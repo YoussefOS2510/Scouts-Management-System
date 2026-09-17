@@ -128,22 +128,22 @@ export function TeamAttendanceAnalytics({ initialUnitId, onBackToSession }: Team
 
   return (
     <div className="space-y-6 animate-fadeIn">
-      {/* Dignified Scout Command Banner & Unit Selector */}
-      <div className="bg-[#1B4332] rounded-xl p-6 text-white border border-[#143326] shadow-sm">
+      {/* Google Workspace Analytics Header & Unit Selector */}
+      <div className="bg-white dark:bg-[#1E1F20] rounded-2xl p-6 border border-[#E0E3E7] dark:border-[#303134] shadow-none">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-5">
           <div className="space-y-1.5 max-w-2xl">
-            <div className="inline-flex items-center gap-1.5 text-xs font-bold text-[#86efac]">
-              <BarChart3 className="w-4 h-4 text-[#86efac]" strokeWidth={2} />
+            <div className="inline-flex items-center gap-1.5 text-xs font-medium text-[#0B57D0] dark:text-[#82B1FF]">
+              <BarChart3 className="w-4 h-4 text-[#0B57D0]" strokeWidth={2} />
               <span>
                 {language === 'ar'
                   ? `تحليلات حضور الوحدة: ${selectedUnitObj?.name_ar || ''}`
                   : `Team Attendance Telemetry: ${selectedUnitObj?.name_en || ''}`}
               </span>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-white">
+            <h1 className="text-xl sm:text-2xl font-normal text-[#1F1F1F] dark:text-[#E3E3E3]">
               {language === 'ar' ? 'إحصائيات ومؤشرات التزام الحضور' : 'Team Attendance Analytics & Insights'}
             </h1>
-            <p className="text-xs text-stone-200 leading-relaxed">
+            <p className="text-xs text-[#444746] dark:text-[#8E918F] leading-relaxed">
               {language === 'ar'
                 ? 'متابعة نسب حضور وانصراف الكشافين، مقارنة أداء الطلائع والسداسيات، ورصد أسباب الاعتذار وحالات الافتقاد.'
                 : 'Scout consistency tracking, patrol comparative rates, excuse distribution, and pastoral follow-up alerts.'}
@@ -153,15 +153,15 @@ export function TeamAttendanceAnalytics({ initialUnitId, onBackToSession }: Team
           {/* Unit Scope Selector */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
             {isSuperAdmin ? (
-              <div className="bg-[#143326] border border-[#2D6A4F] rounded-lg px-3 py-2 flex flex-col gap-1 min-w-[200px]">
-                <span className="text-[11px] font-bold text-[#FDF6EC] flex items-center gap-1.5">
-                  <Filter className="w-3.5 h-3.5 text-[#C87A28]" strokeWidth={2} />
+              <div className="bg-[#F0F4F9] dark:bg-[#282A2C] border border-[#E0E3E7] dark:border-[#303134] rounded-xl px-3 py-2 flex flex-col gap-1 min-w-[200px]">
+                <span className="text-[11px] font-medium text-[#444746] dark:text-[#C4C7C5] flex items-center gap-1.5">
+                  <Filter className="w-3.5 h-3.5 text-[#0B57D0]" strokeWidth={2} />
                   <span>{language === 'ar' ? 'اختر الفريق / الوحدة للمعاينة:' : 'Select Team to Inspect:'}</span>
                 </span>
                 <select
                   value={selectedUnitId}
                   onChange={(e) => setSelectedUnitId(Number(e.target.value))}
-                  className="bg-[#1B4332] text-white text-xs font-bold rounded-md px-3 py-1.5 border border-[#2D6A4F] focus:outline-none focus:ring-1 focus:ring-[#86efac] cursor-pointer"
+                  className="bg-white dark:bg-[#1E1F20] text-[#1F1F1F] dark:text-[#E3E3E3] text-xs font-medium rounded-lg px-3 py-1.5 border border-[#E0E3E7] dark:border-[#303134] focus:outline-none focus:ring-1 focus:ring-[#0B57D0] cursor-pointer"
                 >
                   {accessibleUnits.map((u) => (
                     <option key={u.id} value={u.id}>
@@ -171,15 +171,15 @@ export function TeamAttendanceAnalytics({ initialUnitId, onBackToSession }: Team
                 </select>
               </div>
             ) : (
-              <div className="bg-[#143326] border border-[#2D6A4F] rounded-lg px-4 py-2.5 flex items-center gap-3">
-                <div className="w-9 h-9 rounded-md bg-[#1B4332] text-[#86efac] border border-[#2D6A4F] flex items-center justify-center">
+              <div className="bg-[#F0F4F9] dark:bg-[#282A2C] border border-[#E0E3E7] dark:border-[#303134] rounded-xl px-4 py-2.5 flex items-center gap-3">
+                <div className="w-9 h-9 rounded-lg bg-[#C2E7FF] text-[#001D35] flex items-center justify-center">
                   <ShieldCheck className="w-5 h-5" strokeWidth={2} />
                 </div>
                 <div>
-                  <div className="text-[10px] font-medium text-stone-300">
+                  <div className="text-[10px] font-medium text-[#444746] dark:text-[#8E918F]">
                     {language === 'ar' ? 'نطاق فريقك المعتمد' : 'Assigned Team Scope'}
                   </div>
-                  <div className="text-sm font-bold text-white">
+                  <div className="text-sm font-medium text-[#1F1F1F] dark:text-[#E3E3E3]">
                     {language === 'ar' ? selectedUnitObj?.name_ar : selectedUnitObj?.name_en}
                   </div>
                 </div>
@@ -189,7 +189,7 @@ export function TeamAttendanceAnalytics({ initialUnitId, onBackToSession }: Team
             {onBackToSession && (
               <button
                 onClick={onBackToSession}
-                className="px-3.5 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white font-bold text-xs flex items-center justify-center gap-1.5 border border-white/20 transition-colors cursor-pointer"
+                className="px-4 py-2 rounded-xl bg-[#F0F4F9] hover:bg-[#E9EEF6] dark:bg-[#282A2C] text-[#1F1F1F] dark:text-[#E3E3E3] font-medium text-xs flex items-center justify-center gap-1.5 border border-[#E0E3E7] dark:border-[#303134] transition-colors cursor-pointer"
               >
                 <span>{language === 'ar' ? 'العودة لسجل الجلسة' : 'Back to Roster'}</span>
                 <ChevronRight className="w-3.5 h-3.5 rtl:rotate-180" strokeWidth={2} />

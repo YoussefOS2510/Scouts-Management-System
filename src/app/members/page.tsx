@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
+import Link from 'next/link';
 import { useLanguage } from '../../lib/LanguageContext';
 import { useAuth } from '../../lib/AuthContext';
 import { INITIAL_UNITS } from '../../lib/data';
@@ -77,57 +78,62 @@ export default function MembersDirectoryPage() {
   };
 
   return (
-    <div className="space-y-5">
-      {/* Header */}
-      <div className="bg-white dark:bg-[#161D1A] p-5 rounded-xl border border-[#E2DED6] dark:border-[#27342F] shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-stone-900 dark:text-stone-50 flex items-center gap-2.5">
-            <Users className="w-6 h-6 text-[#1B4332] dark:text-[#86efac]" strokeWidth={2} />
-            <span>{t('nav_members')}</span>
-          </h1>
-          <p className="text-xs text-stone-600 dark:text-stone-400 mt-1">
-            {language === 'ar'
-              ? 'دليل وسجل بيانات الكشافين: الاسم الثلاثي بالعربي، بيانات مدارس الأحد وأب الاعتراف، وجهات الاتصال للطوارئ'
-              : 'Complete bilingual scout records with church classification, emergency contacts, and confidential alerts.'}
-          </p>
+    <div className="space-y-5 animate-fadeIn pb-12">
+      {/* 1. DRIVE LOCATION PATH & VIEW CONTROLS */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-[#F0F4F9] dark:border-[#2D2F31]">
+        {/* Breadcrumb Path */}
+        <div className="flex items-center gap-1.5 text-sm text-[#444746] dark:text-[#C4C7C5]">
+          <Link href="/" className="hover:text-[#0B57D0] transition-colors">
+            {language === 'ar' ? 'منظومة الفوج' : 'Scout Drive'}
+          </Link>
+          <span className="text-[#747775]">{language === 'ar' ? '‹' : '›'}</span>
+          <span className="text-[#1F1F1F] dark:text-[#E3E3E3] font-medium">
+            {language === 'ar' ? 'دليل وسجل بيانات الأعضاء' : 'Members Directory'}
+          </span>
+          <span className="text-xs px-2 py-0.5 rounded-full bg-[#E9EEF6] dark:bg-[#282A2C] text-[#444746] dark:text-[#C4C7C5] font-mono ms-1">
+            {filteredMembers.length}
+          </span>
         </div>
 
-        {/* Top Actions: View Mode & Confidential Toggle */}
-        <div className="flex flex-wrap items-center gap-2">
+        {/* Top Controls: View Mode & Confidential Toggle */}
+        <div className="flex items-center gap-2 self-end sm:self-auto">
           {/* View Mode Toggle */}
-          <div className="flex items-center bg-[#F1EFEA] dark:bg-[#1E2723] p-1 rounded-lg border border-[#E2DED6] dark:border-[#27342F]">
+          <div className="inline-flex rounded-xl p-1 bg-[#F0F4F9] dark:bg-[#282A2C]">
             <button
               onClick={() => setViewMode('table')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold transition-colors cursor-pointer ${
+              className={`p-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer ${
                 viewMode === 'table'
-                  ? 'bg-white dark:bg-[#161D1A] text-stone-900 dark:text-stone-100 shadow-xs'
-                  : 'text-stone-600 hover:text-stone-900 dark:hover:text-white'
+                  ? 'bg-white dark:bg-[#1F1F1F] text-[#0B57D0] shadow-xs'
+                  : 'text-[#444746] dark:text-[#C4C7C5] hover:text-[#1F1F1F]'
               }`}
+              title={language === 'ar' ? 'جدول البيانات' : 'Data Table'}
             >
-              <TableIcon className="w-3.5 h-3.5 text-[#1B4332] dark:text-[#86efac]" strokeWidth={2} />
-              <span>{language === 'ar' ? 'جدول البيانات' : 'Data Table'}</span>
+              <TableIcon className="w-4 h-4" />
+              <span className="hidden md:inline">{language === 'ar' ? 'جدول' : 'Table'}</span>
             </button>
             <button
               onClick={() => setViewMode('cards')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold transition-colors cursor-pointer ${
+              className={`p-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer ${
                 viewMode === 'cards'
-                  ? 'bg-white dark:bg-[#161D1A] text-stone-900 dark:text-stone-100 shadow-xs'
-                  : 'text-stone-600 hover:text-stone-900 dark:hover:text-white'
+                  ? 'bg-white dark:bg-[#1F1F1F] text-[#0B57D0] shadow-xs'
+                  : 'text-[#444746] dark:text-[#C4C7C5] hover:text-[#1F1F1F]'
               }`}
+              title={language === 'ar' ? 'بطاقات' : 'Cards'}
             >
-              <LayoutGrid className="w-3.5 h-3.5 text-[#B45309]" strokeWidth={2} />
-              <span>{language === 'ar' ? 'بطاقات' : 'Cards'}</span>
+              <LayoutGrid className="w-4 h-4" />
+              <span className="hidden md:inline">{language === 'ar' ? 'بطاقات' : 'Cards'}</span>
             </button>
             <button
               onClick={() => setViewMode('board')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold transition-colors cursor-pointer ${
+              className={`p-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer ${
                 viewMode === 'board'
-                  ? 'bg-white dark:bg-[#161D1A] text-stone-900 dark:text-stone-100 shadow-xs'
-                  : 'text-stone-600 hover:text-stone-900 dark:hover:text-white'
+                  ? 'bg-white dark:bg-[#1F1F1F] text-[#0B57D0] shadow-xs'
+                  : 'text-[#444746] dark:text-[#C4C7C5] hover:text-[#1F1F1F]'
               }`}
+              title={language === 'ar' ? 'تشكيل الطلائع' : 'Patrol Board'}
             >
-              <Columns className="w-3.5 h-3.5 text-sky-700 dark:text-sky-400" strokeWidth={2} />
-              <span>{language === 'ar' ? 'تشكيل الطلائع' : 'Patrol Board'}</span>
+              <Columns className="w-4 h-4" />
+              <span className="hidden md:inline">{language === 'ar' ? 'طلائع' : 'Patrols'}</span>
             </button>
           </div>
 
@@ -135,19 +141,19 @@ export default function MembersDirectoryPage() {
           {canViewConfidential ? (
             <button
               onClick={() => setShowConfidential(!showConfidential)}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer shadow-2xs ${
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-colors cursor-pointer ${
                 showConfidential
-                  ? 'bg-[#FDF6EC] dark:bg-amber-950/40 text-[#B45309] dark:text-amber-300 border border-amber-300 dark:border-amber-800'
-                  : 'bg-[#F1EFEA] dark:bg-[#1E2723] text-stone-700 dark:text-stone-300 border border-[#E2DED6] dark:border-[#27342F]'
+                  ? 'bg-[#FEF7EC] text-[#7A3F00] dark:bg-amber-950/40 dark:text-amber-300 border border-[#FFCD85]/50'
+                  : 'bg-[#F0F4F9] text-[#444746] dark:bg-[#282A2C] dark:text-[#C4C7C5]'
               }`}
             >
-              {showConfidential ? <Eye className="w-3.5 h-3.5 text-[#B45309]" strokeWidth={2} /> : <EyeOff className="w-3.5 h-3.5 text-stone-500" strokeWidth={2} />}
-              <span>{showConfidential ? (language === 'ar' ? 'إخفاء الروحي' : 'Hide Spiritual') : (language === 'ar' ? 'إظهار الروحي' : 'Show Spiritual')}</span>
+              {showConfidential ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+              <span>{showConfidential ? (language === 'ar' ? 'إخفاء الحساس' : 'Hide Confidential') : (language === 'ar' ? 'إظهار الحساس' : 'Show Confidential')}</span>
             </button>
           ) : (
-            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono font-bold bg-[#F1EFEA] dark:bg-[#1E2723] text-stone-500 border border-[#E2DED6] dark:border-[#27342F] cursor-not-allowed">
-              <Lock className="w-3.5 h-3.5 text-stone-500" strokeWidth={1.5} />
-              <span>{language === 'ar' ? 'البيانات مقفلة' : 'Confidential Locked'}</span>
+            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs text-[#747775] bg-[#F0F4F9] dark:bg-[#282A2C] cursor-not-allowed">
+              <Lock className="w-3.5 h-3.5" />
+              <span>{language === 'ar' ? 'البيانات مقفلة' : 'Locked'}</span>
             </div>
           )}
         </div>
