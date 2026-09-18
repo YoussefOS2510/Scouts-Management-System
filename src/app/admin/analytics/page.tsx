@@ -139,48 +139,57 @@ export default function AnalyticsDashboardPage() {
             </div>
           </div>
 
-          {/* 4-Column Colorful KPI Strip */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            <div className="bg-white dark:bg-[#121214] p-4 rounded-xl border border-emerald-200 dark:border-emerald-900/50 space-y-1">
+          {/* 4-Column Metric Strip (Generous padding & perfect alignment) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="bg-white dark:bg-[#1E1F20] p-5 sm:p-6 rounded-2xl border border-[#E0E3E7] dark:border-[#303134] space-y-3 flex flex-col justify-between shadow-xs">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider">{language === 'ar' ? 'متوسط نسبة الحضور' : 'Overall Attendance'}</span>
-                <TrendingUp className="w-4 h-4 text-emerald-600 dark:text-emerald-400" strokeWidth={1.5} />
+                <span className="text-xs font-medium text-[#444746] dark:text-[#C4C7C5]">{language === 'ar' ? 'متوسط نسبة الحضور' : 'Overall Attendance'}</span>
+                <div className="w-9 h-9 rounded-xl bg-[#E8F0EC] dark:bg-emerald-950/40 text-[#146C2E] flex items-center justify-center">
+                  <TrendingUp className="w-4 h-4" strokeWidth={2} />
+                </div>
               </div>
-              <div className="text-3xl font-black tracking-tight tabular-nums text-emerald-700 dark:text-emerald-400">91.4%</div>
-              <div className="text-xs font-bold text-emerald-700 dark:text-emerald-400">
-                +2.8% {language === 'ar' ? 'مقارنة بالشهر السابق' : 'vs last month'}
+              <div className="text-3xl font-normal tracking-tight font-mono tabular-nums text-[#1F1F1F] dark:text-[#E3E3E3]">91.4%</div>
+              <div className="text-xs font-medium text-[#146C2E] dark:text-emerald-400 flex items-center gap-1.5">
+                <span>+2.8%</span>
+                <span className="text-[#747775]">{language === 'ar' ? 'مقارنة بالشهر السابق' : 'vs last month'}</span>
               </div>
             </div>
 
-            <div className="bg-white dark:bg-[#121214] p-4 rounded-xl border border-blue-200 dark:border-blue-900/50 space-y-1">
+            <div className="bg-white dark:bg-[#1E1F20] p-5 sm:p-6 rounded-2xl border border-[#E0E3E7] dark:border-[#303134] space-y-3 flex flex-col justify-between shadow-xs">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-blue-700 dark:text-blue-400 uppercase tracking-wider">{language === 'ar' ? 'إجمالي قوة الفوج' : 'Total Scout Strength'}</span>
-                <Users className="w-4 h-4 text-blue-600 dark:text-blue-400" strokeWidth={1.5} />
+                <span className="text-xs font-medium text-[#444746] dark:text-[#C4C7C5]">{language === 'ar' ? 'إجمالي قوة الفوج' : 'Total Scout Strength'}</span>
+                <div className="w-9 h-9 rounded-xl bg-[#D3E3FD] dark:bg-sky-950/40 text-[#0B57D0] flex items-center justify-center">
+                  <Users className="w-4 h-4" strokeWidth={2} />
+                </div>
               </div>
-              <div className="text-3xl font-black tracking-tight tabular-nums text-zinc-900 dark:text-zinc-50">1,048</div>
-              <div className="text-xs font-medium text-blue-600 dark:text-blue-400">
+              <div className="text-3xl font-normal tracking-tight font-mono tabular-nums text-[#1F1F1F] dark:text-[#E3E3E3]">1,048</div>
+              <div className="text-xs text-[#747775]">
                 {language === 'ar' ? 'موزعين على ١٢ مرحلة و٤٨ طليعة' : 'Across 12 units & 48 patrols'}
               </div>
             </div>
 
-            <div className="bg-white dark:bg-[#121214] p-4 rounded-xl border border-amber-200 dark:border-amber-900/50 space-y-1">
+            <div className="bg-white dark:bg-[#1E1F20] p-5 sm:p-6 rounded-2xl border border-[#E0E3E7] dark:border-[#303134] space-y-3 flex flex-col justify-between shadow-xs">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-amber-700 dark:text-amber-400 uppercase tracking-wider">{language === 'ar' ? 'جاهزية مهمات العهدة' : 'Warehouse Health'}</span>
-                <Package className="w-4 h-4 text-amber-600 dark:text-amber-400" strokeWidth={1.5} />
+                <span className="text-xs font-medium text-[#444746] dark:text-[#C4C7C5]">{language === 'ar' ? 'جاهزية مهمات العهدة' : 'Warehouse Health'}</span>
+                <div className="w-9 h-9 rounded-xl bg-[#FEF7EC] dark:bg-amber-950/40 text-[#B06000] flex items-center justify-center">
+                  <Package className="w-4 h-4" strokeWidth={2} />
+                </div>
               </div>
-              <div className="text-3xl font-black tracking-tight tabular-nums text-zinc-900 dark:text-zinc-50">94.2%</div>
-              <div className="text-xs font-medium text-amber-600 dark:text-amber-400">
+              <div className="text-3xl font-normal tracking-tight font-mono tabular-nums text-[#1F1F1F] dark:text-[#E3E3E3]">94.2%</div>
+              <div className="text-xs text-[#747775]">
                 {language === 'ar' ? '١٠٧ قطعة جاهزة / ٦ صيانة' : '107 ready / 6 repair'}
               </div>
             </div>
 
-            <div className="bg-white dark:bg-[#121214] p-4 rounded-xl border border-purple-200 dark:border-purple-900/50 space-y-1">
+            <div className="bg-white dark:bg-[#1E1F20] p-5 sm:p-6 rounded-2xl border border-[#E0E3E7] dark:border-[#303134] space-y-3 flex flex-col justify-between shadow-xs">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-purple-700 dark:text-purple-400 uppercase tracking-wider">{language === 'ar' ? 'انضباط تسجيل الجلسات' : 'Roster Submission'}</span>
-                <CalendarCheck className="w-4 h-4 text-purple-600 dark:text-purple-400" strokeWidth={1.5} />
+                <span className="text-xs font-medium text-[#444746] dark:text-[#C4C7C5]">{language === 'ar' ? 'انضباط تسجيل الجلسات' : 'Roster Submission'}</span>
+                <div className="w-9 h-9 rounded-xl bg-[#F3E8FD] dark:bg-purple-950/40 text-[#7C3AED] flex items-center justify-center">
+                  <CalendarCheck className="w-4 h-4" strokeWidth={2} />
+                </div>
               </div>
-              <div className="text-3xl font-black tracking-tight tabular-nums text-purple-800 dark:text-purple-300">100%</div>
-              <div className="text-xs font-medium text-purple-600 dark:text-purple-400">
+              <div className="text-3xl font-normal tracking-tight font-mono tabular-nums text-[#1F1F1F] dark:text-[#E3E3E3]">100%</div>
+              <div className="text-xs text-[#747775]">
                 {language === 'ar' ? 'كافة القادة سلموا كشوف الجمعة' : 'All 12 rosters received'}
               </div>
             </div>
@@ -189,59 +198,68 @@ export default function AnalyticsDashboardPage() {
           {/* Main Grid: Unit Attendance Benchmarks & Inventory Utilization */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Attendance Rates by Unit (Span 2) */}
-            <div className="lg:col-span-2 bg-white dark:bg-[#121214] p-5 rounded-lg border border-zinc-200 dark:border-zinc-800 space-y-4">
-              <div className="flex items-center justify-between pb-3 border-b border-zinc-100 dark:border-zinc-800">
+            <div className="lg:col-span-2 bg-white dark:bg-[#1E1F20] p-5 rounded-2xl border border-[#E0E3E7] dark:border-[#303134] space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-[#F0F4F9] dark:border-[#2D2F31]">
                 <div>
-                  <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
-                    <CalendarCheck className="w-4 h-4 text-emerald-700 dark:text-emerald-400" strokeWidth={1.5} />
+                  <h2 className="text-sm font-medium text-[#1F1F1F] dark:text-[#E3E3E3] flex items-center gap-2">
+                    <CalendarCheck className="w-4 h-4 text-[#0B57D0]" strokeWidth={2} />
                     <span>{language === 'ar' ? 'مقارنة نسبة الحضور حسب المرحلة الكشفية' : 'Unit Attendance Benchmarks'}</span>
                   </h2>
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                  <p className="text-xs text-[#747775] mt-0.5">
                     {language === 'ar' ? 'ترتيب المراحل من الأعلى حضوراً والتزاماً' : 'Ranked performance across all 12 units'}
                   </p>
                 </div>
-                <span className="text-xs font-mono text-zinc-500 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded border border-zinc-200 dark:border-zinc-700">
+                <span className="text-xs font-mono text-[#444746] dark:text-[#C4C7C5] bg-[#F0F4F9] dark:bg-[#282A2C] px-2.5 py-1 rounded-full border border-[#E0E3E7] dark:border-[#303134]">
                   {language === 'ar' ? 'سبتمبر ٢٠٢٦' : 'September 2026'}
                 </span>
               </div>
 
-              <div className="space-y-3">
+              {/* Perfectly Centered Unit Rows */}
+              <div className="space-y-2">
                 {unitPerformance.map((u) => {
                   const isTop = u.status === 'top';
                   const isWarning = u.status === 'warning';
 
                   return (
-                    <div key={u.unitId} className="space-y-1 text-xs">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium text-zinc-900 dark:text-zinc-100">
-                            {language === 'ar' ? u.name_ar : u.name_en}
+                    <div
+                      key={u.unitId}
+                      className="flex items-center gap-3 p-2 rounded-xl hover:bg-[#F0F4F9] dark:hover:bg-[#282A2C] transition-colors text-xs"
+                    >
+                      {/* Left: Unit Name, Count, and Badge */}
+                      <div className="w-44 sm:w-56 shrink-0 flex items-center gap-2">
+                        <span className="font-medium text-[#1F1F1F] dark:text-[#E3E3E3] truncate">
+                          {language === 'ar' ? u.name_ar : u.name_en}
+                        </span>
+                        <span className="text-[#747775] font-mono tabular-nums text-[11px] shrink-0">
+                          ({u.scouts})
+                        </span>
+                        {isTop && (
+                          <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-[#E8F0EC] text-[#0A5326] dark:bg-emerald-950/40 dark:text-emerald-300 font-medium shrink-0">
+                            <Award className="w-3 h-3" />
+                            <span>{language === 'ar' ? 'متميز' : 'Top'}</span>
                           </span>
-                          <span className="text-zinc-400 font-mono tabular-nums">({u.scouts} {language === 'ar' ? 'كشاف' : 'scouts'})</span>
-                          {isTop && (
-                            <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.2 rounded bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 font-mono border border-amber-200 dark:border-amber-800/60">
-                              <Award className="w-3 h-3 text-amber-600" strokeWidth={1.5} />
-                              <span>{language === 'ar' ? 'متميز' : 'Top'}</span>
-                            </span>
-                          )}
-                          {isWarning && (
-                            <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.2 rounded bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-400 font-mono border border-rose-200 dark:border-rose-800/60">
-                              <AlertTriangle className="w-3 h-3 text-rose-600" strokeWidth={1.5} />
-                              <span>{language === 'ar' ? 'متابعة' : 'Review'}</span>
-                            </span>
-                          )}
-                        </div>
-                        <div className="font-mono tabular-nums font-semibold text-zinc-900 dark:text-zinc-100">{u.rate}%</div>
+                        )}
+                        {isWarning && (
+                          <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-[#F9DEDC] text-[#8C1D18] dark:bg-rose-950/40 dark:text-rose-300 font-medium shrink-0">
+                            <AlertTriangle className="w-3 h-3" />
+                            <span>{language === 'ar' ? 'متابعة' : 'Review'}</span>
+                          </span>
+                        )}
                       </div>
 
-                      {/* Low-profile 3px progress bar */}
-                      <div className="w-full bg-zinc-100 dark:bg-zinc-800 h-1.5 rounded-full overflow-hidden">
+                      {/* Center: Horizontally Centered Progress Bar */}
+                      <div className="flex-1 h-2 bg-[#F0F4F9] dark:bg-[#282A2C] rounded-full overflow-hidden flex items-center">
                         <div
                           className={`h-full rounded-full transition-all duration-300 ${
-                            isTop ? 'bg-emerald-600 dark:bg-emerald-500' : isWarning ? 'bg-rose-600 dark:bg-rose-500' : 'bg-zinc-900 dark:bg-zinc-200'
+                            isTop ? 'bg-[#146C2E]' : isWarning ? 'bg-[#B3261E]' : 'bg-[#0B57D0]'
                           }`}
                           style={{ width: `${u.rate}%` }}
                         />
+                      </div>
+
+                      {/* Right: Percentage Value Centered with the Bar */}
+                      <div className="w-14 text-end font-mono tabular-nums font-semibold text-[#1F1F1F] dark:text-[#E3E3E3] shrink-0 text-xs">
+                        {u.rate}%
                       </div>
                     </div>
                   );
@@ -250,46 +268,54 @@ export default function AnalyticsDashboardPage() {
             </div>
 
             {/* Warehouse Inventory Pressure */}
-            <div className="bg-white dark:bg-[#121214] p-5 rounded-lg border border-zinc-200 dark:border-zinc-800 space-y-4 flex flex-col justify-between">
+            <div className="bg-white dark:bg-[#1E1F20] p-5 rounded-2xl border border-[#E0E3E7] dark:border-[#303134] space-y-4 flex flex-col justify-between">
               <div className="space-y-4">
-                <div className="pb-3 border-b border-zinc-100 dark:border-zinc-800">
-                  <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
-                    <Layers className="w-4 h-4 text-emerald-700 dark:text-emerald-400" strokeWidth={1.5} />
+                <div className="pb-3 border-b border-[#F0F4F9] dark:border-[#2D2F31]">
+                  <h2 className="text-sm font-medium text-[#1F1F1F] dark:text-[#E3E3E3] flex items-center gap-2">
+                    <Layers className="w-4 h-4 text-[#0B57D0]" strokeWidth={2} />
                     <span>{language === 'ar' ? 'ضغط استهلاك العهدة' : 'Equipment Utilization'}</span>
                   </h2>
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                  <p className="text-xs text-[#747775] mt-0.5">
                     {language === 'ar' ? 'نسبة المهمات المحجوزة للمخيمات' : 'Current active reservations vs stock'}
                   </p>
                 </div>
 
-                <div className="space-y-3">
+                <div className="space-y-2.5">
                   {categoryUtilization.map((cat, idx) => (
-                    <div key={idx} className="p-3 rounded-md bg-zinc-50 dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 space-y-1.5">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="font-medium text-zinc-800 dark:text-zinc-200">{cat.category}</span>
-                        <span className="font-mono tabular-nums text-zinc-500 dark:text-zinc-400">
-                          {cat.booked}/{cat.total} ({cat.percent}%)
-                        </span>
+                    <div
+                      key={idx}
+                      className="p-3 rounded-xl bg-[#F0F4F9] dark:bg-[#282A2C] flex items-center gap-3 text-xs"
+                    >
+                      {/* Category Name */}
+                      <div className="w-36 sm:w-40 shrink-0 font-medium text-[#1F1F1F] dark:text-[#E3E3E3] truncate">
+                        {cat.category}
                       </div>
-                      <div className="w-full bg-zinc-200 dark:bg-zinc-800 h-1.5 rounded-full overflow-hidden">
+
+                      {/* Progress Bar Centered */}
+                      <div className="flex-1 h-2 bg-[#E0E3E7] dark:bg-[#383A3C] rounded-full overflow-hidden flex items-center">
                         <div
-                          className={`h-full rounded-full ${
-                            cat.percent > 70 ? 'bg-rose-600' : cat.percent > 40 ? 'bg-amber-600' : 'bg-emerald-600'
+                          className={`h-full rounded-full transition-all duration-300 ${
+                            cat.percent > 70 ? 'bg-[#B3261E]' : cat.percent > 40 ? 'bg-[#B06000]' : 'bg-[#146C2E]'
                           }`}
                           style={{ width: `${cat.percent}%` }}
                         />
+                      </div>
+
+                      {/* Booked / Total & Percent */}
+                      <div className="w-24 text-end font-mono tabular-nums text-[#444746] dark:text-[#C4C7C5] text-[11px] shrink-0">
+                        {cat.booked}/{cat.total} ({cat.percent}%)
                       </div>
                     </div>
                   ))}
                 </div>
               </div>
 
-              <div className="p-3 rounded-md bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 space-y-1 text-xs text-zinc-600 dark:text-zinc-400">
-                <div className="font-medium text-zinc-900 dark:text-zinc-100 flex items-center gap-1.5">
-                  <Info className="w-3.5 h-3.5 text-zinc-500" strokeWidth={1.5} />
+              <div className="p-3.5 rounded-xl bg-[#F0F4F9] dark:bg-[#282A2C] border border-[#E0E3E7] dark:border-[#303134] space-y-1 text-xs text-[#444746] dark:text-[#C4C7C5]">
+                <div className="font-medium text-[#1F1F1F] dark:text-[#E3E3E3] flex items-center gap-1.5">
+                  <Info className="w-4 h-4 text-[#0B57D0]" />
                   <span>{language === 'ar' ? 'توصية القيادة للعهدة' : 'Quartermaster Tip'}</span>
                 </div>
-                <p className="text-xs leading-normal">
+                <p className="text-[11px] text-[#747775] leading-relaxed">
                   {language === 'ar'
                     ? 'نسبة حجز الصوتيات مرتفعة (٧٥٪) بسبب تزامن احتفالات كشافة A وزهرات A. يوصى بجدولة التناوب.'
                     : 'AV system reservations are at 75% due to overlapping troop celebrations. Staggered scheduling recommended.'}
