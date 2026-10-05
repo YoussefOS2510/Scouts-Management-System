@@ -6,16 +6,58 @@ You are an expert full-stack software architect and senior engineer. Your object
 
 ## 1. Technical Stack & Infrastructure Specifications
 
-- **Frontend:** Next.js (App Router, TypeScript, Tailwind CSS, shadcn/ui components, Lucide Icons).
+- **Architecture:** Monorepo (`frontend/` & `backend/` via npm workspaces):
+  - `frontend/`: Next.js 16 (App Router, TypeScript, Tailwind CSS, Lucide Icons, RTL/LTR).
+  - `backend/`: Microsoft SQL Server 2025 T-SQL DDL, functions/stored procedures, clean structural seeds, connection pooling via `mssql/msnodesqlv8`, background Google Drive ingestion worker, verification suite.
+- **Frontend App:** Next.js (App Router, TypeScript, Tailwind CSS, Lucide Icons).
   - Responsive, mobile-first layouts for attendance and equipment checkout.
   - Native RTL (Right-to-Left) and LTR (Left-to-Right) layout direction switching for bilingual Arabic/English usage.
-- **Backend & Database:** PostgreSQL via Supabase (or Node.js/NestJS + Prisma ORM + PostgreSQL).
-- **Authentication:** Supabase Auth or NextAuth/Auth.js (email/password with secure session handling).
-- **Authorization Engine:** Hybrid Scoped RBAC + Direct Granular Permission Overrides (via PostgreSQL functions and Row-Level Security policies).
+  - Dedicated "Scout Space / عرين الكشاف" portal for youth members and administrative dashboard for leaders.
+- **Backend & Database:** Microsoft SQL Server 2025 (`ScoutsDB`, Collation `Arabic_100_CI_AS`, native T-SQL).
+  - Connection driver: `mssql/msnodesqlv8` with ODBC Driver 18 for SQL Server (Windows Integrated Security).
+  - Data Policy: **Zero dummy data** (100% clean operational tables; only 12 canonical units, 11 template patrols, 7 roles, 20 permissions, 5 categories, and 1 system admin seeded).
+- **Authentication:** Dual-authentication engine (Email for leaders, Member Code + PIN for youth scouts).
+- **Authorization Engine:** Hybrid Scoped RBAC + Direct Granular Permission Overrides (via T-SQL `dbo.fn_check_leader_permission` scalar function and `dbo.sp_check_leader_permission` stored procedure).
 - **Media & File Storage Pipeline:**
   - Fast staging buffer (15 GB local volume or scratch bucket) for immediate client ingestion.
-  - Background asynchronous rate-limited queue (BullMQ + Redis or a dedicated PostgreSQL-backed queue table).
-  - Centralized Google Drive API v3 ingestion using a single Google Cloud Service Account pushing all media to one shared organization Drive folder.
+  - Background asynchronous rate-limited worker (`backend/workers/media-worker.ts`) using Google Drive API v3 resumable upload stream.
+  - Automatic Google Drive folder hierarchy: `/ScoutsArchive/{Year}/{UnitName}/{EventName}/`.
+
+---
+
+## 1.1 Monorepo Workspace Directory Layout
+
+```
+Scouts System/
+├── package.json               # Root monorepo workspace configuration
+├── docker-compose.yml         # Containerized PostgreSQL service
+├── Plan.md                    # System architecture & technical specification
+├── frontend/                  # Next.js App Router Web Application
+│   ├── package.json           # Frontend dependencies & Next scripts
+│   ├── next.config.mjs        # Next.js build configuration
+│   ├── tailwind.config.ts     # Material 3 & Tailwind styling system
+│   ├── postcss.config.mjs     # PostCSS configuration
+│   ├── tsconfig.json          # TypeScript configuration
+│   └── src/
+│       ├── app/               # App Router pages (/scout, /members, /attendance, /inventory, /media, /login)
+│       ├── components/        # UI & layout components (GoogleWorkspaceLayout, TeamAttendanceAnalytics)
+│       └── lib/               # AuthContext, permissions engine, data models, types, i18n
+└── backend/                   # Backend Services, Database & Background Workers
+    ├── package.json           # Backend scripts & worker dependencies
+    ├── tsconfig.json          # Node/TypeScript configuration
+    ├── docker-compose.yml     # Database container definition
+    ├── db/                    # SQL Migrations & Stored Procedures (Microsoft SQL Server T-SQL)
+    │   ├── schema.sql         # T-SQL DDL blueprint (ScoutsDB, Arabic_100_CI_AS)
+    │   ├── functions.sql      # fn_check_leader_permission & sp_check_leader_permission
+    │   └── seed.sql           # Clean structural seeds: 12 units, 11 patrols, 7 roles, 20 perms, 1 admin
+    ├── src/
+    │   └── db.ts              # SQL Server connection pool (mssql/msnodesqlv8)
+    ├── workers/               # Background Asynchronous Workers
+    │   └── media-worker.ts    # 15 GB buffer -> Google Drive v3 chunked resumable worker
+    └── scripts/               # Automated Logic & Verification Tests
+        ├── verify-logic.ts    # Test suite for RBAC, booking availability & scout scoping
+        └── verify-mssql.ts    # Live verification suite against Microsoft SQL Server 2025
+```
 
 ---
 
@@ -29,18 +71,18 @@ The platform manages 12 distinct organizational units across age groups and lead
 - **Patrols (طلائع / سداسيات):** Each unit contains multiple sub-patrols linked by `unit_id`.
 
 ### Seed Units Definition
-1. `cubs_a` — أشبال A (Ashbal A) — Grade 5 (Boys, Ages 10–11)
-2. `cubs_b` — أشبال B (Ashbal B) — Grade 6 (Boys, Ages 11–12)
-3. `brownies_a` — زهرات A (Zahrat A) — Grade 5 (Girls, Ages 10–11)
-4. `brownies_b` — زهرات B (Zahrat B) — Grade 6 (Girls, Ages 11–12)
-5. `scouts_a` — كشافة A (Kashafa A) — Prep 1–3 Parallel Troop A (Boys, Ages 12–15)
-6. `scouts_b` — كشافة B (Kashafa B) — Prep 1–3 Parallel Troop B (Boys, Ages 12–15)
-7. `guides_a` — مرشدات A (Morshdat A) — Prep 1–3 Parallel Company A (Girls, Ages 12–15)
-8. `guides_b` — مرشدات B (Morshdat B) — Prep 1–3 Parallel Company B (Girls, Ages 12–15)
-9. `advanced_scouts` — متقدم (Motakadem) — Secondary 1–3 (Boys, Ages 15–18)
-10. `senior_guides` — رائدات (Ra2edat) — Secondary 1–3 (Girls, Ages 15–18)
-11. `rovers` — جوالة (Gawala) — University / Higher Ed (Mixed, Ages 18–23)
-12. `leaders` — قادة (Leaders) — Leadership & Adult Staff (Mixed, Ages 21+)
+1. `cubs_a` — أشبال A (Ashbal A) — Grade 5 (Boys)
+2. `cubs_b` — أشبال B (Ashbal B) — Grade 6 (Boys)
+3. `brownies_a` — زهرات A (Zahrat A) — Grade 5 (Girls)
+4. `brownies_b` — زهرات B (Zahrat B) — Grade 6 (Girls)
+5. `scouts_a` — كشافة A (Kashafa A) — Prep 1–3 Parallel Troop A (Boys)
+6. `scouts_b` — كشافة B (Kashafa B) — Prep 1–3 Parallel Troop B (Boys)
+7. `guides_a` — مرشدات A (Morshdat A) — Prep 1–3 Parallel Company A (Girls)
+8. `guides_b` — مرشدات B (Morshdat B) — Prep 1–3 Parallel Company B (Girls)
+9. `advanced_scouts` — متقدم (Motakadem) — Secondary 1–3 (Boys)
+10. `senior_guides` — رائدات (Ra2edat) — Secondary 1–3 (Girls)
+11. `rovers` — جوالة (Gawala) — University / Higher Ed (Mixed)
+12. `leaders` — قادة (Leaders) — Leadership & Adult Staff (Mixed)
 
 ---
 
@@ -76,11 +118,13 @@ The member record requires explicit per-field language and classification rules:
 The platform provides predefined role presets alongside granular per-leader overrides.
 
 ### Base Roles
-- **Group Leader (قائد الفوج):** Global unrestricted CRUD access.
+- **Admin (أدمن النظام):** Dedicated personal role for system administrator. Full unrestricted global CRUD access, executive statistics, audit logs, and permission overrides.
+- **Group Leader (قائد الفوج):** Global view-only access across the entire group, team attendance analytics, executive analytics, and audit logs.
 - **Quartermaster (أمين العهدة):** Manages equipment, approves bookings, logs item condition.
 - **Section Leader (قائد وحدة / مرحلة):** Scoped to their specific `unit_id`. Full control over attendance, member profiles, and stage promotions.
 - **Assistant Leader (مساعد قائد):** Scoped to their unit. Takes attendance, views emergency contacts; restricted from destructive operations.
 - **Media Officer (مسؤول الإعلام):** Global access to upload pipelines and Drive album structures.
+- **Scout / Kid (كشاف / شبل / عضو):** Youth portal access. Authenticates via unique `member_code` + PIN. Scoped strictly to personal attendance stats and their historical team media archives across the years.
 
 ### Granular Permission Keys Catalog
 - `members.view`: View member roster and basic contacts.
@@ -97,14 +141,49 @@ The platform provides predefined role presets alongside granular per-leader over
 - `media.upload`: Upload event photos/videos to the staging queue.
 - `media.view_all`: Access organizational Drive archives.
 - `users.manage_roles`: Adjust roles, scopes, and custom toggle overrides.
+- `admin.analytics`: Access executive analytics and performance metrics.
+- `admin.audit_logs`: View and track all actions executed by leaders.
+- `attendance.analytics`: View attendance analytics and performance metrics for the team.
+- `scout.portal.view`: Access the dedicated "Scout Space / عرين الكشاف" dashboard.
+- `scout.attendance.view_self`: View personal attendance rate, badges, and session records.
+- `scout.media.view_team_history`: Access yearly team folders matching member progression history (e.g. Ashbal 2024, Kashafa 2026).
 
 ### Permission Resolution Hierarchy
 When evaluating whether a user can perform `permission_key` on `unit_id`:
-1. **Global Super Admin:** If the user has role `group_leader` with `unit_id IS NULL`, evaluate to `TRUE`.
+1. **Global Super Admin:** If the user has role `admin` with `unit_id IS NULL`, evaluate to `TRUE`.
 2. **Per-Leader Direct Override:** Check `user_permission_overrides`:
    - If `is_granted = FALSE`, return `FALSE` (Explicit Revocation).
    - If `is_granted = TRUE`, return `TRUE` (Explicit Grant).
 3. **Base Role Fallback:** Check if any assigned role in `user_roles` grants the permission for the given unit (or globally). If yes, return `TRUE`; otherwise, return `FALSE`.
+4. **Scout Self-Scoping:** For users with role `scout`, permissions are dynamically resolved to their owned `member_id` and authorized progression stages.
+
+---
+
+## 4.1. Youth Scout Access & "Scout Space" Portal Architecture
+
+The platform provides a dedicated, engaging youth portal ("عرين الكشاف - Scout Space") for all youth members:
+
+### A. Authentication & Credentials
+- **Kids Log In Exclusively via Member Code + PIN:**
+  - `member_code`: e.g. `SCT-2026-0001` or `CUB-2026-0101`.
+  - `access_pin`: 4-digit PIN or birthdate (default configured upon member onboarding).
+  - Eliminates the need for young children to manage external email accounts.
+
+### B. Personal Attendance Analytics & Honor Board
+- Circular attendance percentage meter (e.g., 94% Excellent).
+- Total sessions attended, excused, late, and absent counters.
+- Visual Attendance Honor Ribbon / Badge.
+- Comprehensive chronological session history with dates, unit event titles, and statuses.
+
+### C. Multi-Year Progression History & Team Media Vault
+- Tracks each scout's team progression over their years in the organization:
+  - *Example:* Scout Mina Samir was in `Ashbal A` in 2024, `Ashbal B` in 2025, and `Kashafa A` in 2026.
+- **Dynamic Historical Media Scoping:**
+  - In 2024, the kid sees the `Ashbal 2024` team album/folder and all event photos.
+  - In 2025, the kid sees the `Ashbal B 2025` team album/folder.
+  - In 2026, the kid sees the `Kashafa 2026` team album/folder.
+  - Folders of other units or years the kid did NOT belong to remain private to protect troop memories.
+- Rich interactive photo viewer with high-resolution lightbox, event tags, and download options.
 
 ---
 
@@ -161,8 +240,6 @@ CREATE TABLE units (
     stage_group VARCHAR(50) NOT NULL,
     gender VARCHAR(10) NOT NULL CHECK (gender IN ('boys', 'girls', 'mixed')),
     is_leadership BOOLEAN DEFAULT FALSE,
-    min_age INT,
-    max_age INT,
     target_grade VARCHAR(100),
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -176,10 +253,11 @@ CREATE TABLE patrols (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Members
+-- Members (Youth Scouts)
 CREATE TABLE members (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     member_code VARCHAR(50) UNIQUE NOT NULL,
+    pin_hash VARCHAR(255) DEFAULT '1234', -- 4-digit PIN / youth authentication
     unit_id INT NOT NULL REFERENCES units(id),
     patrol_id INT REFERENCES patrols(id) ON DELETE SET NULL,
     full_name_ar VARCHAR(255) NOT NULL,
@@ -198,6 +276,46 @@ CREATE TABLE members (
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Member Yearly Progression (Tracks year-by-year units e.g. Ashbal 2024 -> Kashafa 2026)
+CREATE TABLE member_unit_history (
+    id SERIAL PRIMARY KEY,
+    member_id UUID NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+    unit_id INT NOT NULL REFERENCES units(id) ON DELETE CASCADE,
+    patrol_id INT REFERENCES patrols(id) ON DELETE SET NULL,
+    year INT NOT NULL,
+    notes TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(member_id, unit_id, year)
+);
+
+-- Media Albums (Drive Folders Scoped by Year and Unit)
+CREATE TABLE media_albums (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    unit_id INT NOT NULL REFERENCES units(id) ON DELETE CASCADE,
+    year INT NOT NULL,
+    event_name VARCHAR(150) NOT NULL,
+    event_name_ar VARCHAR(150) NOT NULL,
+    cover_image_url TEXT,
+    drive_folder_id VARCHAR(255),
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Media Items (Photos/Videos in Team Albums)
+CREATE TABLE media_items (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    album_id UUID REFERENCES media_albums(id) ON DELETE CASCADE,
+    unit_id INT NOT NULL REFERENCES units(id),
+    year INT NOT NULL,
+    file_name VARCHAR(255) NOT NULL,
+    title_ar VARCHAR(200),
+    title_en VARCHAR(200),
+    media_type VARCHAR(20) DEFAULT 'image',
+    url TEXT NOT NULL,
+    thumbnail_url TEXT,
+    drive_file_id VARCHAR(255),
+    created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- Users & Core RBAC
