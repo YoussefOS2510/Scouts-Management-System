@@ -35,12 +35,17 @@ type SortKey = 'percentage' | 'name' | 'id' | 'year' | 'patrol';
 type SortOrder = 'asc' | 'desc';
 
 export function TeamAttendanceAnalytics({ initialUnitId, onBackToSession }: TeamAttendanceAnalyticsProps) {
-  const { language } = useLanguage();
-  const { isSuperAdmin, accessibleUnits, currentUnit } = useAuth();
+  const { language, t } = useLanguage();
+  const { isSuperAdmin, currentRole, accessibleUnits, currentUnit } = useAuth();
+
+  const canSelectTeam = isSuperAdmin || currentRole?.name === 'group_leader' || !currentUnit || accessibleUnits.length > 1;
 
   // Selected unit: default to passed prop, or current unit, or first accessible
-  const defaultUnitId = initialUnitId || currentUnit?.id || (accessibleUnits[0]?.id ?? 5);
-  const [selectedUnitId, setSelectedUnitId] = useState<number>(defaultUnitId);
+  const [selectedUnitId, setSelectedUnitId] = useState<number>(() => {
+    if (initialUnitId) return initialUnitId;
+    if (currentUnit && !isSuperAdmin && currentRole?.name !== 'group_leader') return currentUnit.id;
+    return accessibleUnits.length > 0 ? accessibleUnits[0].id : 5;
+  });
 
   // Sorting & Filtering State for Individual Scouts
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -152,7 +157,7 @@ export function TeamAttendanceAnalytics({ initialUnitId, onBackToSession }: Team
 
           {/* Unit Scope Selector */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
-            {isSuperAdmin ? (
+            {canSelectTeam ? (
               <div className="bg-[#F0F4F9] dark:bg-[#282A2C] border border-[#E0E3E7] dark:border-[#303134] rounded-xl px-3 py-2 flex flex-col gap-1 min-w-[200px]">
                 <span className="text-[11px] font-medium text-[#444746] dark:text-[#C4C7C5] flex items-center gap-1.5">
                   <Filter className="w-3.5 h-3.5 text-[#0B57D0]" strokeWidth={2} />

@@ -8,8 +8,6 @@ export interface Unit {
   stage_group: string;
   gender: Gender;
   is_leadership: boolean;
-  min_age: number;
-  max_age: number;
   target_grade: string;
 }
 
@@ -23,6 +21,7 @@ export interface Patrol {
 export interface Member {
   id: string;
   member_code: string;
+  pin?: string; // 4-digit PIN for kid login
   unit_id: number;
   patrol_id?: number | null;
   full_name_ar: string;
@@ -39,6 +38,56 @@ export interface Member {
   father_of_confession?: string;
   notes?: string;
   is_active: boolean;
+}
+
+export interface MemberUnitHistory {
+  id: number;
+  member_id: string;
+  unit_id: number;
+  patrol_id?: number | null;
+  year: number;
+  stage_name_ar?: string;
+  stage_name_en?: string;
+  notes?: string;
+}
+
+export interface MediaAlbum {
+  id: string;
+  unit_id: number;
+  year: number;
+  event_name: string;
+  event_name_ar: string;
+  cover_image_url: string;
+  photo_count: number;
+  drive_folder_id: string;
+  date: string;
+}
+
+export interface MediaItem {
+  id: string;
+  album_id: string;
+  unit_id: number;
+  year: number;
+  file_name: string;
+  title_ar: string;
+  title_en: string;
+  media_type: 'image' | 'video';
+  url: string;
+  thumbnail_url?: string;
+  drive_file_id?: string;
+  date: string;
+  tags?: string[];
+}
+
+export interface ScoutAttendanceStats {
+  totalSessions: number;
+  presentCount: number;
+  absentCount: number;
+  excusedCount: number;
+  lateCount: number;
+  percentage: number;
+  streak: number;
+  honorRank: 'gold' | 'silver' | 'bronze';
 }
 
 export interface User {
@@ -151,6 +200,7 @@ export interface MediaUploadJob {
   retry_count: number;
   error_message?: string;
   drive_file_id?: string;
+  web_view_link?: string;
   created_at: string;
   synced_at?: string;
 }

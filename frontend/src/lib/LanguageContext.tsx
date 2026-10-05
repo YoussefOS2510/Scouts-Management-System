@@ -14,7 +14,19 @@ interface LanguageContextValue {
 const LanguageContext = createContext<LanguageContextValue | undefined>(undefined);
 
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
-  const [language, setLanguage] = useState<Language>('ar');
+  const [language, setLanguageState] = useState<Language>('en');
+
+  // Load language from localStorage, defaulting to 'en'
+  useEffect(() => {
+    try {
+      const savedLang = localStorage.getItem('scouts_language') as Language;
+      if (savedLang === 'ar' || savedLang === 'en') {
+        setLanguageState(savedLang);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
 
   const direction = language === 'ar' ? 'rtl' : 'ltr';
 
@@ -23,13 +35,22 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
     document.documentElement.dir = direction;
   }, [language, direction]);
 
+  const setLanguage = (lang: Language) => {
+    setLanguageState(lang);
+    try {
+      localStorage.setItem('scouts_language', lang);
+    } catch {
+      // ignore
+    }
+  };
+
   const toggleLanguage = () => {
-    setLanguage((prev) => (prev === 'ar' ? 'en' : 'ar'));
+    setLanguage(language === 'ar' ? 'en' : 'ar');
   };
 
   const t = (key: keyof typeof DICTIONARY['ar']): string => {
-    const dict = DICTIONARY[language] || DICTIONARY['ar'];
-    return (dict as any)[key] || (DICTIONARY['ar'] as any)[key] || key;
+    const dict = DICTIONARY[language] || DICTIONARY['en'] || DICTIONARY['ar'];
+    return (dict as any)[key] || (DICTIONARY['en'] as any)[key] || (DICTIONARY['ar'] as any)[key] || key;
   };
 
   return (

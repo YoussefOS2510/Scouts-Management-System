@@ -32,11 +32,23 @@ import {
   FolderOpen,
   UserPlus,
   FileSpreadsheet,
+  Compass,
+  Sparkles,
 } from 'lucide-react';
 
 export function GoogleWorkspaceLayout({ children }: { children: React.ReactNode }) {
   const { language, toggleLanguage, t } = useLanguage();
-  const { currentUser, currentRole, currentUnit, isSuperAdmin, can, logout, accessibleUnits } = useAuth();
+  const {
+    currentUser,
+    currentMember,
+    currentRole,
+    currentUnit,
+    isSuperAdmin,
+    isScout,
+    can,
+    logout,
+    accessibleUnits,
+  } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
 
@@ -47,7 +59,23 @@ export function GoogleWorkspaceLayout({ children }: { children: React.ReactNode 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchFocused, setIsSearchFocused] = useState(false);
-  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(true);
+
+  // Initialize theme from localStorage, defaulting to dark mode
+  useEffect(() => {
+    try {
+      const savedTheme = localStorage.getItem('scouts_theme');
+      if (savedTheme === 'light') {
+        setIsDarkMode(false);
+        document.documentElement.classList.remove('dark');
+      } else {
+        setIsDarkMode(true);
+        document.documentElement.classList.add('dark');
+      }
+    } catch {
+      document.documentElement.classList.add('dark');
+    }
+  }, []);
 
   const searchRef = useRef<HTMLDivElement>(null);
   const newMenuRef = useRef<HTMLDivElement>(null);
@@ -71,47 +99,83 @@ export function GoogleWorkspaceLayout({ children }: { children: React.ReactNode 
   }, []);
 
   const toggleDarkMode = () => {
-    setIsDarkMode(!isDarkMode);
+    const nextMode = !isDarkMode;
+    setIsDarkMode(nextMode);
     if (typeof document !== 'undefined') {
-      document.documentElement.classList.toggle('dark');
+      if (nextMode) {
+        document.documentElement.classList.add('dark');
+        try {
+          localStorage.setItem('scouts_theme', 'dark');
+        } catch {
+          // ignore
+        }
+      } else {
+        document.documentElement.classList.remove('dark');
+        try {
+          localStorage.setItem('scouts_theme', 'light');
+        } catch {
+          // ignore
+        }
+      }
     }
   };
 
-  const navItems = [
-    {
-      href: '/',
-      label: language === 'ar' ? 'الوحدات الكشفية' : 'Scout Units',
-      icon: Folder,
-      badge: '12',
-    },
-    {
-      href: '/attendance',
-      label: language === 'ar' ? 'سجل الحضور' : 'Attendance',
-      icon: CalendarCheck,
-    },
-    {
-      href: '/admin/analytics',
-      label: language === 'ar' ? 'تحليلات الحضور' : 'Analytics',
-      icon: BarChart3,
-    },
-    {
-      href: '/members',
-      label: language === 'ar' ? 'دليل الأعضاء' : 'Members Directory',
-      icon: Users,
-    },
-    {
-      href: '/inventory',
-      label: language === 'ar' ? 'إدارة العهدة' : 'Gear & Inventory',
-      icon: Package,
-    },
-    {
-      href: '/media',
-      label: language === 'ar' ? 'مكتبة الوسائط' : 'Media Library',
-      icon: UploadCloud,
-    },
-  ];
+  // Scoped navigation items based on Scout vs Leader
+  const navItems = isScout
+    ? [
+        {
+          href: '/scout',
+          label: language === 'ar' ? 'عرين الكشاف' : 'Scout Space',
+          icon: Compass,
+          badge: currentMember?.member_code,
+        },
+        {
+          href: '/media',
+          label: language === 'ar' ? 'مكتبة الوسائط' : 'Media Archive',
+          icon: UploadCloud,
+        },
+      ]
+    : [
+        {
+          href: '/scout',
+          label: language === 'ar' ? 'عرين الكشاف (Scout)' : 'Scout Portal',
+          icon: Compass,
+          badge: 'Youth',
+        },
+        {
+          href: '/',
+          label: language === 'ar' ? 'الوحدات الكشفية' : 'Scout Units',
+          icon: Folder,
+          badge: '12',
+        },
+        {
+          href: '/attendance',
+          label: language === 'ar' ? 'سجل الحضور' : 'Attendance',
+          icon: CalendarCheck,
+        },
+        {
+          href: '/admin/analytics',
+          label: language === 'ar' ? 'تحليلات الحضور' : 'Analytics',
+          icon: BarChart3,
+        },
+        {
+          href: '/members',
+          label: language === 'ar' ? 'دليل الأعضاء' : 'Members Directory',
+          icon: Users,
+        },
+        {
+          href: '/inventory',
+          label: language === 'ar' ? 'إدارة العهدة' : 'Gear & Inventory',
+          icon: Package,
+        },
+        {
+          href: '/media',
+          label: language === 'ar' ? 'مكتبة الوسائط' : 'Media Library',
+          icon: UploadCloud,
+        },
+      ];
 
-  if (isSuperAdmin || can('users.manage_roles')) {
+  if (!isScout && (isSuperAdmin || can('users.manage_roles'))) {
     navItems.push({
       href: '/admin/permissions',
       label: language === 'ar' ? 'الصلاحيات' : 'Permissions',
@@ -119,7 +183,7 @@ export function GoogleWorkspaceLayout({ children }: { children: React.ReactNode 
     });
   }
 
-  if (isSuperAdmin || can('admin.audit_logs')) {
+  if (!isScout && (isSuperAdmin || can('admin.audit_logs'))) {
     navItems.push({
       href: '/admin/audit-logs',
       label: language === 'ar' ? 'سجل التدقيق' : 'Audit Logs',

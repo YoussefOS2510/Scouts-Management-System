@@ -459,7 +459,7 @@ export default function DashboardPage() {
             <div className="h-10 px-4 border-b border-[#F0F4F9] dark:border-[#2D2F31] bg-[#F8FAFD] dark:bg-[#282A2C] flex items-center text-xs font-medium text-[#444746] dark:text-[#C4C7C5]">
               <div className="w-1/3 min-w-[180px]">{language === 'ar' ? 'اسم الوحدة الكشفية' : 'Unit Name'}</div>
               <div className="w-1/4 hidden sm:block">{language === 'ar' ? 'المرحلة والنوع' : 'Stage & Gender'}</div>
-              <div className="w-1/4 hidden md:block">{language === 'ar' ? 'الصف والأعمار' : 'Grade & Ages'}</div>
+              <div className="w-1/4 hidden md:block">{language === 'ar' ? 'الصف الدراسي' : 'Target Grade'}</div>
               <div className="w-24 text-center">{language === 'ar' ? 'المسار' : 'Stream'}</div>
               <div className="ms-auto text-end">{language === 'ar' ? 'الإجراء' : 'Action'}</div>
             </div>
@@ -500,7 +500,7 @@ export default function DashboardPage() {
                     </div>
 
                     <div className="w-1/4 hidden md:block text-xs text-[#444746] dark:text-[#8E918F]">
-                      {unit.target_grade} &bull; {language === 'ar' ? `أعمار ${unit.min_age}–${unit.max_age} سنة` : `Ages ${unit.min_age}–${unit.max_age}`}
+                      {unit.target_grade}
                     </div>
 
                     <div className="w-24 text-center">

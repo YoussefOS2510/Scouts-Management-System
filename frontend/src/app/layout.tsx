@@ -27,7 +27,7 @@ const mono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'منظومة الفوج الكشفي | Scout Workspace & Drive',
+  title: 'Scout Workspace & Drive | منظومة الفوج الكشفي',
   description: 'Google Workspace & Material 3 scout management platform for units, attendance, equipment, and Google Drive archival.',
 };
 
@@ -37,7 +37,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="ar" dir="rtl" className={`${notoSansArabic.variable} ${inter.variable} ${mono.variable}`}>
+    <html lang="en" dir="ltr" className={`dark ${notoSansArabic.variable} ${inter.variable} ${mono.variable}`} suppressHydrationWarning>
       <body className="min-h-screen bg-[#F8FAFD] dark:bg-[#121416] text-[#1F1F1F] dark:text-[#E3E3E3] font-sans antialiased selection:bg-[#C2E7FF] selection:text-[#001D35]">
         <LanguageProvider>
           <AuthProvider>

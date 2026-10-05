@@ -30,7 +30,10 @@ import { TeamAttendanceAnalytics } from '../../components/TeamAttendanceAnalytic
 
 export default function AttendancePage() {
   const { language, t } = useLanguage();
-  const { currentUser, currentUnit, isSuperAdmin, can, logAction, accessibleUnits, members, patrols } = useAuth();
+  const { currentUser, currentRole, currentUnit, isSuperAdmin, can, logAction, accessibleUnits, members, patrols } = useAuth();
+
+  // Role permissions
+  const canViewAllUnits = isSuperAdmin || currentRole?.name === 'group_leader';
 
   // Tab view: 'roster' (take attendance) or 'analytics' (team attendance analytics)
   const [activeView, setActiveView] = useState<'roster' | 'analytics'>('roster');
@@ -41,6 +44,8 @@ export default function AttendancePage() {
   // Unit scoping: default to first accessible unit
   const defaultUnit = accessibleUnits.length > 0 ? accessibleUnits[0].id : 5;
   const [selectedUnitId, setSelectedUnitId] = useState<number>(defaultUnit);
+
+  const canTakeAttendance = isSuperAdmin || can('attendance.take', selectedUnitId);
 
   // Sync unit when user or accessibleUnits switch
   React.useEffect(() => {
@@ -109,6 +114,7 @@ export default function AttendancePage() {
 
   // Batch: Mark All Present
   const handleMarkAllPresent = () => {
+    if (!canTakeAttendance) return;
     const updated: Record<string, { status: AttendanceStatus; notes: string }> = {};
     activeMembers.forEach((m) => {
       updated[m.id] = {
@@ -121,11 +127,13 @@ export default function AttendancePage() {
 
   // Reset to no selection
   const handleClearAll = () => {
+    if (!canTakeAttendance) return;
     setRecords({});
   };
 
   // Toggle status (clicking active status toggles off)
   const handleStatusChange = (memberId: string, status: AttendanceStatus) => {
+    if (!canTakeAttendance) return;
     setRecords((prev) => {
       const isCurrentlySelected = prev[memberId]?.status === status;
       if (isCurrentlySelected) {
@@ -145,6 +153,7 @@ export default function AttendancePage() {
 
   // Update note
   const handleNotesChange = (memberId: string, notes: string) => {
+    if (!canTakeAttendance) return;
     setRecords((prev) => ({
       ...prev,
       [memberId]: {
@@ -156,6 +165,7 @@ export default function AttendancePage() {
 
   // Save Session
   const handleSave = () => {
+    if (!canTakeAttendance) return;
     if (isDuplicateDate) {
       alert(t('duplicate_session_warning'));
       return;
@@ -309,7 +319,7 @@ export default function AttendancePage() {
                 <select
                   value={selectedUnitId}
                   onChange={(e) => setSelectedUnitId(Number(e.target.value))}
-                  disabled={!isSuperAdmin && !!currentUnit}
+                  disabled={!canViewAllUnits && !!currentUnit}
                   className="bg-transparent border-none text-xs font-medium text-[#1F1F1F] dark:text-[#E3E3E3] focus:outline-none focus:ring-0 cursor-pointer"
                 >
                   {accessibleUnits.map((unit) => (
@@ -318,7 +328,7 @@ export default function AttendancePage() {
                     </option>
                   ))}
                 </select>
-                {!isSuperAdmin && currentUnit && (
+                {!canViewAllUnits && currentUnit && (
                   <span className="text-[10px] text-[#444746] flex items-center gap-0.5">
                     <Lock className="w-3 h-3 text-amber-600" />
                   </span>
@@ -359,18 +369,25 @@ export default function AttendancePage() {
                 </button>
               )}
 
-              <button
-                onClick={handleSave}
-                disabled={isDuplicateDate}
-                className={`px-5 py-2 rounded-xl text-xs font-medium flex items-center gap-2 transition-all cursor-pointer ${
-                  isDuplicateDate
-                    ? 'bg-[#F0F4F9] dark:bg-[#282A2C] text-[#8E918F] cursor-not-allowed'
-                    : 'bg-[#0B57D0] hover:bg-[#0842A0] text-white shadow-xs'
-                }`}
-              >
-                <Save className="w-4 h-4" />
-                <span>{t('save_session')}</span>
-              </button>
+              {canTakeAttendance ? (
+                <button
+                  onClick={handleSave}
+                  disabled={isDuplicateDate}
+                  className={`px-5 py-2 rounded-xl text-xs font-medium flex items-center gap-2 transition-all cursor-pointer ${
+                    isDuplicateDate
+                      ? 'bg-[#F0F4F9] dark:bg-[#282A2C] text-[#8E918F] cursor-not-allowed'
+                      : 'bg-[#0B57D0] hover:bg-[#0842A0] text-white shadow-xs'
+                  }`}
+                >
+                  <Save className="w-4 h-4" />
+                  <span>{t('save_session')}</span>
+                </button>
+              ) : (
+                <div className="px-3.5 py-2 rounded-xl text-xs font-medium bg-[#F0F4F9] dark:bg-[#282A2C] text-[#444746] dark:text-[#C4C7C5] flex items-center gap-1.5 border border-[#E0E3E7] dark:border-[#303134]">
+                  <Lock className="w-3.5 h-3.5 text-amber-600" />
+                  <span>{language === 'ar' ? 'وضع الاطلاع فقط' : 'View-Only Mode'}</span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -402,22 +419,29 @@ export default function AttendancePage() {
                   {language === 'ar' ? 'تطبيق على جميع الكشافين بنقرة واحدة' : 'Apply to all unit scouts'}
                 </div>
               </div>
-              <div className="flex flex-col gap-2">
-                <button
-                  onClick={handleMarkAllPresent}
-                  className="w-full py-2 px-3 rounded-xl bg-[#E8F0EC] hover:bg-[#D1F2D9] dark:bg-emerald-950/40 text-[#0A5326] dark:text-emerald-300 font-medium text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                >
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>{t('mark_all_present')}</span>
-                </button>
-                <button
-                  onClick={handleClearAll}
-                  className="w-full py-1.5 px-3 rounded-xl bg-[#F0F4F9] hover:bg-[#E9EEF6] dark:bg-[#282A2C] text-[#444746] dark:text-[#C4C7C5] text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                  <span>{language === 'ar' ? 'إعادة ضبط' : 'Clear selection'}</span>
-                </button>
-              </div>
+              {canTakeAttendance ? (
+                <div className="flex flex-col gap-2">
+                  <button
+                    onClick={handleMarkAllPresent}
+                    className="w-full py-2 px-3 rounded-xl bg-[#E8F0EC] hover:bg-[#D1F2D9] dark:bg-emerald-950/40 text-[#0A5326] dark:text-emerald-300 font-medium text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>{t('mark_all_present')}</span>
+                  </button>
+                  <button
+                    onClick={handleClearAll}
+                    className="w-full py-1.5 px-3 rounded-xl bg-[#F0F4F9] hover:bg-[#E9EEF6] dark:bg-[#282A2C] text-[#444746] dark:text-[#C4C7C5] text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>{language === 'ar' ? 'إعادة ضبط' : 'Clear selection'}</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="p-2.5 rounded-xl bg-[#F0F4F9] dark:bg-[#282A2C] text-[11px] text-[#444746] dark:text-[#C4C7C5] flex items-center gap-2">
+                  <Lock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                  <span>{language === 'ar' ? 'التسجيل متاح للقادة المعينين' : 'Marking is restricted'}</span>
+                </div>
+              )}
             </div>
 
             {/* Present Count */}

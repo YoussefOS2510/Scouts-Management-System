@@ -19,22 +19,22 @@ export function checkPermission(
   permissionKey: string,
   targetUnitId?: number | null
 ): boolean {
-  const perm = ctx.permissions.find((p) => p.key === permissionKey);
-  if (!perm) return false;
-
-  // 1. Check Global Super Admin (group_leader with unit_id null)
-  const groupLeaderRole = ctx.roles.find((r) => r.name === 'group_leader');
-  if (groupLeaderRole) {
+  // 1. Check Global Super Admin (admin role or u0) - Admin has everything unlocked
+  if (ctx.userId === 'u0') {
+    return true;
+  }
+  const adminRole = ctx.roles.find((r) => r.name === 'admin');
+  if (adminRole) {
     const isSuperAdmin = ctx.userRoles.some(
-      (ur) =>
-        ur.user_id === ctx.userId &&
-        ur.role_id === groupLeaderRole.id &&
-        (ur.unit_id === null || ur.unit_id === undefined)
+      (ur) => ur.user_id === ctx.userId && ur.role_id === adminRole.id
     );
     if (isSuperAdmin) {
       return true;
     }
   }
+
+  const perm = ctx.permissions.find((p) => p.key === permissionKey);
+  if (!perm) return false;
 
   // 2. Check Direct Overrides
   // Check unit-specific override first
