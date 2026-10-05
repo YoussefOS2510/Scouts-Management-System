@@ -17,6 +17,9 @@ export interface WorkerConfig {
   maxConcurrent: number;
   rateLimitDelayMs: number;
   stagingDirectory: string;
+  rootFolderId?: string;
+  yearFolderId?: string;
+  currentYear?: string;
 }
 
 export class MediaUploadWorker {
@@ -29,6 +32,9 @@ export class MediaUploadWorker {
       maxConcurrent: 2,
       rateLimitDelayMs: 1000, // 60 req/min
       stagingDirectory: process.env.MEDIA_STAGING_DIR || path.join(process.cwd(), 'staging_buffer'),
+      rootFolderId: process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID,
+      yearFolderId: process.env.GOOGLE_DRIVE_YEAR_FOLDER_ID,
+      currentYear: process.env.SCOUTS_CURRENT_YEAR || '2026-2027',
       ...config,
     };
 
@@ -38,7 +44,7 @@ export class MediaUploadWorker {
     }
   }
 
-  private getDriveClient() {
+  public getDriveClient() {
     if (!this.config.serviceAccountKeyPath || !fs.existsSync(this.config.serviceAccountKeyPath)) {
       return null;
     }
@@ -49,6 +55,84 @@ export class MediaUploadWorker {
     });
 
     return google.drive({ version: 'v3', auth });
+  }
+
+  /**
+   * Finds or creates a folder with a given name under a specific parent folder ID
+   */
+  async getOrCreateFolder(folderName: string, parentId?: string): Promise<string> {
+    const drive = this.getDriveClient();
+    if (!drive) {
+      return `mock_folder_${folderName}_${Date.now()}`;
+    }
+
+    const queryParts = [
+      `name = '${folderName.replace(/'/g, "\\'")}'`,
+      `mimeType = 'application/vnd.google-apps.folder'`,
+      `trashed = false`,
+    ];
+
+    if (parentId) {
+      queryParts.push(`'${parentId}' in parents`);
+    }
+
+    const response = await drive.files.list({
+      q: queryParts.join(' and '),
+      fields: 'files(id, name)',
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
+    });
+
+    if (response.data.files && response.data.files.length > 0 && response.data.files[0].id) {
+      return response.data.files[0].id;
+    }
+
+    const createMetadata: any = {
+      name: folderName,
+      mimeType: 'application/vnd.google-apps.folder',
+    };
+    if (parentId) {
+      createMetadata.parents = [parentId];
+    }
+
+    const created = await drive.files.create({
+      requestBody: createMetadata,
+      fields: 'id, name',
+      supportsAllDrives: true,
+    });
+
+    if (!created.data.id) {
+      throw new Error(`Failed to create Google Drive folder: ${folderName}`);
+    }
+
+    return created.data.id;
+  }
+
+  /**
+   * Ensures the proper folder hierarchy for an event:
+   * /Scouts System/{Year}/{EventName}/ (or /Scouts System/{Year}/Events/{EventName}/)
+   */
+  async ensureEventFolder(params: {
+    year?: string;
+    eventName: string;
+    unitName?: string;
+  }): Promise<{ rootFolderId: string; yearFolderId: string; eventFolderId: string }> {
+    const year = params.year || this.config.currentYear || '2026-2027';
+
+    // 1. Root Folder: "Scouts System"
+    const rootFolderId = this.config.rootFolderId || (await this.getOrCreateFolder('Scouts System'));
+
+    // 2. Year Folder: e.g. "2026-2027"
+    const yearFolderId =
+      this.config.yearFolderId && year === this.config.currentYear
+        ? this.config.yearFolderId
+        : await this.getOrCreateFolder(year, rootFolderId);
+
+    // 3. Event Folder under the year folder
+    const folderLabel = params.unitName ? `${params.unitName}_${params.eventName}` : params.eventName;
+    const eventFolderId = await this.getOrCreateFolder(folderLabel, yearFolderId);
+
+    return { rootFolderId, yearFolderId, eventFolderId };
   }
 
   /**
