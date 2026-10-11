@@ -18,10 +18,10 @@ export async function GET(request: NextRequest) {
           u.name_en,
           COUNT(DISTINCT m.id) AS scouts,
           COUNT(DISTINCT s.id) AS total_sessions,
-          ISNULL(ROUND(AVG(CASE WHEN r.status IN ('present', 'late') THEN 100.0 ELSE 0.0 END), 1), 0.0) AS rate,
+          COALESCE(ROUND(AVG(CASE WHEN r.status IN ('present', 'late') THEN 100.0 ELSE 0.0 END), 1), 0.0) AS rate,
           usr.full_name AS leader
         FROM units u
-        LEFT JOIN members m ON m.unit_id = u.id AND m.is_active = 1
+        LEFT JOIN members m ON m.unit_id = u.id AND m.is_active = TRUE
         LEFT JOIN attendance_sessions s ON s.unit_id = u.id
         LEFT JOIN attendance_records r ON r.session_id = s.id
         LEFT JOIN user_roles ur ON ur.unit_id = u.id AND ur.role_id = 4
@@ -46,8 +46,8 @@ export async function GET(request: NextRequest) {
         SELECT 
           c.id,
           c.name AS category,
-          ISNULL(SUM(e.total_quantity), 0) AS total,
-          ISNULL(SUM(bi.quantity), 0) AS booked
+          COALESCE(SUM(e.total_quantity), 0) AS total,
+          COALESCE(SUM(bi.quantity), 0) AS booked
         FROM equipment_categories c
         LEFT JOIN equipment e ON e.category_id = c.id
         LEFT JOIN booking_items bi ON bi.equipment_id = e.id
@@ -99,7 +99,7 @@ export async function GET(request: NextRequest) {
           p.name_en AS patrol_name_en
         FROM members m
         LEFT JOIN patrols p ON p.id = m.patrol_id
-        WHERE m.unit_id = @uid AND m.is_active = 1
+        WHERE m.unit_id = @uid AND m.is_active = TRUE
         ORDER BY m.full_name_ar ASC
       `, [
         { name: 'uid', type: sql.Int, value: targetUnit }

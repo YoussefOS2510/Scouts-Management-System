@@ -5,8 +5,8 @@ export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
-    const memRes = await query(`SELECT COUNT(*) AS total FROM members WHERE is_active = 1`);
-    const eqRes = await query(`SELECT ISNULL(SUM(total_quantity), 0) AS total FROM equipment`);
+    const memRes = await query(`SELECT COUNT(*) AS total FROM members WHERE is_active = TRUE`);
+    const eqRes = await query(`SELECT COALESCE(SUM(total_quantity), 0) AS total FROM equipment`);
     const sessRes = await query(`SELECT COUNT(*) AS total FROM attendance_sessions`);
     const bookRes = await query(`SELECT COUNT(*) AS total FROM bookings`);
 

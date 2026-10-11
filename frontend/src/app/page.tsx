@@ -63,8 +63,8 @@ export default function DashboardPage() {
 
   // Live Database stats
   const [stats, setStats] = useState<{ totalMembers: number; totalEquipment: number; totalSessions: number }>({
-    totalMembers: 22,
-    totalEquipment: 97,
+    totalMembers: 0,
+    totalEquipment: 0,
     totalSessions: 0,
   });
 
