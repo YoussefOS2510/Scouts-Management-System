@@ -24,6 +24,7 @@ import {
   X,
   Check,
   AlertCircle,
+  ShieldAlert,
 } from 'lucide-react';
 import { INITIAL_ROLES } from '../../lib/data';
 
@@ -75,7 +76,8 @@ export default function MembersDirectoryPage() {
   const [lEmail, setLEmail] = useState('');
   const [lPhone, setLPhone] = useState('');
   const [lRoleId, setLRoleId] = useState<number>(4); // Section Leader
-  const [lUnitId, setLUnitId] = useState<number | 'global'>('global');
+  const [lUnitIds, setLUnitIds] = useState<number[]>([]);
+  const [lIsGlobal, setLIsGlobal] = useState<boolean>(true);
 
   // Sync unit when user switches
   React.useEffect(() => {
@@ -92,12 +94,13 @@ export default function MembersDirectoryPage() {
   const canViewConfidential = isSuperAdmin || can('members.view_confidential', typeof selectedUnitId === 'number' ? selectedUnitId : currentUnit?.id);
   const canAddMember = isSuperAdmin || can('members.create_edit');
   const canAddLeader = isSuperAdmin || can('users.manage_roles');
+  const canAccessMembers = isSuperAdmin || can('members.view') || can('members.create_edit');
 
   // Filtered members
   const filteredMembers = useMemo(() => {
     return members.filter((m) => {
-      // If scoped leader, strictly force only their team
-      if (!canViewAllUnits && currentUnit && m.unit_id !== currentUnit.id) {
+      // If scoped leader, strictly force only their team(s)
+      if (!canViewAllUnits && accessibleUnits.length > 0 && !accessibleUnits.some((u) => u.id === m.unit_id)) {
         return false;
       }
 
@@ -108,7 +111,7 @@ export default function MembersDirectoryPage() {
         m.member_code.toLowerCase().includes(searchTerm.toLowerCase());
       return matchUnit && matchSearch;
     });
-  }, [searchTerm, selectedUnitId, isSuperAdmin, currentUnit, members]);
+  }, [searchTerm, selectedUnitId, isSuperAdmin, accessibleUnits, canViewAllUnits, members]);
 
   // Handle assigning patrol
   const handleAssignPatrol = (memberId: string, patrolId: number | null) => {
@@ -182,13 +185,15 @@ export default function MembersDirectoryPage() {
       email: lEmail.trim(),
       phone: lPhone.trim(),
       role_id: lRoleId,
-      unit_id: lUnitId === 'global' ? null : Number(lUnitId),
+      unit_ids: lIsGlobal ? [] : lUnitIds,
     });
 
     setIsAddLeaderOpen(false);
     setLName('');
     setLEmail('');
     setLPhone('');
+    setLUnitIds([]);
+    setLIsGlobal(true);
 
     setActionSuccessMsg(
       language === 'ar'
@@ -201,14 +206,40 @@ export default function MembersDirectoryPage() {
   // Filtered patrols for selected modal unit
   const modalUnitPatrols = patrols.filter((p) => p.unit_id === mUnitId);
 
+  if (!canAccessMembers) {
+    return (
+      <div className="max-w-2xl mx-auto py-16 text-center space-y-4 animate-fadeIn">
+        <div className="w-14 h-14 rounded-2xl bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 mx-auto flex items-center justify-center border border-amber-200 dark:border-amber-800/60 shadow-xs">
+          <ShieldAlert className="w-7 h-7" strokeWidth={1.5} />
+        </div>
+        <h2 className="text-xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
+          {language === 'ar' ? 'وصول مقيّد: دليل الأعضاء والكشافة' : 'Restricted Access: Members Directory'}
+        </h2>
+        <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 max-w-md mx-auto">
+          {language === 'ar'
+            ? 'حسابك الحالي لا يمتلك صلاحيات استعراض كشوف الأعضاء أو تعديل بيانات الكشافة.'
+            : 'Your current role does not have permission to view scout member rosters or manage profiles.'}
+        </p>
+        <div className="pt-2">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-zinc-100 dark:text-zinc-900 font-semibold text-xs transition-colors shadow-xs cursor-pointer"
+          >
+            {language === 'ar' ? 'العودة للرئيسية' : 'Return to Dashboard'}
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-5 animate-fadeIn pb-12">
       {/* 1. DRIVE LOCATION PATH & VIEW CONTROLS */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-[#F0F4F9] dark:border-[#2D2F31]">
         {/* Breadcrumb Path */}
         <div className="flex items-center gap-1.5 text-sm text-[#444746] dark:text-[#C4C7C5]">
-          <Link href="/" className="hover:text-[#0B57D0] transition-colors">
-            {language === 'ar' ? 'منظومة الفوج' : 'Scout Drive'}
+          <Link href="/" className="hover:text-[#0B57D0] transition-colors font-bold">
+            SMSR
           </Link>
           <span className="text-[#747775]">{language === 'ar' ? '‹' : '›'}</span>
           <span className="text-[#1F1F1F] dark:text-[#E3E3E3] font-medium">
@@ -341,9 +372,9 @@ export default function MembersDirectoryPage() {
         <select
           value={selectedUnitId}
           onChange={(e) => setSelectedUnitId(e.target.value === 'all' ? 'all' : Number(e.target.value))}
-          disabled={!canViewAllUnits && !!currentUnit}
+          disabled={!canViewAllUnits && accessibleUnits.length <= 1}
           className={`border rounded-lg px-3 py-2 text-xs font-bold focus:ring-1 focus:ring-[#1B4332] focus:outline-none transition-colors ${
-            !canViewAllUnits && currentUnit
+            !canViewAllUnits && accessibleUnits.length <= 1
               ? 'bg-[#F1EFEA] dark:bg-[#1E2723] border-[#E2DED6] dark:border-[#27342F] text-stone-500 cursor-not-allowed'
               : 'bg-white dark:bg-[#161D1A] border-[#D5CFC5] dark:border-[#27342F] text-stone-900 dark:text-stone-100'
           }`}
@@ -1101,22 +1132,57 @@ export default function MembersDirectoryPage() {
                   </select>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
-                    {language === 'ar' ? 'الفريق المخصص' : 'Assigned Team'} *
-                  </label>
-                  <select
-                    value={lUnitId}
-                    onChange={(e) => setLUnitId(e.target.value === 'global' ? 'global' : Number(e.target.value))}
-                    className="w-full text-xs rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2.5 py-2 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  >
-                    <option value="global">{language === 'ar' ? '🌐 كامل الفوج' : '🌐 All Teams'}</option>
-                    {INITIAL_UNITS.map((u) => (
-                      <option key={u.id} value={u.id}>
-                        {language === 'ar' ? u.name_ar : u.name_en}
-                      </option>
-                    ))}
-                  </select>
+                <div className="col-span-2 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                      {language === 'ar' ? 'الفرق والمراحل المخصصة' : 'Assigned Scout Teams'} *
+                    </label>
+                    <span className="text-[10px] text-zinc-500 font-mono">
+                      {lIsGlobal
+                        ? (language === 'ar' ? 'نطاق عام (كامل الفوج)' : 'All Teams')
+                        : `${lUnitIds.length} ${language === 'ar' ? 'فرق محددة' : 'teams selected'}`}
+                    </span>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-1.5 p-2 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 max-h-36 overflow-y-auto">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLIsGlobal(true);
+                        setLUnitIds([]);
+                      }}
+                      className={`px-2 py-1 rounded-md text-[11px] font-medium transition-colors cursor-pointer ${
+                        lIsGlobal
+                          ? 'bg-purple-600 text-white font-bold'
+                          : 'bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700'
+                      }`}
+                    >
+                      {language === 'ar' ? '🌐 كامل الفوج' : '🌐 All Teams'}
+                    </button>
+                    {INITIAL_UNITS.map((u) => {
+                      const isSelected = !lIsGlobal && lUnitIds.includes(u.id);
+                      return (
+                        <button
+                          key={u.id}
+                          type="button"
+                          onClick={() => {
+                            setLIsGlobal(false);
+                            setLUnitIds((prev) =>
+                              prev.includes(u.id) ? prev.filter((id) => id !== u.id) : [...prev, u.id]
+                            );
+                          }}
+                          className={`px-2 py-1 rounded-md text-[11px] font-medium transition-colors cursor-pointer flex items-center gap-1 ${
+                            isSelected
+                              ? 'bg-purple-600 text-white font-bold'
+                              : 'bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-700'
+                          }`}
+                        >
+                          {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                          <span>{language === 'ar' ? u.name_ar : u.name_en}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
 

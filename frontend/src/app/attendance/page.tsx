@@ -25,6 +25,7 @@ import {
   ChevronRight,
   ChevronLeft,
   Folder,
+  ShieldAlert,
 } from 'lucide-react';
 import { TeamAttendanceAnalytics } from '../../components/TeamAttendanceAnalytics';
 
@@ -34,6 +35,13 @@ export default function AttendancePage() {
 
   // Role permissions
   const canViewAllUnits = isSuperAdmin || currentRole?.name === 'group_leader';
+
+  const canAccessAttendance =
+    isSuperAdmin ||
+    can('attendance.take') ||
+    can('attendance.edit_history') ||
+    can('attendance.export') ||
+    can('attendance.analytics');
 
   // Tab view: 'roster' (take attendance) or 'analytics' (team attendance analytics)
   const [activeView, setActiveView] = useState<'roster' | 'analytics'>('roster');
@@ -57,9 +65,19 @@ export default function AttendancePage() {
   const [sessionDate, setSessionDate] = useState<string>(
     new Date().toISOString().split('T')[0]
   );
-  const [savedSessions, setSavedSessions] = useState<{ unitId: number; date: string }[]>([
-    { unitId: 5, date: '2026-09-01' },
-  ]);
+  const [savedSessions, setSavedSessions] = useState<{ unitId: number; date: string }[]>([]);
+
+  // Fetch saved sessions from database for selected unit
+  React.useEffect(() => {
+    fetch(`/api/attendance?unitId=${selectedUnitId}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.success && Array.isArray(data.sessions)) {
+          setSavedSessions(data.sessions.map((s: any) => ({ unitId: s.unit_id, date: s.session_date })));
+        }
+      })
+      .catch((err) => console.error('Failed to fetch attendance sessions:', err));
+  }, [selectedUnitId]);
 
   // Attendance state: { [memberId]: { status?: AttendanceStatus, notes: string } }
   // Defaults to empty object so all scouts have NO selection by default
@@ -171,21 +189,37 @@ export default function AttendancePage() {
       return;
     }
 
-    const currentUnitObj = INITIAL_UNITS.find((u) => u.id === selectedUnitId);
-    setSavedSessions((prev) => [...prev, { unitId: selectedUnitId, date: sessionDate }]);
-    setSaveNotification(t('session_saved_success'));
+    const payloadRecords = Object.entries(records).map(([mId, rec]) => ({
+      memberId: mId,
+      status: rec.status,
+      notes: rec.notes,
+    }));
 
-    logAction({
-      action_type: 'attendance_saved',
-      title_ar: `تسجيل حضور وانصراف (${currentUnitObj?.name_ar || ''})`,
-      title_en: `Attendance Session Recorded (${currentUnitObj?.name_en || ''})`,
-      description_ar: `تم حفظ كشف الحضور لتاريخ ${sessionDate} بنجاح (${stats.present} حاضر، ${stats.absent} غائب، ${stats.excused} معتذر)`,
-      description_en: `Recorded attendance for ${sessionDate} (${stats.present} Present, ${stats.absent} Absent, ${stats.excused} Excused)`,
-      unit_id: selectedUnitId,
-      metadata: { session_date: sessionDate, ...stats },
-    });
-
-    setTimeout(() => setSaveNotification(null), 4000);
+    fetch('/api/attendance', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        unitId: selectedUnitId,
+        sessionDate,
+        sessionTitle: 'اجتماع كشفي أسبوعي',
+        recordedBy: currentUser?.id,
+        records: payloadRecords,
+      }),
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.success) {
+          setSavedSessions((prev) => [...prev, { unitId: selectedUnitId, date: sessionDate }]);
+          setSaveNotification(t('session_saved_success'));
+          setTimeout(() => setSaveNotification(null), 4000);
+        } else {
+          alert(data.error || 'Failed to save attendance');
+        }
+      })
+      .catch((err) => {
+        console.error('Save attendance error:', err);
+        alert('Database connection error while saving attendance');
+      });
   };
 
   // Aggregate stats
@@ -214,31 +248,49 @@ export default function AttendancePage() {
 
   const currentUnitObj = INITIAL_UNITS.find((u) => u.id === selectedUnitId);
 
+  if (!canAccessAttendance) {
+    return (
+      <div className="max-w-2xl mx-auto py-16 text-center space-y-4 animate-fadeIn">
+        <div className="w-14 h-14 rounded-2xl bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 mx-auto flex items-center justify-center border border-amber-200 dark:border-amber-800/60 shadow-xs">
+          <ShieldAlert className="w-7 h-7" strokeWidth={1.5} />
+        </div>
+        <h2 className="text-xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
+          {language === 'ar' ? 'وصول مقيّد: سجل الحضور والغياب' : 'Restricted Access: Attendance Roster'}
+        </h2>
+        <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 max-w-md mx-auto">
+          {language === 'ar'
+            ? 'حسابك الحالي لا يمتلك صلاحيات تسجيل أو إدارة كشوف الحضور الكشفية.'
+            : 'Your current role does not have permission to mark attendance or view roll-call rosters.'}
+        </p>
+        <div className="pt-2">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-zinc-100 dark:text-zinc-900 font-semibold text-xs transition-colors shadow-xs cursor-pointer"
+          >
+            {language === 'ar' ? 'العودة للرئيسية' : 'Return to Dashboard'}
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-5 animate-fadeIn pb-12">
       {/* 1. DRIVE LOCATION PATH & VIEW CONTROLS */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-[#F0F4F9] dark:border-[#2D2F31]">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-neutral-200/80 dark:border-neutral-800/60">
         {/* Breadcrumbs */}
-        <div className="flex items-center gap-1.5 text-sm text-[#444746] dark:text-[#C4C7C5]">
-          <Link href="/" className="hover:text-[#0B57D0] transition-colors">
-            {language === 'ar' ? 'منظومة الفوج' : 'Scout Drive'}
+        <div className="flex items-center gap-1.5 text-xs sm:text-sm text-neutral-500 dark:text-neutral-400">
+          <Link href="/" className="hover:text-sky-500 transition-colors font-bold">
+            SMSR
           </Link>
-          {language === 'ar' ? (
-            <ChevronLeft className="w-4 h-4 text-[#747775]" />
-          ) : (
-            <ChevronRight className="w-4 h-4 text-[#747775]" />
-          )}
-          <span className="text-[#1F1F1F] dark:text-[#E3E3E3] font-medium">
+          <ChevronRight className="w-3.5 h-3.5 text-neutral-400 rtl:rotate-180" />
+          <span className="text-neutral-900 dark:text-neutral-100 font-semibold">
             {language === 'ar' ? 'سجل الحضور والانصراف' : 'Attendance Roster'}
           </span>
           {currentUnitObj && (
             <>
-              {language === 'ar' ? (
-                <ChevronLeft className="w-4 h-4 text-[#747775]" />
-              ) : (
-                <ChevronRight className="w-4 h-4 text-[#747775]" />
-              )}
-              <span className="text-xs px-2.5 py-0.5 rounded-full bg-[#C2E7FF] text-[#001D35] dark:bg-[#004A77] dark:text-[#C2E7FF] font-medium">
+              <ChevronRight className="w-3.5 h-3.5 text-neutral-400 rtl:rotate-180" />
+              <span className="text-xs px-2.5 py-0.5 rounded-md bg-sky-500/10 text-sky-700 dark:bg-sky-400/15 dark:text-sky-300 font-medium border border-sky-500/20" dir="auto">
                 {language === 'ar' ? currentUnitObj.name_ar : currentUnitObj.name_en}
               </span>
             </>
@@ -248,42 +300,42 @@ export default function AttendancePage() {
         {/* Tab & View Mode Segmented Controls */}
         <div className="flex items-center gap-2 self-end sm:self-auto">
           {/* Main View Switcher: Roster vs Analytics */}
-          <div className="inline-flex rounded-xl p-1 bg-[#F0F4F9] dark:bg-[#282A2C]">
+          <div className="inline-flex rounded-xl p-1 bg-neutral-100 dark:bg-[#111827] border border-neutral-200/80 dark:border-neutral-800/80">
             <button
               onClick={() => setActiveView('roster')}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer ${
                 activeView === 'roster'
-                  ? 'bg-white dark:bg-[#1F1F1F] text-[#0B57D0] shadow-xs font-semibold'
-                  : 'text-[#444746] dark:text-[#C4C7C5] hover:text-[#1F1F1F]'
+                  ? 'bg-white dark:bg-[#1E293B] text-sky-600 dark:text-sky-400 shadow-xs font-semibold'
+                  : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100'
               }`}
             >
-              <CalendarCheck className="w-4 h-4" />
+              <CalendarCheck className="w-3.5 h-3.5" />
               <span>{t('daily_roster')}</span>
             </button>
             <button
               onClick={() => setActiveView('analytics')}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer ${
                 activeView === 'analytics'
-                  ? 'bg-white dark:bg-[#1F1F1F] text-[#0B57D0] shadow-xs font-semibold'
-                  : 'text-[#444746] dark:text-[#C4C7C5] hover:text-[#1F1F1F]'
+                  ? 'bg-white dark:bg-[#1E293B] text-sky-600 dark:text-sky-400 shadow-xs font-semibold'
+                  : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100'
               }`}
             >
-              <BarChart3 className="w-4 h-4" />
+              <BarChart3 className="w-3.5 h-3.5" />
               <span>{t('team_attendance_analytics')}</span>
             </button>
           </div>
 
           {/* List vs Grid Layout (only in roster tab) */}
           {activeView === 'roster' && (
-            <div className="inline-flex rounded-xl p-1 bg-[#F0F4F9] dark:bg-[#282A2C]">
+            <div className="inline-flex rounded-xl p-1 bg-neutral-100 dark:bg-[#111827] border border-neutral-200/80 dark:border-neutral-800/80">
               <button
                 onClick={() => setRosterViewMode('list')}
                 className={`p-1.5 rounded-lg text-xs transition-colors cursor-pointer ${
                   rosterViewMode === 'list'
-                    ? 'bg-white dark:bg-[#1F1F1F] text-[#0B57D0] shadow-xs'
-                    : 'text-[#444746] hover:text-[#1F1F1F]'
+                    ? 'bg-white dark:bg-[#1E293B] text-sky-600 dark:text-sky-400 shadow-xs'
+                    : 'text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100'
                 }`}
-                title={language === 'ar' ? 'عرض جدول (Drive List)' : 'Table List View'}
+                title={language === 'ar' ? 'عرض جدول (List View)' : 'Table List View'}
               >
                 <List className="w-4 h-4" />
               </button>
@@ -291,10 +343,10 @@ export default function AttendancePage() {
                 onClick={() => setRosterViewMode('grid')}
                 className={`p-1.5 rounded-lg text-xs transition-colors cursor-pointer ${
                   rosterViewMode === 'grid'
-                    ? 'bg-white dark:bg-[#1F1F1F] text-[#0B57D0] shadow-xs'
-                    : 'text-[#444746] hover:text-[#1F1F1F]'
+                    ? 'bg-white dark:bg-[#1E293B] text-sky-600 dark:text-sky-400 shadow-xs'
+                    : 'text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100'
                 }`}
-                title={language === 'ar' ? 'عرض بطاقات (Grid)' : 'Card Grid View'}
+                title={language === 'ar' ? 'عرض بطاقات (Grid View)' : 'Card Grid View'}
               >
                 <LayoutGrid className="w-4 h-4" />
               </button>
@@ -310,41 +362,63 @@ export default function AttendancePage() {
         />
       ) : (
         <>
-          {/* 2. GOOGLE DRIVE CONTROL TOOLBAR (Unit, Date, Export, Save) */}
-          <div className="bg-white dark:bg-[#1E1F20] rounded-2xl p-4 border border-[#E0E3E7] dark:border-[#303134] flex flex-wrap items-center justify-between gap-3 shadow-none">
+          {/* 2. REFACTORED CONTROL TOOLBAR (Unit, Date, Compact Batch Actions, Export, Save) */}
+          <div className="bg-white dark:bg-[#111827] rounded-xl p-3 sm:p-4 border border-neutral-200 dark:border-neutral-800/80 flex flex-wrap items-center justify-between gap-3 shadow-none">
             <div className="flex flex-wrap items-center gap-2.5">
               {/* Unit Dropdown */}
-              <div className="flex items-center gap-2 bg-[#F0F4F9] dark:bg-[#282A2C] rounded-xl px-3 py-1.5">
-                <Folder className="w-4 h-4 text-[#0B57D0]" />
+              <div className="flex items-center gap-2 bg-neutral-100 dark:bg-[#0B0F17] rounded-lg px-2.5 py-1.5 border border-neutral-200/80 dark:border-neutral-800/80">
+                <Folder className="w-4 h-4 text-sky-500" />
                 <select
                   value={selectedUnitId}
                   onChange={(e) => setSelectedUnitId(Number(e.target.value))}
-                  disabled={!canViewAllUnits && !!currentUnit}
-                  className="bg-transparent border-none text-xs font-medium text-[#1F1F1F] dark:text-[#E3E3E3] focus:outline-none focus:ring-0 cursor-pointer"
+                  disabled={!canViewAllUnits && accessibleUnits.length <= 1}
+                  className="bg-transparent border-none text-xs font-medium text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-0 cursor-pointer"
                 >
                   {accessibleUnits.map((unit) => (
-                    <option key={unit.id} value={unit.id} className="dark:bg-[#1E1F20]">
+                    <option key={unit.id} value={unit.id} className="dark:bg-[#111827]">
                       {language === 'ar' ? unit.name_ar : unit.name_en}
                     </option>
                   ))}
                 </select>
-                {!canViewAllUnits && currentUnit && (
-                  <span className="text-[10px] text-[#444746] flex items-center gap-0.5">
-                    <Lock className="w-3 h-3 text-amber-600" />
+                {!canViewAllUnits && accessibleUnits.length <= 1 && (
+                  <span className="text-[10px] text-amber-500 flex items-center gap-0.5">
+                    <Lock className="w-3 h-3" />
                   </span>
                 )}
               </div>
 
               {/* Date Picker */}
-              <div className="flex items-center gap-2 bg-[#F0F4F9] dark:bg-[#282A2C] rounded-xl px-3 py-1.5">
-                <span className="text-xs text-[#444746] dark:text-[#8E918F]">{t('date')}:</span>
+              <div className="flex items-center gap-2 bg-neutral-100 dark:bg-[#0B0F17] rounded-lg px-2.5 py-1.5 border border-neutral-200/80 dark:border-neutral-800/80">
+                <span className="text-xs text-neutral-500 dark:text-neutral-400 font-medium">{t('date')}:</span>
                 <input
                   type="date"
                   value={sessionDate}
                   onChange={(e) => setSessionDate(e.target.value)}
-                  className="bg-transparent border-none text-xs font-mono text-[#1F1F1F] dark:text-[#E3E3E3] focus:outline-none focus:ring-0 cursor-pointer"
+                  className="bg-transparent border-none text-xs font-mono text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-0 cursor-pointer"
                 />
               </div>
+
+              {/* Compact Batch Action Buttons in Toolbar (Requirement 2) */}
+              {canTakeAttendance && (
+                <div className="flex items-center gap-1.5 ms-0 sm:ms-2">
+                  <button
+                    onClick={handleMarkAllPresent}
+                    className="px-2.5 py-1.5 rounded-lg text-xs font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 flex items-center gap-1.5 transition-colors cursor-pointer"
+                    title={t('mark_all_present')}
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>{t('mark_all_present')}</span>
+                  </button>
+                  <button
+                    onClick={handleClearAll}
+                    className="px-2.5 py-1.5 rounded-lg text-xs font-medium text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800 border border-neutral-200 dark:border-neutral-700/60 flex items-center gap-1.5 transition-colors cursor-pointer"
+                    title={language === 'ar' ? 'إعادة ضبط الاختيارات' : 'Clear selection'}
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>{language === 'ar' ? 'مسح' : 'Clear'}</span>
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Actions: Export Excel & Save Session */}
@@ -362,9 +436,9 @@ export default function AttendancePage() {
                       unit_id: selectedUnitId,
                     });
                   }}
-                  className="px-3.5 py-2 rounded-xl text-xs font-medium bg-[#F0F4F9] hover:bg-[#E9EEF6] dark:bg-[#282A2C] dark:hover:bg-[#333538] text-[#1F1F1F] dark:text-[#E3E3E3] flex items-center gap-2 transition-colors cursor-pointer"
+                  className="px-3 py-2 rounded-xl text-xs font-medium bg-neutral-100 hover:bg-neutral-200/70 dark:bg-[#1E293B] dark:hover:bg-neutral-700/80 text-neutral-800 dark:text-neutral-200 flex items-center gap-1.5 transition-colors cursor-pointer border border-neutral-200/80 dark:border-neutral-700/50"
                 >
-                  <FileSpreadsheet className="w-4 h-4 text-[#146C2E]" />
+                  <FileSpreadsheet className="w-4 h-4 text-emerald-500" />
                   <span>{language === 'ar' ? 'تصدير إكسيل' : 'Export'}</span>
                 </button>
               )}
@@ -373,18 +447,18 @@ export default function AttendancePage() {
                 <button
                   onClick={handleSave}
                   disabled={isDuplicateDate}
-                  className={`px-5 py-2 rounded-xl text-xs font-medium flex items-center gap-2 transition-all cursor-pointer ${
+                  className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer ${
                     isDuplicateDate
-                      ? 'bg-[#F0F4F9] dark:bg-[#282A2C] text-[#8E918F] cursor-not-allowed'
-                      : 'bg-[#0B57D0] hover:bg-[#0842A0] text-white shadow-xs'
+                      ? 'bg-neutral-200 dark:bg-neutral-800 text-neutral-400 cursor-not-allowed'
+                      : 'bg-sky-600 hover:bg-sky-500 text-white shadow-xs'
                   }`}
                 >
                   <Save className="w-4 h-4" />
                   <span>{t('save_session')}</span>
                 </button>
               ) : (
-                <div className="px-3.5 py-2 rounded-xl text-xs font-medium bg-[#F0F4F9] dark:bg-[#282A2C] text-[#444746] dark:text-[#C4C7C5] flex items-center gap-1.5 border border-[#E0E3E7] dark:border-[#303134]">
-                  <Lock className="w-3.5 h-3.5 text-amber-600" />
+                <div className="px-3.5 py-2 rounded-xl text-xs font-medium bg-neutral-100 dark:bg-[#1E293B] text-neutral-500 dark:text-neutral-400 flex items-center gap-1.5 border border-neutral-200 dark:border-neutral-800">
+                  <Lock className="w-3.5 h-3.5 text-amber-500" />
                   <span>{language === 'ar' ? 'وضع الاطلاع فقط' : 'View-Only Mode'}</span>
                 </div>
               )}
@@ -393,128 +467,104 @@ export default function AttendancePage() {
 
           {/* Duplicate Session Notice if applicable */}
           {isDuplicateDate && (
-            <div className="p-3.5 rounded-2xl bg-[#FEF7EC] dark:bg-amber-950/30 border border-[#FFCD85] dark:border-amber-800 text-[#7A3F00] dark:text-amber-300 text-xs flex items-center gap-2.5">
-              <AlertTriangle className="w-4 h-4 text-[#B06000] shrink-0" />
+            <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800/70 text-amber-900 dark:text-amber-300 text-xs flex items-center gap-2.5">
+              <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
               <span>{t('duplicate_session_warning')}</span>
             </div>
           )}
 
           {/* Success Notification */}
           {saveNotification && (
-            <div className="p-3.5 rounded-2xl bg-[#E8F0EC] dark:bg-emerald-950/30 border border-[#A8E5B6] text-[#0A5326] dark:text-emerald-300 text-xs flex items-center gap-2 font-medium animate-fadeIn">
+            <div className="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-300 dark:border-emerald-800/70 text-emerald-900 dark:text-emerald-300 text-xs flex items-center gap-2 font-medium animate-fadeIn">
               <Check className="w-4 h-4" />
               <span>{saveNotification}</span>
             </div>
           )}
 
-          {/* 3. LOW-PROFILE METRIC CARDS & BATCH CONTROLS */}
-          <div className="grid grid-cols-1 lg:grid-cols-5 gap-3.5">
-            {/* Batch Controls Pill Card */}
-            <div className="bg-white dark:bg-[#1E1F20] rounded-2xl p-4 border border-[#E0E3E7] dark:border-[#303134] flex flex-col justify-between space-y-3">
-              <div>
-                <div className="text-xs font-medium text-[#444746] dark:text-[#C4C7C5]">
-                  {language === 'ar' ? 'إجراءات سريعة' : 'Batch Actions'}
-                </div>
-                <div className="text-[11px] text-[#747775] mt-0.5">
-                  {language === 'ar' ? 'تطبيق على جميع الكشافين بنقرة واحدة' : 'Apply to all unit scouts'}
-                </div>
+          {/* 3. SLEEK SINGLE-ROW SUMMARY BAR (Requirement 2) */}
+          <div className="bg-white dark:bg-[#111827] rounded-xl px-4 py-3 border border-neutral-200 dark:border-neutral-800/80 flex flex-wrap items-center justify-between gap-4 shadow-none">
+            <div className="flex flex-wrap items-center gap-4 sm:gap-6 divide-x rtl:divide-x-reverse divide-neutral-200 dark:divide-neutral-800/80 text-xs">
+              {/* Enrolled Total */}
+              <div className="flex items-center gap-2">
+                <span className="text-neutral-500 dark:text-neutral-400 font-medium">
+                  {language === 'ar' ? 'المقيدين بالوحدة' : 'Enrolled'}
+                </span>
+                <span className="text-sm sm:text-base font-bold font-mono text-neutral-900 dark:text-neutral-100 tabular-nums">
+                  <bdi>{stats.total}</bdi>
+                </span>
               </div>
-              {canTakeAttendance ? (
-                <div className="flex flex-col gap-2">
-                  <button
-                    onClick={handleMarkAllPresent}
-                    className="w-full py-2 px-3 rounded-xl bg-[#E8F0EC] hover:bg-[#D1F2D9] dark:bg-emerald-950/40 text-[#0A5326] dark:text-emerald-300 font-medium text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                  >
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span>{t('mark_all_present')}</span>
-                  </button>
-                  <button
-                    onClick={handleClearAll}
-                    className="w-full py-1.5 px-3 rounded-xl bg-[#F0F4F9] hover:bg-[#E9EEF6] dark:bg-[#282A2C] text-[#444746] dark:text-[#C4C7C5] text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                  >
-                    <RotateCcw className="w-3.5 h-3.5" />
-                    <span>{language === 'ar' ? 'إعادة ضبط' : 'Clear selection'}</span>
-                  </button>
-                </div>
-              ) : (
-                <div className="p-2.5 rounded-xl bg-[#F0F4F9] dark:bg-[#282A2C] text-[11px] text-[#444746] dark:text-[#C4C7C5] flex items-center gap-2">
-                  <Lock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                  <span>{language === 'ar' ? 'التسجيل متاح للقادة المعينين' : 'Marking is restricted'}</span>
-                </div>
-              )}
-            </div>
 
-            {/* Present Count */}
-            <div className="bg-white dark:bg-[#1E1F20] rounded-2xl p-4 border border-[#E0E3E7] dark:border-[#303134] shadow-none flex flex-col justify-center">
-              <div className="text-3xl font-normal text-[#1F1F1F] dark:text-[#E3E3E3] font-mono tabular-nums">
-                {stats.present}
+              {/* Present */}
+              <div className="ps-4 sm:ps-6 flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                <span className="text-neutral-500 dark:text-neutral-400 font-medium">{t('present_count')}</span>
+                <span className="text-sm sm:text-base font-bold font-mono text-emerald-600 dark:text-emerald-400 tabular-nums">
+                  <bdi>{stats.present}</bdi>
+                </span>
+                <span className="text-[11px] font-mono text-neutral-400">
+                  ({stats.total > 0 ? Math.round((stats.present / stats.total) * 100) : 0}%)
+                </span>
               </div>
-              <div className="text-xs font-medium text-[#146C2E] dark:text-emerald-400 mt-1">
-                {t('present_count')} ({stats.total > 0 ? Math.round((stats.present / stats.total) * 100) : 0}%)
-              </div>
-            </div>
 
-            {/* Absent Count */}
-            <div className="bg-white dark:bg-[#1E1F20] rounded-2xl p-4 border border-[#E0E3E7] dark:border-[#303134] shadow-none flex flex-col justify-center">
-              <div className="text-3xl font-normal text-[#1F1F1F] dark:text-[#E3E3E3] font-mono tabular-nums">
-                {stats.absent}
+              {/* Absent */}
+              <div className="ps-4 sm:ps-6 flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0" />
+                <span className="text-neutral-500 dark:text-neutral-400 font-medium">{t('absent_count')}</span>
+                <span className="text-sm sm:text-base font-bold font-mono text-rose-600 dark:text-rose-400 tabular-nums">
+                  <bdi>{stats.absent}</bdi>
+                </span>
               </div>
-              <div className="text-xs font-medium text-rose-600 dark:text-rose-400 mt-1">
-                {t('absent_count')}
-              </div>
-            </div>
 
-            {/* Excused / Late Count */}
-            <div className="bg-white dark:bg-[#1E1F20] rounded-2xl p-4 border border-[#E0E3E7] dark:border-[#303134] shadow-none flex flex-col justify-center">
-              <div className="text-3xl font-normal text-[#1F1F1F] dark:text-[#E3E3E3] font-mono tabular-nums">
-                {stats.excused} <span className="text-sm font-normal text-[#0B57D0]">+{stats.late}</span>
-              </div>
-              <div className="text-xs font-medium text-[#B06000] dark:text-amber-400 mt-1">
-                {t('excused_count')} / {t('late_count')}
+              {/* Excused / Late */}
+              <div className="ps-4 sm:ps-6 flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+                <span className="text-neutral-500 dark:text-neutral-400 font-medium">
+                  {t('excused_count')} / {t('late_count')}
+                </span>
+                <span className="text-sm sm:text-base font-bold font-mono text-amber-600 dark:text-amber-400 tabular-nums">
+                  <bdi>{stats.excused}</bdi>
+                </span>
+                <span className="text-xs font-mono text-neutral-400">+<bdi>{stats.late}</bdi></span>
               </div>
             </div>
 
             {/* Attendance Rate */}
-            <div className="bg-white dark:bg-[#1E1F20] rounded-2xl p-4 border border-[#E0E3E7] dark:border-[#303134] shadow-none flex flex-col justify-center">
-              <div className="flex items-baseline justify-between">
-                <span className="text-3xl font-normal text-[#1F1F1F] dark:text-[#E3E3E3] font-mono tabular-nums">
-                  {stats.rate}%
+            <div className="flex items-center gap-3 ms-auto">
+              <span className="text-xs text-neutral-500 dark:text-neutral-400 font-medium">{t('attendance_rate')}</span>
+              <span className="text-base sm:text-lg font-bold font-mono text-sky-600 dark:text-sky-400 tabular-nums">
+                <bdi>{stats.rate}%</bdi>
+              </span>
+              {stats.unselected > 0 && (
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-neutral-100 dark:bg-[#1E293B] text-neutral-500 dark:text-neutral-400 border border-neutral-200 dark:border-neutral-700/60">
+                  {stats.unselected} {language === 'ar' ? 'متبقي' : 'pending'}
                 </span>
-                {stats.unselected > 0 && (
-                  <span className="text-[10px] text-[#444746] bg-[#F0F4F9] dark:bg-[#282A2C] px-1.5 py-0.5 rounded-full">
-                    {stats.unselected} {language === 'ar' ? 'متبقي' : 'left'}
-                  </span>
-                )}
-              </div>
-              <div className="text-xs font-medium text-[#444746] dark:text-[#C4C7C5] mt-1">
-                {t('attendance_rate')}
-              </div>
+              )}
             </div>
           </div>
 
-          {/* 4. ROSTER GROUPS (LIST VIEW OR GRID VIEW) */}
+          {/* 4. ROSTER GROUPS WITH UNIFIED COMPACT SEGMENTED RADIO-GROUP CONTROL */}
           <div className="space-y-4">
             {groupedScouts.map((group, gIdx) => (
               <div
                 key={gIdx}
-                className="bg-white dark:bg-[#1E1F20] rounded-2xl border border-[#E0E3E7] dark:border-[#303134] overflow-hidden"
+                className="bg-white dark:bg-[#111827] rounded-xl border border-neutral-200 dark:border-neutral-800/80 overflow-hidden shadow-none"
               >
                 {/* Patrol Header */}
-                <div className="px-4 py-2.5 bg-[#F8FAFD] dark:bg-[#282A2C] border-b border-[#F0F4F9] dark:border-[#2D2F31] flex items-center justify-between">
+                <div className="px-4 py-2.5 bg-neutral-50 dark:bg-[#161F30] border-b border-neutral-200/80 dark:border-neutral-800/80 flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <Users className="w-4 h-4 text-[#0B57D0]" />
-                    <h3 className="font-medium text-sm text-[#1F1F1F] dark:text-[#E3E3E3]">
+                    <Users className="w-4 h-4 text-sky-500" />
+                    <h3 className="font-semibold text-xs sm:text-sm text-neutral-900 dark:text-neutral-100" dir="auto">
                       {group.patrolName}
                     </h3>
-                    <span className="text-xs text-[#444746] dark:text-[#8E918F]">
+                    <span className="text-xs text-neutral-500 dark:text-neutral-400">
                       ({group.members.length} {language === 'ar' ? 'كشاف' : 'scouts'})
                     </span>
                   </div>
                 </div>
 
-                {/* VIEW MODE 1: Drive Table List View */}
+                {/* VIEW MODE 1: Table List View */}
                 {rosterViewMode === 'list' && (
-                  <div className="divide-y divide-[#F0F4F9] dark:divide-[#282A2C]">
+                  <div className="divide-y divide-neutral-200/80 dark:divide-neutral-800/60">
                     {group.members.map((member) => {
                       const current = records[member.id];
                       const currentStatus = current?.status;
@@ -522,96 +572,119 @@ export default function AttendancePage() {
                       return (
                         <div
                           key={member.id}
-                          className="h-auto sm:h-14 px-4 py-2.5 hover:bg-[#F8FAFD] dark:hover:bg-[#282A2C]/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 transition-colors"
+                          className="h-auto sm:h-14 px-4 py-2.5 hover:bg-neutral-50/80 dark:hover:bg-[#1E293B]/40 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 transition-colors"
                         >
                           {/* Member Details */}
                           <div className="flex items-center gap-3 min-w-0 flex-1">
-                            <div className="w-8 h-8 rounded-full bg-[#E9EEF6] dark:bg-[#303134] text-[#001D35] dark:text-[#C2E7FF] flex items-center justify-center text-xs font-medium shrink-0">
+                            <div className="w-8 h-8 rounded-lg bg-neutral-100 dark:bg-[#1E293B] text-neutral-700 dark:text-neutral-200 flex items-center justify-center text-xs font-bold shrink-0 border border-neutral-200/60 dark:border-neutral-700/50">
                               {member.full_name_ar?.charAt(0) || 'ك'}
                             </div>
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-2">
-                                <span className="text-sm font-medium text-[#1F1F1F] dark:text-[#E3E3E3] truncate">
-                                  {language === 'ar' ? member.full_name_ar : (member.full_name_en || member.full_name_ar)}
+                                <span className="text-xs sm:text-sm font-semibold text-neutral-900 dark:text-neutral-100 truncate" dir="auto">
+                                  <bdi>{language === 'ar' ? member.full_name_ar : (member.full_name_en || member.full_name_ar)}</bdi>
                                 </span>
-                                <span className="text-[11px] font-mono text-[#747775] shrink-0">
-                                  {member.member_code}
+                                <span className="text-[11px] font-mono text-neutral-400 shrink-0">
+                                  <bdi>{member.member_code}</bdi>
                                 </span>
                               </div>
-                              <div className="text-[11px] text-[#747775] truncate">
-                                {member.academic_year} &bull; {member.school_or_college || 'سان جورج'}
+                              <div className="text-[11px] text-neutral-500 dark:text-neutral-400 truncate" dir="auto">
+                                <bdi>{member.academic_year}</bdi> &bull; <bdi>{member.school_or_college || 'سان جورج'}</bdi>
                               </div>
                             </div>
                           </div>
 
-                          {/* Material Choice Chips for Status */}
-                          <div className="flex items-center gap-1.5 self-start sm:self-auto shrink-0">
-                            {/* Present Choice Chip */}
-                            <button
-                              onClick={() => handleStatusChange(member.id, 'present')}
-                              className={`px-3 py-1 rounded-full text-xs transition-colors cursor-pointer flex items-center gap-1.5 ${
-                                currentStatus === 'present'
-                                  ? 'bg-[#D1F2D9] text-[#0A5326] font-medium'
-                                  : 'bg-[#F0F4F9] dark:bg-[#282A2C] text-[#444746] dark:text-[#C4C7C5] hover:bg-[#E9EEF6]'
-                              }`}
+                          {/* Unified Compact Segmented Radio-Group Control */}
+                          <div className="flex items-center gap-2 self-start sm:self-auto shrink-0 flex-wrap">
+                            <div
+                              role="radiogroup"
+                              aria-label={`Attendance for ${member.full_name_ar}`}
+                              className="inline-flex p-0.5 rounded-lg bg-neutral-100 dark:bg-[#0B0F17] border border-neutral-200/90 dark:border-neutral-800 shrink-0"
                             >
-                              <CheckCircle2 className="w-3.5 h-3.5" />
-                              <span>{t('status_present')}</span>
-                            </button>
+                              {/* Present Segment */}
+                              <button
+                                type="button"
+                                role="radio"
+                                aria-checked={currentStatus === 'present'}
+                                onClick={() => handleStatusChange(member.id, 'present')}
+                                className={`px-2.5 py-1 text-xs rounded-md flex items-center gap-1.5 transition-all cursor-pointer ${
+                                  currentStatus === 'present'
+                                    ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/40 shadow-xs font-semibold'
+                                    : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200 hover:bg-white/60 dark:hover:bg-neutral-800/50 border border-transparent'
+                                }`}
+                                title={t('status_present')}
+                              >
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                <span>{t('status_present')}</span>
+                              </button>
 
-                            {/* Absent Choice Chip */}
-                            <button
-                              onClick={() => handleStatusChange(member.id, 'absent')}
-                              className={`px-3 py-1 rounded-full text-xs transition-colors cursor-pointer flex items-center gap-1.5 ${
-                                currentStatus === 'absent'
-                                  ? 'bg-[#F9DEDC] text-[#8C1D18] font-medium'
-                                  : 'bg-[#F0F4F9] dark:bg-[#282A2C] text-[#444746] dark:text-[#C4C7C5] hover:bg-[#E9EEF6]'
-                              }`}
-                            >
-                              <XCircle className="w-3.5 h-3.5" />
-                              <span>{t('status_absent')}</span>
-                            </button>
+                              {/* Absent Segment */}
+                              <button
+                                type="button"
+                                role="radio"
+                                aria-checked={currentStatus === 'absent'}
+                                onClick={() => handleStatusChange(member.id, 'absent')}
+                                className={`px-2.5 py-1 text-xs rounded-md flex items-center gap-1.5 transition-all cursor-pointer ${
+                                  currentStatus === 'absent'
+                                    ? 'bg-rose-500/15 text-rose-700 dark:text-rose-400 border border-rose-500/40 shadow-xs font-semibold'
+                                    : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200 hover:bg-white/60 dark:hover:bg-neutral-800/50 border border-transparent'
+                                }`}
+                                title={t('status_absent')}
+                              >
+                                <XCircle className="w-3.5 h-3.5" />
+                                <span>{t('status_absent')}</span>
+                              </button>
 
-                            {/* Excused Choice Chip */}
-                            <button
-                              onClick={() => handleStatusChange(member.id, 'excused')}
-                              className={`px-3 py-1 rounded-full text-xs transition-colors cursor-pointer flex items-center gap-1.5 ${
-                                currentStatus === 'excused'
-                                  ? 'bg-[#D3E3FD] text-[#043372] font-medium'
-                                  : 'bg-[#F0F4F9] dark:bg-[#282A2C] text-[#444746] dark:text-[#C4C7C5] hover:bg-[#E9EEF6]'
-                              }`}
-                            >
-                              <HelpCircle className="w-3.5 h-3.5" />
-                              <span>{t('status_excused')}</span>
-                            </button>
+                              {/* Excused Segment */}
+                              <button
+                                type="button"
+                                role="radio"
+                                aria-checked={currentStatus === 'excused'}
+                                onClick={() => handleStatusChange(member.id, 'excused')}
+                                className={`px-2.5 py-1 text-xs rounded-md flex items-center gap-1.5 transition-all cursor-pointer ${
+                                  currentStatus === 'excused'
+                                    ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/40 shadow-xs font-semibold'
+                                    : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200 hover:bg-white/60 dark:hover:bg-neutral-800/50 border border-transparent'
+                                }`}
+                                title={t('status_excused')}
+                              >
+                                <HelpCircle className="w-3.5 h-3.5" />
+                                <span>{t('status_excused')}</span>
+                              </button>
 
-                            {/* Late Choice Chip */}
-                            <button
-                              onClick={() => handleStatusChange(member.id, 'late')}
-                              className={`px-3 py-1 rounded-full text-xs transition-colors cursor-pointer flex items-center gap-1.5 ${
-                                currentStatus === 'late'
-                                  ? 'bg-[#FFE2B3] text-[#7A3F00] font-medium'
-                                  : 'bg-[#F0F4F9] dark:bg-[#282A2C] text-[#444746] dark:text-[#C4C7C5] hover:bg-[#E9EEF6]'
-                              }`}
-                            >
-                              <Clock className="w-3.5 h-3.5" />
-                              <span>{t('status_late')}</span>
-                            </button>
-                          </div>
-
-                          {/* Excuse Reason Input: Appears ONLY when marked excused */}
-                          {currentStatus === 'excused' && (
-                            <div className="w-full sm:w-56 animate-fadeIn">
-                              <input
-                                type="text"
-                                placeholder={language === 'ar' ? 'سبب الاعتذار...' : 'Excuse reason...'}
-                                value={current?.notes || ''}
-                                onChange={(e) => handleNotesChange(member.id, e.target.value)}
-                                autoFocus
-                                className="w-full bg-[#F0F4F9] dark:bg-[#282A2C] border border-[#C2E7FF] dark:border-[#004A77] rounded-xl px-3 py-1 text-xs text-[#1F1F1F] dark:text-[#E3E3E3] placeholder-[#747775] focus:outline-none focus:ring-1 focus:ring-[#0B57D0]"
-                              />
+                              {/* Late Segment */}
+                              <button
+                                type="button"
+                                role="radio"
+                                aria-checked={currentStatus === 'late'}
+                                onClick={() => handleStatusChange(member.id, 'late')}
+                                className={`px-2.5 py-1 text-xs rounded-md flex items-center gap-1.5 transition-all cursor-pointer ${
+                                  currentStatus === 'late'
+                                    ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/40 shadow-xs font-semibold'
+                                    : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200 hover:bg-white/60 dark:hover:bg-neutral-800/50 border border-transparent'
+                                }`}
+                                title={t('status_late')}
+                              >
+                                <Clock className="w-3.5 h-3.5" />
+                                <span>{t('status_late')}</span>
+                              </button>
                             </div>
-                          )}
+
+                            {/* Excuse Reason Input: Appears when marked excused */}
+                            {currentStatus === 'excused' && (
+                              <div className="w-full sm:w-56 animate-fadeIn">
+                                <input
+                                  type="text"
+                                  placeholder={language === 'ar' ? 'سبب الاعتذار...' : 'Excuse reason...'}
+                                  value={current?.notes || ''}
+                                  onChange={(e) => handleNotesChange(member.id, e.target.value)}
+                                  autoFocus
+                                  className="w-full bg-neutral-100 dark:bg-[#0B0F17] border border-amber-500/40 rounded-lg px-2.5 py-1 text-xs text-neutral-900 dark:text-neutral-100 placeholder-neutral-400 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                                  dir="auto"
+                                />
+                              </div>
+                            )}
+                          </div>
                         </div>
                       );
                     })}
@@ -628,55 +701,71 @@ export default function AttendancePage() {
                       return (
                         <div
                           key={member.id}
-                          className="p-3.5 rounded-xl bg-[#F8FAFD] dark:bg-[#282A2C] border border-[#E0E3E7] dark:border-[#303134] space-y-3"
+                          className="p-3.5 rounded-xl bg-neutral-50 dark:bg-[#161F30] border border-neutral-200/80 dark:border-neutral-800/80 space-y-3"
                         >
                           <div className="flex items-center justify-between">
-                            <div className="text-sm font-medium text-[#1F1F1F] dark:text-[#E3E3E3] truncate">
-                              {language === 'ar' ? member.full_name_ar : (member.full_name_en || member.full_name_ar)}
+                            <div className="text-xs sm:text-sm font-semibold text-neutral-900 dark:text-neutral-100 truncate" dir="auto">
+                              <bdi>{language === 'ar' ? member.full_name_ar : (member.full_name_en || member.full_name_ar)}</bdi>
                             </div>
-                            <span className="text-[11px] font-mono text-[#747775]">
-                              {member.member_code}
+                            <span className="text-[11px] font-mono text-neutral-400">
+                              <bdi>{member.member_code}</bdi>
                             </span>
                           </div>
 
-                          {/* Choice chips */}
-                          <div className="flex items-center gap-1.5 flex-wrap">
+                          {/* Segmented radio control */}
+                          <div
+                            role="radiogroup"
+                            aria-label={`Attendance for ${member.full_name_ar}`}
+                            className="inline-flex p-0.5 rounded-lg bg-neutral-100 dark:bg-[#0B0F17] border border-neutral-200/90 dark:border-neutral-800 w-full justify-between"
+                          >
                             <button
+                              type="button"
+                              role="radio"
+                              aria-checked={currentStatus === 'present'}
                               onClick={() => handleStatusChange(member.id, 'present')}
-                              className={`px-2.5 py-1 rounded-full text-xs transition-colors cursor-pointer ${
+                              className={`flex-1 py-1 text-xs rounded-md text-center transition-all cursor-pointer ${
                                 currentStatus === 'present'
-                                  ? 'bg-[#D1F2D9] text-[#0A5326] font-medium'
-                                  : 'bg-white dark:bg-[#1E1F20] text-[#444746] hover:bg-[#E9EEF6]'
+                                  ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/40 shadow-xs font-semibold'
+                                  : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200 border border-transparent'
                               }`}
                             >
                               {t('status_present')}
                             </button>
                             <button
+                              type="button"
+                              role="radio"
+                              aria-checked={currentStatus === 'absent'}
                               onClick={() => handleStatusChange(member.id, 'absent')}
-                              className={`px-2.5 py-1 rounded-full text-xs transition-colors cursor-pointer ${
+                              className={`flex-1 py-1 text-xs rounded-md text-center transition-all cursor-pointer ${
                                 currentStatus === 'absent'
-                                  ? 'bg-[#F9DEDC] text-[#8C1D18] font-medium'
-                                  : 'bg-white dark:bg-[#1E1F20] text-[#444746] hover:bg-[#E9EEF6]'
+                                  ? 'bg-rose-500/15 text-rose-700 dark:text-rose-400 border border-rose-500/40 shadow-xs font-semibold'
+                                  : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200 border border-transparent'
                               }`}
                             >
                               {t('status_absent')}
                             </button>
                             <button
+                              type="button"
+                              role="radio"
+                              aria-checked={currentStatus === 'excused'}
                               onClick={() => handleStatusChange(member.id, 'excused')}
-                              className={`px-2.5 py-1 rounded-full text-xs transition-colors cursor-pointer ${
+                              className={`flex-1 py-1 text-xs rounded-md text-center transition-all cursor-pointer ${
                                 currentStatus === 'excused'
-                                  ? 'bg-[#D3E3FD] text-[#043372] font-medium'
-                                  : 'bg-white dark:bg-[#1E1F20] text-[#444746] hover:bg-[#E9EEF6]'
+                                  ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/40 shadow-xs font-semibold'
+                                  : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200 border border-transparent'
                               }`}
                             >
                               {t('status_excused')}
                             </button>
                             <button
+                              type="button"
+                              role="radio"
+                              aria-checked={currentStatus === 'late'}
                               onClick={() => handleStatusChange(member.id, 'late')}
-                              className={`px-2.5 py-1 rounded-full text-xs transition-colors cursor-pointer ${
+                              className={`flex-1 py-1 text-xs rounded-md text-center transition-all cursor-pointer ${
                                 currentStatus === 'late'
-                                  ? 'bg-[#FFE2B3] text-[#7A3F00] font-medium'
-                                  : 'bg-white dark:bg-[#1E1F20] text-[#444746] hover:bg-[#E9EEF6]'
+                                  ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/40 shadow-xs font-semibold'
+                                  : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200 border border-transparent'
                               }`}
                             >
                               {t('status_late')}
@@ -691,7 +780,8 @@ export default function AttendancePage() {
                               value={current?.notes || ''}
                               onChange={(e) => handleNotesChange(member.id, e.target.value)}
                               autoFocus
-                              className="w-full bg-white dark:bg-[#1E1F20] border border-[#C2E7FF] dark:border-[#004A77] rounded-lg px-2.5 py-1 text-xs text-[#1F1F1F] dark:text-[#E3E3E3] focus:outline-none focus:ring-1 focus:ring-[#0B57D0]"
+                              className="w-full bg-neutral-100 dark:bg-[#0B0F17] border border-amber-500/40 rounded-lg px-2.5 py-1 text-xs text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                              dir="auto"
                             />
                           )}
                         </div>

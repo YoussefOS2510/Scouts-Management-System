@@ -6,12 +6,18 @@
 
 :root {
   --background: #F8FAFD;
-  --foreground: #1F1F1F;
+  --foreground: #0F172A;
+  --surface-panel: #FFFFFF;
+  --surface-card: #FFFFFF;
+  --border-subtle: #E2E8F0;
 }
 
 .dark {
-  --background: #121416;
-  --foreground: #E3E3E3;
+  --background: #0B0F17;
+  --foreground: #F1F5F9;
+  --surface-panel: #111827;
+  --surface-card: #1E293B;
+  --border-subtle: rgba(51, 65, 85, 0.45);
 }
 
 body {

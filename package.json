@@ -13,6 +13,8 @@
     "start": "npm run start --workspace=frontend",
     "verify": "npm run verify --workspace=backend",
     "verify:mssql": "npm run verify:mssql --workspace=backend",
+    "verify:postgres": "npm run verify:postgres --workspace=backend",
+    "migrate:cloud": "npx tsx backend/scripts/migrate-cloud.ts",
     "worker": "npm run worker --workspace=backend"
   },
   "type": "module"

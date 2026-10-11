@@ -4,11 +4,36 @@ import {
   INITIAL_ROLES,
   INITIAL_PERMISSIONS,
   INITIAL_ROLE_PERMISSIONS,
-  INITIAL_USER_ROLES,
-  INITIAL_USER_OVERRIDES,
-  INITIAL_EQUIPMENT,
-  INITIAL_BOOKINGS,
 } from '../../frontend/src/lib/data';
+
+const TEST_USER_ROLES = [
+  { id: 1, user_id: 'u0', role_id: 1, unit_id: null },
+  { id: 10, user_id: 'u3', role_id: 4, unit_id: 5 },
+  { id: 5, user_id: 'u4', role_id: 5, unit_id: 5 },
+];
+
+const TEST_USER_OVERRIDES = [
+  { id: 1, user_id: 'u4', permission_id: 7, unit_id: 5, is_granted: true },
+  { id: 2, user_id: 'u4', permission_id: 10, unit_id: 5, is_granted: false },
+];
+
+const TEST_EQUIPMENT = [
+  { id: 1, category_id: 1, name: 'Tent 4-Person', sku: 'TNT-001', total_quantity: 25, storage_bay: 'Bay A-1', condition: 'good' as const },
+];
+
+const TEST_BOOKINGS = [
+  {
+    id: 'b1',
+    user_id: 'u3',
+    unit_id: 5,
+    start_date: '2026-10-01',
+    end_date: '2026-10-04',
+    purpose: 'Camp',
+    status: 'approved' as const,
+    items: [{ booking_id: 'b1', equipment_id: 1, quantity: 10 }],
+    created_at: '2026-09-10T12:00:00Z',
+  },
+];
 
 async function runVerification() {
   console.log('--- 1. Testing Permission Resolution Hierarchy ---');
@@ -17,10 +42,10 @@ async function runVerification() {
   const superAdminCtx: PermissionContext = {
     userId: 'u0',
     roles: INITIAL_ROLES,
-    userRoles: INITIAL_USER_ROLES,
+    userRoles: TEST_USER_ROLES,
     permissions: INITIAL_PERMISSIONS,
     rolePermissions: INITIAL_ROLE_PERMISSIONS,
-    overrides: INITIAL_USER_OVERRIDES,
+    overrides: TEST_USER_OVERRIDES,
   };
 
   const superAdminCanManageRoles = checkPermission(superAdminCtx, 'users.manage_roles');
@@ -39,10 +64,10 @@ async function runVerification() {
   const sectionLeaderCtx: PermissionContext = {
     userId: 'u3',
     roles: INITIAL_ROLES,
-    userRoles: INITIAL_USER_ROLES,
+    userRoles: TEST_USER_ROLES,
     permissions: INITIAL_PERMISSIONS,
     rolePermissions: INITIAL_ROLE_PERMISSIONS,
-    overrides: INITIAL_USER_OVERRIDES,
+    overrides: TEST_USER_OVERRIDES,
   };
 
   const leaderCanTakeUnit5 = checkPermission(sectionLeaderCtx, 'attendance.take', 5);
@@ -61,10 +86,10 @@ async function runVerification() {
   const asstLeaderCtx: PermissionContext = {
     userId: 'u4',
     roles: INITIAL_ROLES,
-    userRoles: INITIAL_USER_ROLES,
+    userRoles: TEST_USER_ROLES,
     permissions: INITIAL_PERMISSIONS,
     rolePermissions: INITIAL_ROLE_PERMISSIONS,
-    overrides: INITIAL_USER_OVERRIDES,
+    overrides: TEST_USER_OVERRIDES,
   };
 
   const asstExportGranted = checkPermission(asstLeaderCtx, 'attendance.export', 5);
@@ -79,26 +104,26 @@ async function runVerification() {
   console.log('--- 2. Testing Equipment Overlap Availability Engine ---');
   // Tent item (id 1, total 25)
   // b1 has 10 tents booked between 2026-10-01 and 2026-10-04
-  const tent = INITIAL_EQUIPMENT.find((e) => e.id === 1)!;
+  const tent = TEST_EQUIPMENT.find((e) => e.id === 1)!;
 
   // Query overlapping range: 2026-10-02 to 2026-10-03 -> 10 allocated, 15 available
-  const overlapCheck = calculateEquipmentAvailability(tent, INITIAL_BOOKINGS, '2026-10-02', '2026-10-03', 15);
+  const overlapCheck = calculateEquipmentAvailability(tent, TEST_BOOKINGS, '2026-10-02', '2026-10-03', 15);
   console.log(`[PASS] Overlapping range availability: ${overlapCheck.availableQuantity} available (Expected: 15)`);
   console.log(`[PASS] Request 15 tents isAvailable: ${overlapCheck.isAvailable} (Expected: true)`);
   if (overlapCheck.availableQuantity !== 15 || !overlapCheck.isAvailable) throw new Error('Availability test failed');
 
   // Query requesting 16 tents during overlap -> should fail
-  const exceedCheck = calculateEquipmentAvailability(tent, INITIAL_BOOKINGS, '2026-10-02', '2026-10-03', 16);
+  const exceedCheck = calculateEquipmentAvailability(tent, TEST_BOOKINGS, '2026-10-02', '2026-10-03', 16);
   console.log(`[PASS] Request 16 tents isAvailable: ${exceedCheck.isAvailable} (Expected: false)`);
   if (exceedCheck.isAvailable) throw new Error('Exceeding quantity test failed');
 
   // Query non-overlapping range: 2026-11-01 to 2026-11-05 -> full 25 available
-  const nonOverlapCheck = calculateEquipmentAvailability(tent, INITIAL_BOOKINGS, '2026-11-01', '2026-11-05', 25);
+  const nonOverlapCheck = calculateEquipmentAvailability(tent, TEST_BOOKINGS, '2026-11-01', '2026-11-05', 25);
   console.log(`[PASS] Non-overlapping range availability: ${nonOverlapCheck.availableQuantity} available (Expected: 25)`);
   console.log('--- 3. Testing Admin Team Assignment & Leader Patrol Distribution ---');
 
   // Test 3.1: Admin reassigns Mark Wagdy (u3) from Unit 5 (Kashafa A) to Unit 3 (Zahrat A)
-  const reassignedUserRoles = INITIAL_USER_ROLES.map((ur) =>
+  const reassignedUserRoles = TEST_USER_ROLES.map((ur) =>
     ur.user_id === 'u3' ? { ...ur, unit_id: 3 } : ur
   );
 
@@ -108,7 +133,7 @@ async function runVerification() {
     userRoles: reassignedUserRoles,
     permissions: INITIAL_PERMISSIONS,
     rolePermissions: INITIAL_ROLE_PERMISSIONS,
-    overrides: INITIAL_USER_OVERRIDES,
+    overrides: TEST_USER_OVERRIDES,
   };
 
   const canTakeUnit3AfterReassign = checkPermission(reassignedLeaderCtx, 'attendance.take', 3);
@@ -131,10 +156,10 @@ async function runVerification() {
   const quartermasterCtx: PermissionContext = {
     userId: 'u2',
     roles: INITIAL_ROLES,
-    userRoles: INITIAL_USER_ROLES,
+    userRoles: TEST_USER_ROLES,
     permissions: INITIAL_PERMISSIONS,
     rolePermissions: INITIAL_ROLE_PERMISSIONS,
-    overrides: INITIAL_USER_OVERRIDES,
+    overrides: TEST_USER_OVERRIDES,
   };
 
   const sectionLeaderAnalyticsUnit5 = checkPermission(sectionLeaderCtx, 'attendance.analytics', 5);
@@ -148,13 +173,23 @@ async function runVerification() {
   console.log(`[PASS] Quartermaster attendance.analytics: ${qmAnalytics} (Expected: false)`);
 
   console.log('--- 5. Testing Scout Yearly Progression & Team Folder Access ---');
-  // Mina Samir (m1) was in Ashbal A (unit 1) in 2024, Ashbal B (unit 2) in 2025, Kashafa A (unit 5) in 2026
-  const { INITIAL_MEMBER_UNIT_HISTORY, INITIAL_MEDIA_ALBUMS } = await import('../../frontend/src/lib/data');
+  const TEST_MEMBER_UNIT_HISTORY = [
+    { id: 1, member_id: 'm1', unit_id: 1, patrol_id: 101, year: 2024 },
+    { id: 2, member_id: 'm1', unit_id: 2, patrol_id: 201, year: 2025 },
+    { id: 3, member_id: 'm1', unit_id: 5, patrol_id: 1, year: 2026 },
+  ];
 
-  const minaHistory = INITIAL_MEMBER_UNIT_HISTORY.filter((h) => h.member_id === 'm1');
+  const TEST_MEDIA_ALBUMS = [
+    { id: 'alb-1', unit_id: 1, year: 2024, event_name: 'Camp 2024' },
+    { id: 'alb-2', unit_id: 2, year: 2025, event_name: 'Safari 2025' },
+    { id: 'alb-3', unit_id: 5, year: 2026, event_name: 'Camp 2026' },
+    { id: 'alb-4', unit_id: 3, year: 2024, event_name: 'Zahrat 2024' },
+  ];
+
+  const minaHistory = TEST_MEMBER_UNIT_HISTORY.filter((h) => h.member_id === 'm1');
   const allowedPairs = minaHistory.map((h) => ({ unit_id: h.unit_id, year: h.year }));
 
-  const minaAccessibleAlbums = INITIAL_MEDIA_ALBUMS.filter((alb) =>
+  const minaAccessibleAlbums = TEST_MEDIA_ALBUMS.filter((alb) =>
     allowedPairs.some((p) => p.unit_id === alb.unit_id && p.year === alb.year)
   );
 

@@ -6,16 +6,19 @@
   "scripts": {
     "verify": "npx tsx scripts/verify-logic.ts",
     "verify:mssql": "npx tsx scripts/verify-mssql.ts",
+    "verify:postgres": "npx tsx scripts/verify-postgres.ts",
     "worker": "npx tsx workers/media-worker.ts"
   },
   "dependencies": {
     "googleapis": "^181.0.0",
     "msnodesqlv8": "^5.5.0",
-    "mssql": "^12.3.0"
+    "mssql": "^12.3.0",
+    "pg": "^8.23.1"
   },
   "devDependencies": {
     "@types/mssql": "^12.3.0",
     "@types/node": "^26.6.0",
+    "@types/pg": "^8.23.1",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   }

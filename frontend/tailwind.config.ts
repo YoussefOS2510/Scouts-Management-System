@@ -11,25 +11,37 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        saas: {
+          bg: "#0B0F17",
+          panel: "#111827",
+          card: "#1E293B",
+          cardHover: "#243247",
+          border: "rgba(51, 65, 85, 0.45)",
+          borderMuted: "rgba(51, 65, 85, 0.25)",
+          primary: "#0284C7",
+          primaryHover: "#0369A1",
+          primaryFocus: "#38BDF8",
+        },
         canvas: {
           light: "#F8FAFD",
-          dark: "#121416",
+          dark: "#0B0F17",
         },
         surface: {
           light: "#FFFFFF",
-          dark: "#1E1F20",
+          dark: "#111827",
+          cardDark: "#1E293B",
           hover: "#F1EFEA",
-          darkHover: "#2A2B2D",
+          darkHover: "#1E293B",
           border: "#E0E3E7",
-          darkBorder: "#303134",
+          darkBorder: "rgba(51, 65, 85, 0.45)",
         },
         m3: {
           surfaceBg: "#F8FAFD",
           surfaceContainer: "#FFFFFF",
           surfaceContainerLow: "#F0F4F9",
           surfaceContainerHigh: "#E9EEF6",
-          primary: "#0B57D0",
-          primaryHover: "#0842A0",
+          primary: "#0284C7",
+          primaryHover: "#0369A1",
           primaryContainer: "#C2E7FF",
           onPrimaryContainer: "#001D35",
           textPrimary: "#1F1F1F",

@@ -2,9 +2,10 @@
 
 import React, { useState, useMemo } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useLanguage } from '../lib/LanguageContext';
 import { useAuth } from '../lib/AuthContext';
-import { INITIAL_UNITS, INITIAL_MEMBERS, INITIAL_EQUIPMENT } from '../lib/data';
+import { INITIAL_UNITS } from '../lib/data';
 import {
   Folder,
   LayoutGrid,
@@ -27,11 +28,28 @@ import {
   Download,
   Eye,
   SlidersHorizontal,
+  UploadCloud,
 } from 'lucide-react';
 
 export default function DashboardPage() {
   const { language, t } = useLanguage();
-  const { currentUser, currentRole, currentUnit, isSuperAdmin, accessibleUnits } = useAuth();
+  const { currentUser, currentRole, currentUnit, isSuperAdmin, accessibleUnits, can } = useAuth();
+  const router = useRouter();
+
+  const canTakeAttendance = isSuperAdmin || can('attendance.take');
+  const canViewAnalytics = isSuperAdmin || can('admin.analytics') || can('attendance.analytics');
+  const canViewMembers = isSuperAdmin || can('members.view') || can('members.create_edit');
+  const canUploadMedia = isSuperAdmin || can('media.upload');
+
+  const handleUnitClick = (unitId: number) => {
+    if (canTakeAttendance) {
+      router.push(`/attendance?unit=${unitId}`);
+    } else if (canUploadMedia) {
+      router.push(`/media`);
+    } else if (canViewMembers) {
+      router.push(`/members`);
+    }
+  };
 
   // View toggle: 'grid' (Drive Folder Tiles) vs 'list' (Drive Table Rows)
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
@@ -43,8 +61,26 @@ export default function DashboardPage() {
   // Selected folder for context menu
   const [activeMenuUnitId, setActiveMenuUnitId] = useState<number | null>(null);
 
-  const totalMembers = INITIAL_MEMBERS.length;
-  const totalEquipment = INITIAL_EQUIPMENT.reduce((acc, curr) => acc + curr.total_quantity, 0);
+  // Live Database stats
+  const [stats, setStats] = useState<{ totalMembers: number; totalEquipment: number; totalSessions: number }>({
+    totalMembers: 22,
+    totalEquipment: 97,
+    totalSessions: 0,
+  });
+
+  React.useEffect(() => {
+    fetch('/api/dashboard/stats')
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.success && data.stats) {
+          setStats(data.stats);
+        }
+      })
+      .catch((err) => console.error('Failed to fetch dashboard stats:', err));
+  }, []);
+
+  const totalMembers = stats.totalMembers;
+  const totalEquipment = stats.totalEquipment;
 
   // M3 Section color tokens for Google Drive Folder Icons
   const getStageColor = (code: string) => {
@@ -96,36 +132,32 @@ export default function DashboardPage() {
   return (
     <div className="space-y-6 animate-fadeIn pb-12">
       {/* 1. DRIVE LOCATION PATH & VIEW CONTROLS */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-[#F0F4F9] dark:border-[#2D2F31]">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-neutral-200/80 dark:border-neutral-800/60">
         {/* Breadcrumb Path */}
-        <div className="flex items-center gap-1.5 text-sm text-[#444746] dark:text-[#C4C7C5]">
-          <Link href="/" className="hover:text-[#0B57D0] transition-colors">
-            {language === 'ar' ? 'منظومة الفوج' : 'Scout Drive'}
+        <div className="flex items-center gap-1.5 text-xs sm:text-sm text-neutral-500 dark:text-neutral-400">
+          <Link href="/" className="hover:text-sky-500 transition-colors font-bold">
+            SMSR
           </Link>
-          {language === 'ar' ? (
-            <ChevronLeft className="w-4 h-4 text-[#747775]" />
-          ) : (
-            <ChevronRight className="w-4 h-4 text-[#747775]" />
-          )}
-          <span className="text-[#1F1F1F] dark:text-[#E3E3E3] font-medium">
-            {language === 'ar' ? 'الوحدات الكشفية والمراحل' : 'Unit Directory'}
+          <ChevronRight className="w-3.5 h-3.5 text-neutral-400 rtl:rotate-180" />
+          <span className="text-neutral-900 dark:text-neutral-100 font-semibold">
+            {language === 'ar' ? 'دليل الوحدات الكشفية' : 'Unit Directory'}
           </span>
-          <span className="text-xs px-2 py-0.5 rounded-full bg-[#E9EEF6] dark:bg-[#282A2C] text-[#444746] dark:text-[#C4C7C5] font-mono ms-1">
+          <span className="text-xs px-2 py-0.5 rounded-md bg-neutral-100 dark:bg-[#1E293B] text-neutral-600 dark:text-neutral-400 font-mono ms-1 border border-neutral-200/80 dark:border-neutral-800/80">
             {displayUnits.length}
           </span>
         </div>
 
         {/* View Mode & Sorting Controls */}
         <div className="flex items-center gap-2 self-end sm:self-auto">
-          <div className="inline-flex rounded-xl p-1 bg-[#F0F4F9] dark:bg-[#282A2C]">
+          <div className="inline-flex rounded-xl p-1 bg-neutral-100 dark:bg-[#111827] border border-neutral-200/80 dark:border-neutral-800/80">
             <button
               onClick={() => setViewMode('grid')}
               className={`p-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer ${
                 viewMode === 'grid'
-                  ? 'bg-white dark:bg-[#1F1F1F] text-[#0B57D0] shadow-xs'
-                  : 'text-[#444746] dark:text-[#C4C7C5] hover:text-[#1F1F1F]'
+                  ? 'bg-white dark:bg-[#1E293B] text-sky-600 dark:text-sky-400 shadow-xs font-semibold'
+                  : 'text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100'
               }`}
-              title={language === 'ar' ? 'عرض شبكي (مجلدات)' : 'Grid View'}
+              title={language === 'ar' ? 'عرض شبكي' : 'Grid View'}
             >
               <LayoutGrid className="w-4 h-4" />
               <span className="hidden md:inline">{language === 'ar' ? 'شبكة' : 'Grid'}</span>
@@ -134,10 +166,10 @@ export default function DashboardPage() {
               onClick={() => setViewMode('list')}
               className={`p-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer ${
                 viewMode === 'list'
-                  ? 'bg-white dark:bg-[#1F1F1F] text-[#0B57D0] shadow-xs'
-                  : 'text-[#444746] dark:text-[#C4C7C5] hover:text-[#1F1F1F]'
+                  ? 'bg-white dark:bg-[#1E293B] text-sky-600 dark:text-sky-400 shadow-xs font-semibold'
+                  : 'text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100'
               }`}
-              title={language === 'ar' ? 'عرض قائمة (جدول)' : 'List View'}
+              title={language === 'ar' ? 'عرض جدول' : 'List View'}
             >
               <List className="w-4 h-4" />
               <span className="hidden md:inline">{language === 'ar' ? 'قائمة' : 'List'}</span>
@@ -146,9 +178,9 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* 2. MATERIAL 3 FILTER CHIPS */}
+      {/* 2. RESTRAINED FILTER CHIPS (Requirement 3: unified interactive accent) */}
       <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
-        <span className="text-xs font-medium text-[#444746] dark:text-[#8E918F] shrink-0 me-1">
+        <span className="text-xs font-medium text-neutral-400 dark:text-neutral-400 shrink-0 me-1">
           <Filter className="w-3.5 h-3.5 inline me-1" />
           {language === 'ar' ? 'تصفية:' : 'Filter:'}
         </span>
@@ -156,10 +188,10 @@ export default function DashboardPage() {
         {/* All Chips */}
         <button
           onClick={() => { setFilterStage('all'); setFilterGender('all'); }}
-          className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition-all shrink-0 cursor-pointer ${
+          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all shrink-0 cursor-pointer ${
             filterStage === 'all' && filterGender === 'all'
-              ? 'bg-[#C2E7FF] text-[#001D35] dark:bg-[#004A77] dark:text-[#C2E7FF] font-semibold shadow-2xs'
-              : 'bg-[#F0F4F9] dark:bg-[#282A2C] text-[#444746] dark:text-[#C4C7C5] hover:bg-[#E9EEF6]'
+              ? 'bg-sky-500/10 text-sky-700 dark:bg-sky-400/15 dark:text-sky-300 font-semibold border border-sky-500/30 shadow-2xs'
+              : 'bg-neutral-100 dark:bg-[#111827] text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200 border border-neutral-200/80 dark:border-neutral-800/80 hover:bg-neutral-200/60 dark:hover:bg-[#1E293B]'
           }`}
         >
           {language === 'ar' ? 'الكل' : 'All'}
@@ -167,10 +199,10 @@ export default function DashboardPage() {
 
         <button
           onClick={() => setFilterGender(filterGender === 'boys' ? 'all' : 'boys')}
-          className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition-all shrink-0 cursor-pointer ${
+          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all shrink-0 cursor-pointer ${
             filterGender === 'boys'
-              ? 'bg-[#C2E7FF] text-[#001D35] dark:bg-[#004A77] dark:text-[#C2E7FF] font-semibold'
-              : 'bg-[#F0F4F9] dark:bg-[#282A2C] text-[#444746] dark:text-[#C4C7C5] hover:bg-[#E9EEF6]'
+              ? 'bg-sky-500/10 text-sky-700 dark:bg-sky-400/15 dark:text-sky-300 font-semibold border border-sky-500/30 shadow-2xs'
+              : 'bg-neutral-100 dark:bg-[#111827] text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200 border border-neutral-200/80 dark:border-neutral-800/80 hover:bg-neutral-200/60 dark:hover:bg-[#1E293B]'
           }`}
         >
           {language === 'ar' ? 'بنين (Boys)' : 'Boys'}
@@ -178,10 +210,10 @@ export default function DashboardPage() {
 
         <button
           onClick={() => setFilterGender(filterGender === 'girls' ? 'all' : 'girls')}
-          className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition-all shrink-0 cursor-pointer ${
+          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all shrink-0 cursor-pointer ${
             filterGender === 'girls'
-              ? 'bg-[#C2E7FF] text-[#001D35] dark:bg-[#004A77] dark:text-[#C2E7FF] font-semibold'
-              : 'bg-[#F0F4F9] dark:bg-[#282A2C] text-[#444746] dark:text-[#C4C7C5] hover:bg-[#E9EEF6]'
+              ? 'bg-sky-500/10 text-sky-700 dark:bg-sky-400/15 dark:text-sky-300 font-semibold border border-sky-500/30 shadow-2xs'
+              : 'bg-neutral-100 dark:bg-[#111827] text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200 border border-neutral-200/80 dark:border-neutral-800/80 hover:bg-neutral-200/60 dark:hover:bg-[#1E293B]'
           }`}
         >
           {language === 'ar' ? 'بنات (Girls)' : 'Girls'}
@@ -189,10 +221,10 @@ export default function DashboardPage() {
 
         <button
           onClick={() => setFilterStage(filterStage === 'parallel' ? 'all' : 'parallel')}
-          className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition-all shrink-0 cursor-pointer ${
+          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all shrink-0 cursor-pointer ${
             filterStage === 'parallel'
-              ? 'bg-[#C2E7FF] text-[#001D35] dark:bg-[#004A77] dark:text-[#C2E7FF] font-semibold'
-              : 'bg-[#F0F4F9] dark:bg-[#282A2C] text-[#444746] dark:text-[#C4C7C5] hover:bg-[#E9EEF6]'
+              ? 'bg-sky-500/10 text-sky-700 dark:bg-sky-400/15 dark:text-sky-300 font-semibold border border-sky-500/30 shadow-2xs'
+              : 'bg-neutral-100 dark:bg-[#111827] text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200 border border-neutral-200/80 dark:border-neutral-800/80 hover:bg-neutral-200/60 dark:hover:bg-[#1E293B]'
           }`}
         >
           {language === 'ar' ? 'مسار متوازي (A / B)' : 'Parallel Streams'}
@@ -200,10 +232,10 @@ export default function DashboardPage() {
 
         <button
           onClick={() => setFilterStage(filterStage === 'cubs' ? 'all' : 'cubs')}
-          className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition-all shrink-0 cursor-pointer ${
+          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all shrink-0 cursor-pointer ${
             filterStage === 'cubs'
-              ? 'bg-[#FFE2B3] text-[#7A3F00] dark:bg-amber-950 dark:text-amber-200 font-semibold'
-              : 'bg-[#F0F4F9] dark:bg-[#282A2C] text-[#444746] dark:text-[#C4C7C5] hover:bg-[#E9EEF6]'
+              ? 'bg-sky-500/10 text-sky-700 dark:bg-sky-400/15 dark:text-sky-300 font-semibold border border-sky-500/30 shadow-2xs'
+              : 'bg-neutral-100 dark:bg-[#111827] text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200 border border-neutral-200/80 dark:border-neutral-800/80 hover:bg-neutral-200/60 dark:hover:bg-[#1E293B]'
           }`}
         >
           {language === 'ar' ? 'أشبال وزهرات' : 'Cubs & Brownies'}
@@ -211,10 +243,10 @@ export default function DashboardPage() {
 
         <button
           onClick={() => setFilterStage(filterStage === 'scouts' ? 'all' : 'scouts')}
-          className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition-all shrink-0 cursor-pointer ${
+          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all shrink-0 cursor-pointer ${
             filterStage === 'scouts'
-              ? 'bg-[#D1F2D9] text-[#0A5326] dark:bg-emerald-950 dark:text-emerald-200 font-semibold'
-              : 'bg-[#F0F4F9] dark:bg-[#282A2C] text-[#444746] dark:text-[#C4C7C5] hover:bg-[#E9EEF6]'
+              ? 'bg-sky-500/10 text-sky-700 dark:bg-sky-400/15 dark:text-sky-300 font-semibold border border-sky-500/30 shadow-2xs'
+              : 'bg-neutral-100 dark:bg-[#111827] text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200 border border-neutral-200/80 dark:border-neutral-800/80 hover:bg-neutral-200/60 dark:hover:bg-[#1E293B]'
           }`}
         >
           {language === 'ar' ? 'كشافة ومرشدات' : 'Scouts & Guides'}
@@ -222,148 +254,148 @@ export default function DashboardPage() {
 
         <button
           onClick={() => setFilterStage(filterStage === 'rovers' ? 'all' : 'rovers')}
-          className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition-all shrink-0 cursor-pointer ${
+          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all shrink-0 cursor-pointer ${
             filterStage === 'rovers'
-              ? 'bg-[#D3E3FD] text-[#043372] dark:bg-sky-950 dark:text-sky-200 font-semibold'
-              : 'bg-[#F0F4F9] dark:bg-[#282A2C] text-[#444746] dark:text-[#C4C7C5] hover:bg-[#E9EEF6]'
+              ? 'bg-sky-500/10 text-sky-700 dark:bg-sky-400/15 dark:text-sky-300 font-semibold border border-sky-500/30 shadow-2xs'
+              : 'bg-neutral-100 dark:bg-[#111827] text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200 border border-neutral-200/80 dark:border-neutral-800/80 hover:bg-neutral-200/60 dark:hover:bg-[#1E293B]'
           }`}
         >
           {language === 'ar' ? 'متقدم وجوالة' : 'Venturers & Rovers'}
         </button>
       </div>
 
-      {/* 3. QUICK METRICS (LOW-PROFILE MATERIAL TILES) */}
+      {/* 3. METRIC CARDS (Requirement 3: Surface elevation tokens #111827, #1E293B, border-neutral-800) */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
         {/* Metric 1: 12 Units */}
-        <div className="bg-white dark:bg-[#1E1F20] rounded-2xl p-4 border border-[#E0E3E7] dark:border-[#303134] shadow-none hover:border-[#0B57D0]/40 transition-colors">
-          <div className="text-3xl font-normal text-[#1F1F1F] dark:text-[#E3E3E3] font-mono tabular-nums">
+        <div className="bg-white dark:bg-[#111827] rounded-xl p-4 border border-neutral-200 dark:border-neutral-800/80 shadow-none hover:border-neutral-300 dark:hover:border-neutral-700/80 transition-colors">
+          <div className="text-2xl sm:text-3xl font-bold text-neutral-900 dark:text-neutral-100 font-mono tabular-nums">
             12
           </div>
-          <div className="text-xs font-medium text-[#444746] dark:text-[#C4C7C5] mt-1">
+          <div className="text-xs font-medium text-neutral-500 dark:text-neutral-400 mt-1">
             {language === 'ar' ? 'وحدة كشفية نشطة' : 'Active Scout Units'}
           </div>
         </div>
 
         {/* Metric 2: 1,048 Scouts */}
-        <div className="bg-white dark:bg-[#1E1F20] rounded-2xl p-4 border border-[#E0E3E7] dark:border-[#303134] shadow-none hover:border-[#0B57D0]/40 transition-colors">
-          <div className="text-3xl font-normal text-[#1F1F1F] dark:text-[#E3E3E3] font-mono tabular-nums">
+        <div className="bg-white dark:bg-[#111827] rounded-xl p-4 border border-neutral-200 dark:border-neutral-800/80 shadow-none hover:border-neutral-300 dark:hover:border-neutral-700/80 transition-colors">
+          <div className="text-2xl sm:text-3xl font-bold text-neutral-900 dark:text-neutral-100 font-mono tabular-nums">
             1,048
           </div>
-          <div className="text-xs font-medium text-[#444746] dark:text-[#C4C7C5] mt-1">
-            {language === 'ar' ? 'كشاف وقائد بالمنظومة' : 'Total Scouts & Leaders'}
+          <div className="text-xs font-medium text-neutral-500 dark:text-neutral-400 mt-1">
+            {language === 'ar' ? 'كشاف وقائد مسجل' : 'Registered Members'}
           </div>
         </div>
 
-        {/* Metric 3: 107 Equipment Items */}
-        <div className="bg-white dark:bg-[#1E1F20] rounded-2xl p-4 border border-[#E0E3E7] dark:border-[#303134] shadow-none hover:border-[#0B57D0]/40 transition-colors">
-          <div className="text-3xl font-normal text-[#1F1F1F] dark:text-[#E3E3E3] font-mono tabular-nums">
+        {/* Metric 3: Equipment Items */}
+        <div className="bg-white dark:bg-[#111827] rounded-xl p-4 border border-neutral-200 dark:border-neutral-800/80 shadow-none hover:border-neutral-300 dark:hover:border-neutral-700/80 transition-colors">
+          <div className="text-2xl sm:text-3xl font-bold text-neutral-900 dark:text-neutral-100 font-mono tabular-nums">
             {totalEquipment}
           </div>
-          <div className="text-xs font-medium text-[#444746] dark:text-[#C4C7C5] mt-1">
+          <div className="text-xs font-medium text-neutral-500 dark:text-neutral-400 mt-1">
             {language === 'ar' ? 'قطعة عهدة ومهمات' : 'Equipment & Gear Items'}
           </div>
         </div>
 
-        {/* Metric 4: 15 GB Staging */}
-        <div className="bg-white dark:bg-[#1E1F20] rounded-2xl p-4 border border-[#E0E3E7] dark:border-[#303134] shadow-none hover:border-[#0B57D0]/40 transition-colors">
-          <div className="text-3xl font-normal text-[#1F1F1F] dark:text-[#E3E3E3] font-mono tabular-nums">
+        {/* Metric 4: Cloud Storage */}
+        <div className="bg-white dark:bg-[#111827] rounded-xl p-4 border border-neutral-200 dark:border-neutral-800/80 shadow-none hover:border-neutral-300 dark:hover:border-neutral-700/80 transition-colors">
+          <div className="text-2xl sm:text-3xl font-bold text-neutral-900 dark:text-neutral-100 font-mono tabular-nums">
             15 GB
           </div>
-          <div className="text-xs font-medium text-[#444746] dark:text-[#C4C7C5] mt-1">
-            {language === 'ar' ? 'تخزين مؤقت (Google Drive)' : 'Google Drive Staging'}
+          <div className="text-xs font-medium text-neutral-500 dark:text-neutral-400 mt-1">
+            {language === 'ar' ? 'تخزين سحابي مستخدم' : 'Google Drive Storage'}
           </div>
         </div>
       </div>
 
-      {/* 4. SUGGESTED WORKSPACE FILES (Google Drive Quick Access) */}
+      {/* 4. SUGGESTED WORKSPACE FILES (Restrained modern SaaS cards) */}
       <div className="space-y-2.5">
-        <div className="text-xs font-medium text-[#444746] dark:text-[#C4C7C5] flex items-center justify-between">
-          <span>{language === 'ar' ? 'الملفات والسجلات المقترحة' : 'Suggested Roster & Gear Files'}</span>
-          <span className="text-[11px] text-[#444746]">{language === 'ar' ? 'آخر تحديث: اليوم' : 'Updated today'}</span>
+        <div className="text-xs font-medium text-neutral-500 dark:text-neutral-400 flex items-center justify-between">
+          <span>{language === 'ar' ? 'الإجراءات والسجلات السريعة' : 'Quick Access & Common Actions'}</span>
+          <span className="text-[11px] text-neutral-400 font-mono">{language === 'ar' ? 'اليوم' : 'Today'}</span>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <Link
             href="/attendance?unit=5"
-            className="p-3 bg-white dark:bg-[#1E1F20] hover:bg-[#F0F4F9] dark:hover:bg-[#282A2C] rounded-xl border border-[#E0E3E7] dark:border-[#303134] flex items-center gap-3 transition-colors cursor-pointer group"
+            className="p-3 bg-white dark:bg-[#111827] hover:bg-neutral-50 dark:hover:bg-[#161F30] rounded-xl border border-neutral-200 dark:border-neutral-800/80 hover:border-neutral-300 dark:hover:border-neutral-700/80 flex items-center gap-3 transition-colors cursor-pointer group"
           >
-            <div className="w-8 h-8 rounded-lg bg-[#E8F0EC] dark:bg-emerald-950/50 flex items-center justify-center shrink-0">
-              <CalendarCheck className="w-4 h-4 text-[#146C2E]" />
+            <div className="w-8 h-8 rounded-lg bg-neutral-100 dark:bg-[#1E293B] border border-neutral-200/60 dark:border-neutral-700/50 flex items-center justify-center shrink-0">
+              <CalendarCheck className="w-4 h-4 text-emerald-500" />
             </div>
             <div className="min-w-0 flex-1">
-              <div className="text-xs font-medium text-[#1F1F1F] dark:text-[#E3E3E3] truncate group-hover:text-[#0B57D0]">
+              <div className="text-xs font-semibold text-neutral-900 dark:text-neutral-100 truncate group-hover:text-sky-500 transition-colors">
                 {language === 'ar' ? 'كشف حضور كشافة A' : 'Attendance: Scouts A'}
               </div>
-              <div className="text-[10px] text-[#444746] truncate">
-                {language === 'ar' ? 'اجتماع الجمعة • جاهز للرصد' : 'Friday Meeting • Ready'}
+              <div className="text-[11px] text-neutral-500 dark:text-neutral-400 truncate">
+                {language === 'ar' ? 'جاهز للرصد الأسبوعي' : 'Weekly Roster Ready'}
               </div>
             </div>
           </Link>
 
           <Link
             href="/inventory"
-            className="p-3 bg-white dark:bg-[#1E1F20] hover:bg-[#F0F4F9] dark:hover:bg-[#282A2C] rounded-xl border border-[#E0E3E7] dark:border-[#303134] flex items-center gap-3 transition-colors cursor-pointer group"
+            className="p-3 bg-white dark:bg-[#111827] hover:bg-neutral-50 dark:hover:bg-[#161F30] rounded-xl border border-neutral-200 dark:border-neutral-800/80 hover:border-neutral-300 dark:hover:border-neutral-700/80 flex items-center gap-3 transition-colors cursor-pointer group"
           >
-            <div className="w-8 h-8 rounded-lg bg-[#FEF7EC] dark:bg-amber-950/50 flex items-center justify-center shrink-0">
-              <Package className="w-4 h-4 text-[#B06000]" />
+            <div className="w-8 h-8 rounded-lg bg-neutral-100 dark:bg-[#1E293B] border border-neutral-200/60 dark:border-neutral-700/50 flex items-center justify-center shrink-0">
+              <Package className="w-4 h-4 text-amber-500" />
             </div>
             <div className="min-w-0 flex-1">
-              <div className="text-xs font-medium text-[#1F1F1F] dark:text-[#E3E3E3] truncate group-hover:text-[#0B57D0]">
-                {language === 'ar' ? 'حجز خيام ومهمات المعسكر' : 'Camp Gear Booking'}
+              <div className="text-xs font-semibold text-neutral-900 dark:text-neutral-100 truncate group-hover:text-sky-500 transition-colors">
+                {language === 'ar' ? 'حجز مهمات ومستودع' : 'Camp Gear Booking'}
               </div>
-              <div className="text-[10px] text-[#444746] truncate">
-                {language === 'ar' ? 'مستودع الفوج • بدون تعارض' : 'Troop Depot • Verified'}
+              <div className="text-[11px] text-neutral-500 dark:text-neutral-400 truncate">
+                {language === 'ar' ? 'مستودع الفوج • متاح' : 'Troop Depot Available'}
               </div>
             </div>
           </Link>
 
           <Link
             href="/admin/analytics"
-            className="p-3 bg-white dark:bg-[#1E1F20] hover:bg-[#F0F4F9] dark:hover:bg-[#282A2C] rounded-xl border border-[#E0E3E7] dark:border-[#303134] flex items-center gap-3 transition-colors cursor-pointer group"
+            className="p-3 bg-white dark:bg-[#111827] hover:bg-neutral-50 dark:hover:bg-[#161F30] rounded-xl border border-neutral-200 dark:border-neutral-800/80 hover:border-neutral-300 dark:hover:border-neutral-700/80 flex items-center gap-3 transition-colors cursor-pointer group"
           >
-            <div className="w-8 h-8 rounded-lg bg-[#D3E3FD] dark:bg-sky-950/50 flex items-center justify-center shrink-0">
-              <FileSpreadsheet className="w-4 h-4 text-[#0B57D0]" />
+            <div className="w-8 h-8 rounded-lg bg-neutral-100 dark:bg-[#1E293B] border border-neutral-200/60 dark:border-neutral-700/50 flex items-center justify-center shrink-0">
+              <FileSpreadsheet className="w-4 h-4 text-sky-500" />
             </div>
             <div className="min-w-0 flex-1">
-              <div className="text-xs font-medium text-[#1F1F1F] dark:text-[#E3E3E3] truncate group-hover:text-[#0B57D0]">
-                {language === 'ar' ? 'تقرير التميز الفصلي' : 'Quarterly Attendance Stats'}
+              <div className="text-xs font-semibold text-neutral-900 dark:text-neutral-100 truncate group-hover:text-sky-500 transition-colors">
+                {language === 'ar' ? 'تحليلات الحضور الفصلية' : 'Attendance Analytics'}
               </div>
-              <div className="text-[10px] text-[#444746] truncate">
-                {language === 'ar' ? 'نسب الحضور وفرز الأعذار' : '91.4% Overall Rate'}
+              <div className="text-[11px] text-neutral-500 dark:text-neutral-400 truncate">
+                {language === 'ar' ? 'معدل الالتزام 91.4%' : '91.4% Overall Rate'}
               </div>
             </div>
           </Link>
 
           <Link
             href="/media"
-            className="p-3 bg-white dark:bg-[#1E1F20] hover:bg-[#F0F4F9] dark:hover:bg-[#282A2C] rounded-xl border border-[#E0E3E7] dark:border-[#303134] flex items-center gap-3 transition-colors cursor-pointer group"
+            className="p-3 bg-white dark:bg-[#111827] hover:bg-neutral-50 dark:hover:bg-[#161F30] rounded-xl border border-neutral-200 dark:border-neutral-800/80 hover:border-neutral-300 dark:hover:border-neutral-700/80 flex items-center gap-3 transition-colors cursor-pointer group"
           >
-            <div className="w-8 h-8 rounded-lg bg-[#F3E8FD] dark:bg-purple-950/50 flex items-center justify-center shrink-0">
-              <HardDrive className="w-4 h-4 text-[#7C3AED]" />
+            <div className="w-8 h-8 rounded-lg bg-neutral-100 dark:bg-[#1E293B] border border-neutral-200/60 dark:border-neutral-700/50 flex items-center justify-center shrink-0">
+              <HardDrive className="w-4 h-4 text-purple-500" />
             </div>
             <div className="min-w-0 flex-1">
-              <div className="text-xs font-medium text-[#1F1F1F] dark:text-[#E3E3E3] truncate group-hover:text-[#0B57D0]">
-                {language === 'ar' ? 'أرشيف درايف السحابي' : 'Drive Media Root'}
+              <div className="text-xs font-semibold text-neutral-900 dark:text-neutral-100 truncate group-hover:text-sky-500 transition-colors">
+                {language === 'ar' ? 'الأرشيف السحابي درايف' : 'Drive Media Root'}
               </div>
-              <div className="text-[10px] text-[#444746] truncate">
-                {language === 'ar' ? 'مجلد الفوج الكشفي • نشط' : 'Cloud Sync Connected'}
+              <div className="text-[11px] text-neutral-500 dark:text-neutral-400 truncate">
+                {language === 'ar' ? 'المجلد الكشفي السحابي' : 'Cloud Sync Active'}
               </div>
             </div>
           </Link>
         </div>
       </div>
 
-      {/* 5. UNITS DIRECTORY (GOOGLE DRIVE FOLDER TILES OR LIST) */}
+      {/* 5. UNITS DIRECTORY (Entire card clickable with smooth hover elevate effect) */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <div className="text-sm font-medium text-[#444746] dark:text-[#C4C7C5] flex items-center gap-2">
-            <Folder className="w-4 h-4 text-[#0B57D0]" />
-            <span>{language === 'ar' ? 'مجلدات الوحدات الكشفية' : 'Scout Unit Folders'}</span>
-            <span className="text-xs text-[#747775] font-normal">({displayUnits.length})</span>
+          <div className="text-sm font-semibold text-neutral-900 dark:text-neutral-100 flex items-center gap-2">
+            <Folder className="w-4 h-4 text-sky-500" />
+            <span>{language === 'ar' ? 'الوحدات الكشفية والمراحل' : 'Scout Unit Directory'}</span>
+            <span className="text-xs text-neutral-400 font-normal">({displayUnits.length})</span>
           </div>
         </div>
 
-        {/* View 1: Google Drive Folder Tiles (Grid View) */}
+        {/* View 1: Clickable Unit Cards with Consolidated Typography (Grid View) */}
         {viewMode === 'grid' && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
             {displayUnits.map((unit) => {
@@ -373,90 +405,113 @@ export default function DashboardPage() {
               return (
                 <div
                   key={unit.id}
-                  className="relative group h-14 bg-[#F0F4F9] hover:bg-[#E9EEF6] dark:bg-[#282A2C] dark:hover:bg-[#333538] rounded-xl px-3.5 py-2 flex items-center justify-between transition-colors cursor-pointer select-none"
+                  onClick={() => handleUnitClick(unit.id)}
+                  className="group relative bg-white dark:bg-[#111827] hover:dark:bg-[#161F30] border border-neutral-200 dark:border-neutral-800/80 hover:border-neutral-300 dark:hover:border-neutral-700/80 rounded-xl p-3.5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg cursor-pointer flex items-center justify-between gap-3 select-none"
                 >
-                  {/* Leading: Drive Folder Icon colored by section */}
-                  <Link
-                    href={`/attendance?unit=${unit.id}`}
-                    className="flex items-center gap-3 min-w-0 flex-1"
-                  >
-                    <Folder
-                      className="w-6 h-6 shrink-0 transition-transform group-hover:scale-105"
-                      style={{ color: stageStyle.color }}
-                      fill={stageStyle.color}
-                      fillOpacity={0.25}
-                    />
+                  {/* Leading Icon & Consolidated Typography without micro-badge clutter */}
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <div className="w-10 h-10 rounded-lg bg-neutral-100 dark:bg-[#1E293B] border border-neutral-200/60 dark:border-neutral-700/50 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                      <Folder
+                        className="w-5 h-5 shrink-0"
+                        style={{ color: stageStyle.color }}
+                      />
+                    </div>
                     <div className="min-w-0 flex-1">
-                      <div className="text-sm font-medium text-[#1F1F1F] dark:text-[#E3E3E3] truncate">
-                        {language === 'ar' ? unit.name_ar : unit.name_en}
+                      <div className="text-xs sm:text-sm font-semibold text-neutral-900 dark:text-neutral-100 truncate group-hover:text-sky-500 transition-colors" dir="auto">
+                        <bdi>{language === 'ar' ? unit.name_ar : unit.name_en}</bdi>
                       </div>
-                      <div className="text-[11px] text-[#444746] dark:text-[#8E918F] truncate flex items-center gap-1.5 font-normal">
-                        <span>{unit.target_grade}</span>
+                      {/* Clean structured typography instead of micro-badges */}
+                      <div className="text-xs text-neutral-500 dark:text-neutral-400 truncate mt-0.5 flex items-center gap-1.5 font-normal" dir="auto">
+                        <bdi>{unit.target_grade}</bdi>
                         <span>&bull;</span>
-                        <span>{unit.gender === 'boys' ? (language === 'ar' ? 'بنين' : 'Boys') : (language === 'ar' ? 'بنات' : 'Girls')}</span>
+                        <bdi>{unit.gender === 'boys' ? (language === 'ar' ? 'بنين' : 'Boys') : (language === 'ar' ? 'بنات' : 'Girls')}</bdi>
                         {isParallel && (
-                          <span className="px-1 rounded bg-[#E0E3E7] dark:bg-[#383A3C] text-[9px] font-medium text-[#444746]">
-                            {unit.code.includes('_a') ? 'مسار A' : 'مسار B'}
-                          </span>
+                          <>
+                            <span>&bull;</span>
+                            <bdi className="font-mono text-neutral-400">
+                              {unit.code.includes('_a') ? (language === 'ar' ? 'مسار A' : 'Track A') : (language === 'ar' ? 'مسار B' : 'Track B')}
+                            </bdi>
+                          </>
                         )}
                       </div>
                     </div>
-                  </Link>
-
-                  {/* Trailing: Context Menu Button (⋮) */}
-                  <div className="relative">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setActiveMenuUnitId(activeMenuUnitId === unit.id ? null : unit.id);
-                      }}
-                      className="p-1.5 rounded-full hover:bg-black/5 dark:hover:bg-white/10 text-[#444746] dark:text-[#C4C7C5] transition-colors cursor-pointer"
-                      title={language === 'ar' ? 'خيارات إضافية' : 'Options'}
-                    >
-                      <MoreVertical className="w-4 h-4" />
-                    </button>
-
-                    {/* Context Menu Dropdown */}
-                    {activeMenuUnitId === unit.id && (
-                      <div className="absolute end-0 top-8 w-48 bg-white dark:bg-[#1E1F20] rounded-xl shadow-xl border border-[#E0E3E7] dark:border-[#303134] py-1.5 z-50 animate-fadeIn">
-                        <Link
-                          href={`/attendance?unit=${unit.id}`}
-                          onClick={() => setActiveMenuUnitId(null)}
-                          className="flex items-center gap-2.5 px-3.5 py-2 text-xs font-medium text-[#1F1F1F] dark:text-[#E3E3E3] hover:bg-[#F0F4F9] dark:hover:bg-[#282A2C]"
-                        >
-                          <CalendarCheck className="w-4 h-4 text-[#146C2E]" />
-                          <span>{language === 'ar' ? 'تسجيل الحضور' : 'Take Attendance'}</span>
-                        </Link>
-                        <Link
-                          href="/admin/analytics"
-                          onClick={() => setActiveMenuUnitId(null)}
-                          className="flex items-center gap-2.5 px-3.5 py-2 text-xs font-medium text-[#1F1F1F] dark:text-[#E3E3E3] hover:bg-[#F0F4F9] dark:hover:bg-[#282A2C]"
-                        >
-                          <FileSpreadsheet className="w-4 h-4 text-[#0B57D0]" />
-                          <span>{language === 'ar' ? 'تحليلات الوحدة' : 'Unit Analytics'}</span>
-                        </Link>
-                        <Link
-                          href="/members"
-                          onClick={() => setActiveMenuUnitId(null)}
-                          className="flex items-center gap-2.5 px-3.5 py-2 text-xs font-medium text-[#1F1F1F] dark:text-[#E3E3E3] hover:bg-[#F0F4F9] dark:hover:bg-[#282A2C]"
-                        >
-                          <Users className="w-4 h-4 text-[#B06000]" />
-                          <span>{language === 'ar' ? 'كشف الكشافين والقادة' : 'Unit Members'}</span>
-                        </Link>
-                      </div>
-                    )}
                   </div>
+
+                  {/* Context Menu Button (⋮) with e.stopPropagation */}
+                  {(canTakeAttendance || canViewAnalytics || canViewMembers || canUploadMedia) && (
+                    <div className="relative shrink-0">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setActiveMenuUnitId(activeMenuUnitId === unit.id ? null : unit.id);
+                        }}
+                        className="p-1.5 rounded-lg hover:bg-neutral-100 dark:hover:bg-[#1E293B] text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200 transition-colors cursor-pointer"
+                        title={language === 'ar' ? 'خيارات إضافية' : 'Options'}
+                      >
+                        <MoreVertical className="w-4 h-4" />
+                      </button>
+
+                      {/* Context Menu Dropdown */}
+                      {activeMenuUnitId === unit.id && (
+                        <div
+                          onClick={(e) => e.stopPropagation()}
+                          className="absolute end-0 top-8 w-48 bg-white dark:bg-[#111827] rounded-xl shadow-2xl border border-neutral-200 dark:border-neutral-800/90 py-1.5 z-50 animate-fadeIn"
+                        >
+                          {canTakeAttendance && (
+                            <Link
+                              href={`/attendance?unit=${unit.id}`}
+                              onClick={() => setActiveMenuUnitId(null)}
+                              className="flex items-center gap-2.5 px-3.5 py-2 text-xs font-medium text-neutral-800 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-[#1E293B]"
+                            >
+                              <CalendarCheck className="w-4 h-4 text-emerald-500" />
+                              <span>{language === 'ar' ? 'تسجيل الحضور' : 'Take Attendance'}</span>
+                            </Link>
+                          )}
+                          {canViewAnalytics && (
+                            <Link
+                              href="/admin/analytics"
+                              onClick={() => setActiveMenuUnitId(null)}
+                              className="flex items-center gap-2.5 px-3.5 py-2 text-xs font-medium text-neutral-800 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-[#1E293B]"
+                            >
+                              <FileSpreadsheet className="w-4 h-4 text-sky-500" />
+                              <span>{language === 'ar' ? 'تحليلات الوحدة' : 'Unit Analytics'}</span>
+                            </Link>
+                          )}
+                          {canViewMembers && (
+                            <Link
+                              href="/members"
+                              onClick={() => setActiveMenuUnitId(null)}
+                              className="flex items-center gap-2.5 px-3.5 py-2 text-xs font-medium text-neutral-800 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-[#1E293B]"
+                            >
+                              <Users className="w-4 h-4 text-amber-500" />
+                              <span>{language === 'ar' ? 'دليل الأعضاء' : 'Unit Members'}</span>
+                            </Link>
+                          )}
+                          {canUploadMedia && (
+                            <Link
+                              href="/media"
+                              onClick={() => setActiveMenuUnitId(null)}
+                              className="flex items-center gap-2.5 px-3.5 py-2 text-xs font-medium text-neutral-800 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-[#1E293B]"
+                            >
+                              <UploadCloud className="w-4 h-4 text-purple-500" />
+                              <span>{language === 'ar' ? 'وسائط الوحدة' : 'Media Archive'}</span>
+                            </Link>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}
           </div>
         )}
 
-        {/* View 2: Google Drive Table Rows (List View) */}
+        {/* View 2: Table Rows (List View) */}
         {viewMode === 'list' && (
-          <div className="bg-white dark:bg-[#1E1F20] rounded-2xl border border-[#E0E3E7] dark:border-[#303134] overflow-hidden">
+          <div className="bg-white dark:bg-[#111827] rounded-xl border border-neutral-200 dark:border-neutral-800/80 overflow-hidden shadow-none">
             {/* Table Header */}
-            <div className="h-10 px-4 border-b border-[#F0F4F9] dark:border-[#2D2F31] bg-[#F8FAFD] dark:bg-[#282A2C] flex items-center text-xs font-medium text-[#444746] dark:text-[#C4C7C5]">
+            <div className="h-10 px-4 border-b border-neutral-200/80 dark:border-neutral-800/80 bg-neutral-50 dark:bg-[#161F30] flex items-center text-xs font-semibold text-neutral-500 dark:text-neutral-400">
               <div className="w-1/3 min-w-[180px]">{language === 'ar' ? 'اسم الوحدة الكشفية' : 'Unit Name'}</div>
               <div className="w-1/4 hidden sm:block">{language === 'ar' ? 'المرحلة والنوع' : 'Stage & Gender'}</div>
               <div className="w-1/4 hidden md:block">{language === 'ar' ? 'الصف الدراسي' : 'Target Grade'}</div>
@@ -465,7 +520,7 @@ export default function DashboardPage() {
             </div>
 
             {/* Rows */}
-            <div className="divide-y divide-[#F0F4F9] dark:divide-[#282A2C]">
+            <div className="divide-y divide-neutral-200/80 dark:divide-neutral-800/60">
               {displayUnits.map((unit) => {
                 const stageStyle = getStageColor(unit.code);
                 const isParallel = unit.code.includes('_a') || unit.code.includes('_b');
@@ -473,49 +528,62 @@ export default function DashboardPage() {
                 return (
                   <div
                     key={unit.id}
-                    className="h-12 px-4 hover:bg-[#F0F4F9] dark:hover:bg-[#282A2C]/60 flex items-center text-sm text-[#1F1F1F] dark:text-[#E3E3E3] transition-colors"
+                    onClick={() => handleUnitClick(unit.id)}
+                    className="h-12 px-4 hover:bg-neutral-50/80 dark:hover:bg-[#1E293B]/40 flex items-center text-xs sm:text-sm text-neutral-900 dark:text-neutral-100 transition-colors cursor-pointer"
                   >
                     <div className="w-1/3 min-w-[180px] flex items-center gap-3">
                       <Folder
-                        className="w-5 h-5 shrink-0"
+                        className="w-4 h-4 shrink-0"
                         style={{ color: stageStyle.color }}
-                        fill={stageStyle.color}
-                        fillOpacity={0.25}
                       />
-                      <Link
-                        href={`/attendance?unit=${unit.id}`}
-                        className="font-medium hover:text-[#0B57D0] truncate"
-                      >
-                        {language === 'ar' ? unit.name_ar : unit.name_en}
-                      </Link>
+                      <span className="font-semibold hover:text-sky-500 truncate" dir="auto">
+                        <bdi>{language === 'ar' ? unit.name_ar : unit.name_en}</bdi>
+                      </span>
                     </div>
 
                     <div className="w-1/4 hidden sm:flex items-center gap-2">
-                      <span className={`text-[11px] px-2.5 py-0.5 rounded-full border ${stageStyle.badgeBg}`}>
+                      <span className="text-xs font-medium text-neutral-600 dark:text-neutral-300" dir="auto">
                         {stageStyle.stageName}
                       </span>
-                      <span className="text-xs text-[#444746]">
+                      <span className="text-neutral-400">&bull;</span>
+                      <span className="text-xs text-neutral-500 dark:text-neutral-400">
                         {unit.gender === 'boys' ? (language === 'ar' ? 'بنين' : 'Boys') : (language === 'ar' ? 'بنات' : 'Girls')}
                       </span>
                     </div>
 
-                    <div className="w-1/4 hidden md:block text-xs text-[#444746] dark:text-[#8E918F]">
-                      {unit.target_grade}
+                    <div className="w-1/4 hidden md:block text-xs text-neutral-500 dark:text-neutral-400" dir="auto">
+                      <bdi>{unit.target_grade}</bdi>
                     </div>
 
                     <div className="w-24 text-center">
-                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#F0F4F9] dark:bg-[#282A2C] text-[#444746]">
-                        {isParallel ? (unit.code.includes('_a') ? 'مسار A' : 'مسار B') : (language === 'ar' ? 'متدرج' : 'Main')}
+                      <span className="text-[11px] font-mono px-2 py-0.5 rounded-md bg-neutral-100 dark:bg-[#1E293B] text-neutral-500 dark:text-neutral-400 border border-neutral-200/60 dark:border-neutral-800/60">
+                        {isParallel ? (unit.code.includes('_a') ? 'A' : 'B') : '-'}
                       </span>
                     </div>
 
-                    <div className="ms-auto flex items-center gap-2">
-                      <Link
-                        href={`/attendance?unit=${unit.id}`}
-                        className="px-3 py-1 rounded-full text-xs font-medium bg-[#F0F4F9] hover:bg-[#C2E7FF] text-[#001D35] transition-colors"
-                      >
-                        {language === 'ar' ? 'كشف الحضور' : 'Roster'}
-                      </Link>
+                    <div className="ms-auto flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                      {canTakeAttendance ? (
+                        <Link
+                          href={`/attendance?unit=${unit.id}`}
+                          className="px-3 py-1 rounded-lg text-xs font-medium bg-neutral-100 hover:bg-neutral-200/70 dark:bg-[#1E293B] dark:hover:bg-neutral-700/80 text-neutral-800 dark:text-neutral-200 transition-colors border border-neutral-200/80 dark:border-neutral-700/50"
+                        >
+                          {language === 'ar' ? 'كشف الحضور' : 'Roster'}
+                        </Link>
+                      ) : canUploadMedia ? (
+                        <Link
+                          href="/media"
+                          className="px-3 py-1 rounded-lg text-xs font-medium bg-neutral-100 hover:bg-neutral-200/70 dark:bg-[#1E293B] dark:hover:bg-neutral-700/80 text-neutral-800 dark:text-neutral-200 transition-colors border border-neutral-200/80 dark:border-neutral-700/50"
+                        >
+                          {language === 'ar' ? 'الوسائط' : 'Media'}
+                        </Link>
+                      ) : canViewMembers ? (
+                        <Link
+                          href="/members"
+                          className="px-3 py-1 rounded-lg text-xs font-medium bg-neutral-100 hover:bg-neutral-200/70 dark:bg-[#1E293B] dark:hover:bg-neutral-700/80 text-neutral-800 dark:text-neutral-200 transition-colors border border-neutral-200/80 dark:border-neutral-700/50"
+                        >
+                          {language === 'ar' ? 'الأعضاء' : 'Members'}
+                        </Link>
+                      ) : null}
                     </div>
                   </div>
                 );

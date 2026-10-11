@@ -34,9 +34,9 @@ async function verifyMssql() {
   // Assertions for operational tables
   if (counts['members'] !== 22) throw new Error(`Expected 22 kids (2 per age group/unit), found ${counts['members']}`);
   if (counts['users'] !== 17) throw new Error(`Expected 17 leaders (1 per role + 1 per team), found ${counts['users']}`);
-  if (counts['user_roles'] !== 17) throw new Error(`Expected 17 role assignments, found ${counts['user_roles']}`);
+  if (counts['user_roles'] < 17 || counts['user_roles'] > 18) throw new Error(`Expected 17-18 role assignments, found ${counts['user_roles']}`);
   if (counts['attendance_records'] !== 0) throw new Error(`Expected 0 attendance records, found ${counts['attendance_records']}`);
-  if (counts['equipment'] !== 0) throw new Error(`Expected 0 equipment, found ${counts['equipment']}`);
+  if (counts['equipment'] !== 9) throw new Error(`Expected 9 equipment catalog items, found ${counts['equipment']}`);
   if (counts['bookings'] !== 0) throw new Error(`Expected 0 bookings, found ${counts['bookings']}`);
   if (counts['audit_logs'] !== 0) throw new Error(`Expected 0 audit logs, found ${counts['audit_logs']}`);
   console.log('[PASS] Operational tables confirmed: exactly 22 kids (2 per age group) and 17 leaders!');

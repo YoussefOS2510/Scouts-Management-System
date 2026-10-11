@@ -1,0 +1,18 @@
+5 set marine 3m
+4 set 2m
+5 set 1m
+46 handball
+2 tanks
+4 volleyballs
+1 gymball
+4 footballs
+2 basketballs
+180 kana
+11 tenis balls
+38 flat cone
+19 cone
+5 Bukets
+13 tums
+13 snare
+3 bass
+10 table stands

@@ -4,7 +4,6 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../../lib/AuthContext';
 import { useLanguage } from '../../lib/LanguageContext';
-import { INITIAL_USERS, INITIAL_USER_ROLES, INITIAL_ROLES, INITIAL_UNITS, INITIAL_MEMBERS } from '../../lib/data';
 import {
   Compass,
   Lock,
@@ -20,7 +19,7 @@ import {
 } from 'lucide-react';
 
 export default function LoginPage() {
-  const { login, loginAsScout, logout, currentUser, currentRole, currentUnit, isScout, currentMember } = useAuth();
+  const { login, loginAsScout, logout, currentUser, currentRole, currentUnit, isScout, currentMember, members, allUsers } = useAuth();
   const { language } = useLanguage();
   const router = useRouter();
 
@@ -49,8 +48,8 @@ export default function LoginPage() {
     } else {
       setError(
         language === 'ar'
-          ? 'البريد الإلكتروني غير مسجل في منظومة الفوج. تأكد من صحة البريد.'
-          : 'Email not registered in the Scout system. Please check your credentials.'
+          ? 'البريد الإلكتروني غير مسجل في منظومة SMSR. تأكد من صحة البريد.'
+          : 'Email not registered in the SMSR system. Please check your credentials.'
       );
     }
   };
@@ -81,17 +80,28 @@ export default function LoginPage() {
   return (
     <div className="max-w-xl mx-auto py-8 sm:py-12 space-y-6 animate-fadeIn">
       {/* Header */}
-      <div className="text-center space-y-2">
-        <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-800 text-white shadow-md mx-auto">
-          <Compass className="w-6 h-6 text-white" strokeWidth={1.8} />
+      <div className="text-center space-y-3">
+        <div className="inline-flex items-center justify-center w-24 h-24 rounded-2xl bg-white p-1.5 shadow-md border border-neutral-200 dark:border-neutral-800 mx-auto">
+          <img
+            src="/smsr-logo.jpg"
+            alt="SMSR Logo"
+            className="w-full h-full object-contain rounded-xl"
+          />
         </div>
-        <h1 className="text-2xl font-black tracking-tight text-zinc-900 dark:text-zinc-100">
-          {language === 'ar' ? 'بوابة تسجيل الدخول الكشفية' : 'Scout Platform Authentication'}
-        </h1>
-        <p className="text-xs text-zinc-500 dark:text-zinc-400 max-w-md mx-auto">
+        <div className="space-y-1">
+          <h1 className="text-3xl font-extrabold tracking-tight text-neutral-900 dark:text-neutral-100">
+            SMSR
+          </h1>
+          <p className="text-sm font-semibold text-sky-600 dark:text-sky-400">
+            {language === 'ar'
+              ? 'كشافة السيدة العذراء بالرحاب (St. Mary Scouts Rehab)'
+              : 'St. Mary Scouts Rehab — Sea Scout Group'}
+          </p>
+        </div>
+        <p className="text-xs text-neutral-500 dark:text-neutral-400 max-w-md mx-auto">
           {language === 'ar'
-            ? 'الوصول موحد لجميع الكشافة والقادة لمتابعة الحضور، العهدة، وأرشيف صور الفوج عبر السنين.'
-            : 'Unified authentication for all youth scouts and adult leaders.'}
+            ? 'بوابة موحدة للكشافة والقادة لمتابعة الحضور، العهدة، وأرشيف الوسائط السحابي.'
+            : 'Unified portal for youth scouts and leaders: attendance, equipment inventory, and Google Drive archive.'}
         </p>
       </div>
 
@@ -237,7 +247,7 @@ export default function LoginPage() {
                     {language === 'ar' ? 'حسابات كشافة تجريبية للاختبار السريع:' : 'Quick Demo Scout Accounts:'}
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {INITIAL_MEMBERS.slice(0, 4).map((member) => (
+                    {members.slice(0, 4).map((member) => (
                       <button
                         key={member.id}
                         type="button"
@@ -301,16 +311,30 @@ export default function LoginPage() {
                 {/* Quick Leader Autofill */}
                 <div className="pt-3 border-t border-zinc-100 dark:border-zinc-800">
                   <div className="text-[11px] font-bold text-zinc-500 mb-2">
-                    {language === 'ar' ? 'حسابات القادة المسجلين:' : 'Registered Leaders Directory:'}
+                    {language === 'ar' ? 'حسابات القادة المسجلين للاختبار السريع:' : 'Registered Leaders Quick Directory:'}
                   </div>
-                  <div className="space-y-1.5 max-h-48 overflow-y-auto">
-                    {INITIAL_USERS.slice(0, 4).map((user) => (
+                  <div className="space-y-1.5 max-h-56 overflow-y-auto">
+                    {[
+                      ...allUsers.slice(0, 3),
+                      allUsers.find((u) => u.email === 'christine.nabil@scouts.org') || {
+                        id: 'u18',
+                        email: 'christine.nabil@scouts.org',
+                        full_name: 'القائدة كريستين نبيل (Christine Nabil)',
+                      },
+                    ].filter(Boolean).map((user) => (
                       <div
                         key={user.id}
                         className="p-2 rounded-lg bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 flex items-center justify-between text-xs"
                       >
                         <div className="min-w-0 pr-2">
-                          <div className="font-bold text-zinc-900 dark:text-zinc-100 truncate">{user.full_name}</div>
+                          <div className="font-bold text-zinc-900 dark:text-zinc-100 truncate flex items-center gap-1.5">
+                            <span>{user.full_name}</span>
+                            {user.id === 'u18' && (
+                              <span className="text-[10px] px-1.5 py-0.2 rounded bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 font-semibold">
+                                Morshdat A & B
+                              </span>
+                            )}
+                          </div>
                           <div className="text-[11px] text-zinc-500 font-mono truncate">{user.email}</div>
                         </div>
                         <button
@@ -319,7 +343,7 @@ export default function LoginPage() {
                             setEmail(user.email);
                             setError(null);
                           }}
-                          className="px-2.5 py-1 rounded-md bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs font-semibold cursor-pointer"
+                          className="px-2.5 py-1 rounded-md bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs font-semibold cursor-pointer shrink-0"
                         >
                           {language === 'ar' ? 'تعبئة' : 'Fill'}
                         </button>

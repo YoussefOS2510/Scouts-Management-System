@@ -27,8 +27,12 @@ const mono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Scout Workspace & Drive | منظومة الفوج الكشفي',
-  description: 'Google Workspace & Material 3 scout management platform for units, attendance, equipment, and Google Drive archival.',
+  title: 'SMSR | St. Mary Scouts Rehab - كشافة السيدة العذراء بالرحاب',
+  description: 'SMSR (St. Mary Scouts Rehab) - المجموعة الكشفية البحرية بكنيسة السيدة العذراء بالرحاب. منظومة إدارة شؤون الكشافة والحضور والعهدة وأرشيف الوسائط.',
+  icons: {
+    icon: '/smsr-logo.jpg',
+    apple: '/smsr-logo.jpg',
+  },
 };
 
 export default function RootLayout({
@@ -38,7 +42,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" dir="ltr" className={`dark ${notoSansArabic.variable} ${inter.variable} ${mono.variable}`} suppressHydrationWarning>
-      <body className="min-h-screen bg-[#F8FAFD] dark:bg-[#121416] text-[#1F1F1F] dark:text-[#E3E3E3] font-sans antialiased selection:bg-[#C2E7FF] selection:text-[#001D35]">
+      <body className="min-h-screen bg-[#F8FAFD] dark:bg-[#0B0F17] text-[#0F172A] dark:text-[#F1F5F9] font-sans antialiased selection:bg-sky-500/20 selection:text-sky-300">
         <LanguageProvider>
           <AuthProvider>
             <GoogleWorkspaceLayout>

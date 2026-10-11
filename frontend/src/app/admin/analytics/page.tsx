@@ -28,8 +28,7 @@ export default function AnalyticsDashboardPage() {
     isSuperAdmin ||
     can('admin.analytics') ||
     can('attendance.analytics') ||
-    can('attendance.take') ||
-    !!currentUnit;
+    can('attendance.take');
 
   // Permission Guard
   if (!canViewTeamAnalytics) {
@@ -61,29 +60,21 @@ export default function AnalyticsDashboardPage() {
     return <TeamAttendanceAnalytics initialUnitId={currentUnit?.id} />;
   }
 
-  // Analytics mock calculations
-  const unitPerformance = [
-    { unitId: 1, name_ar: 'أشبال A', name_en: 'Ashbal A', rate: 94, scouts: 84, leader: 'Fady George', status: 'optimal' },
-    { unitId: 2, name_ar: 'أشبال B', name_en: 'Ashbal B', rate: 89, scouts: 92, leader: 'Mina Nabil', status: 'optimal' },
-    { unitId: 3, name_ar: 'زهرات A', name_en: 'Zahrat A', rate: 96, scouts: 88, leader: 'Sarah Mina', status: 'top' },
-    { unitId: 4, name_ar: 'زهرات B', name_en: 'Zahrat B', rate: 91, scouts: 79, leader: 'Christine Adel', status: 'optimal' },
-    { unitId: 5, name_ar: 'كشافة A', name_en: 'Kashafa A', rate: 93, scouts: 110, leader: 'Mark Wagdy', status: 'optimal' },
-    { unitId: 6, name_ar: 'كشافة B', name_en: 'Kashafa B', rate: 85, scouts: 105, leader: 'David Bassem', status: 'warning' },
-    { unitId: 7, name_ar: 'مرشدات A', name_en: 'Morshdat A', rate: 95, scouts: 98, leader: 'Marina Samy', status: 'top' },
-    { unitId: 8, name_ar: 'مرشدات B', name_en: 'Morshdat B', rate: 88, scouts: 94, leader: 'Sandra Raouf', status: 'optimal' },
-    { unitId: 9, name_ar: 'متقدم', name_en: 'Motakadem', rate: 84, scouts: 82, leader: 'Kyrillos Emad', status: 'warning' },
-    { unitId: 10, name_ar: 'رائدات', name_en: 'Ra2edat', rate: 90, scouts: 76, leader: 'Verena Fayez', status: 'optimal' },
-    { unitId: 11, name_ar: 'جوالة', name_en: 'Gawala', rate: 87, scouts: 65, leader: 'Bishoy Magdy', status: 'optimal' },
-    { unitId: 12, name_ar: 'قادة', name_en: 'Leaders', rate: 98, scouts: 75, leader: 'Peter Shoukry', status: 'top' },
-  ];
+  // Live Database Analytics State
+  const [unitPerformance, setUnitPerformance] = useState<any[]>([]);
+  const [categoryUtilization, setCategoryUtilization] = useState<any[]>([]);
 
-  const categoryUtilization = [
-    { category: language === 'ar' ? 'خيام وإيواء' : 'Tents & Shelters', total: 28, booked: 13, percent: 46 },
-    { category: language === 'ar' ? 'مهمات طهي ومطبخ' : 'Camp Cooking', total: 18, booked: 6, percent: 33 },
-    { category: language === 'ar' ? 'حبال ومشاريع ريادية' : 'Pioneering Ropes', total: 35, booked: 18, percent: 51 },
-    { category: language === 'ar' ? 'إنارة وكهرباء' : 'Lighting & Power', total: 22, booked: 10, percent: 45 },
-    { category: language === 'ar' ? 'صوتيات وإذاعة' : 'Sound & AV Systems', total: 4, booked: 3, percent: 75 },
-  ];
+  React.useEffect(() => {
+    fetch('/api/analytics?type=executive')
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.success) {
+          if (Array.isArray(data.unitPerformance)) setUnitPerformance(data.unitPerformance);
+          if (Array.isArray(data.categoryUtilization)) setCategoryUtilization(data.categoryUtilization);
+        }
+      })
+      .catch((err) => console.error('Failed to fetch executive analytics:', err));
+  }, []);
 
   return (
     <div className="space-y-6 animate-fadeIn">

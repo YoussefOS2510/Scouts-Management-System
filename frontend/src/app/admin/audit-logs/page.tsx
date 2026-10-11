@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useLanguage } from '../../../lib/LanguageContext';
 import { useAuth } from '../../../lib/AuthContext';
 import { INITIAL_UNITS } from '../../../lib/data';
-import { AuditActionType } from '../../../lib/types';
+import { AuditActionType, AuditLogEntry } from '../../../lib/types';
 import {
   History,
   ShieldAlert,
@@ -23,10 +23,25 @@ export default function LeaderAuditLogsPage() {
   const { language, t } = useLanguage();
   const { isSuperAdmin, can, auditLogs, allUsers } = useAuth();
 
+  const [liveLogs, setLiveLogs] = useState<AuditLogEntry[]>([]);
   const [selectedUserFilter, setSelectedUserFilter] = useState<string>('all');
   const [selectedUnitFilter, setSelectedUnitFilter] = useState<number | 'all'>('all');
   const [selectedActionFilter, setSelectedActionFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
+
+  // Fetch live audit logs from ScoutsDB on mount
+  React.useEffect(() => {
+    fetch('/api/audit-logs?limit=100')
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.success && Array.isArray(data.logs)) {
+          setLiveLogs(data.logs);
+        }
+      })
+      .catch((err) => console.error('Failed to fetch live audit logs:', err));
+  }, []);
+
+  const logsToFilter = liveLogs.length > 0 ? liveLogs : auditLogs;
 
   // Permission Guard
   if (!isSuperAdmin && !can('admin.audit_logs')) {
@@ -55,7 +70,7 @@ export default function LeaderAuditLogsPage() {
 
   // Filtered Logs
   const filteredLogs = useMemo(() => {
-    return auditLogs.filter((log) => {
+    return logsToFilter.filter((log) => {
       const matchUser = selectedUserFilter === 'all' || log.user_id === selectedUserFilter;
       const matchUnit = selectedUnitFilter === 'all' || log.unit_id === selectedUnitFilter;
       const matchAction = selectedActionFilter === 'all' || log.action_type === selectedActionFilter;
@@ -69,7 +84,7 @@ export default function LeaderAuditLogsPage() {
 
       return matchUser && matchUnit && matchAction && matchSearch;
     });
-  }, [auditLogs, selectedUserFilter, selectedUnitFilter, selectedActionFilter, searchQuery]);
+  }, [logsToFilter, selectedUserFilter, selectedUnitFilter, selectedActionFilter, searchQuery]);
 
   const getActionBadge = (actionType: AuditActionType) => {
     switch (actionType) {
@@ -260,7 +275,7 @@ export default function LeaderAuditLogsPage() {
                 <div className="text-xs text-zinc-400 dark:text-zinc-500 font-mono tabular-nums whitespace-nowrap flex items-center gap-1 shrink-0 sm:pt-0.5">
                   <Clock className="w-3.5 h-3.5" strokeWidth={1.5} />
                   <span>
-                    {new Date(log.created_at).toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en-US', {
+                    {new Date(log.created_at || log.timestamp || Date.now()).toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en-US', {
                       month: 'short',
                       day: 'numeric',
                       hour: '2-digit',

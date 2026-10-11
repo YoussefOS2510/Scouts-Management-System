@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, useMemo, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, ReactNode, useCallback } from 'react';
 import {
   User,
   Role,
@@ -14,6 +14,8 @@ import {
   MediaAlbum,
   MediaItem,
   ScoutAttendanceStats,
+  Permission,
+  UserPermissionOverride,
 } from './types';
 import {
   INITIAL_USERS,
@@ -32,7 +34,7 @@ import {
   INITIAL_SCOUT_SESSION_RECORDS,
   ScoutSessionRecord,
 } from './data';
-import { checkPermission, PermissionContext } from './permissions';
+import { checkPermission, PermissionContext, isSameUser, normalizeUserId } from './permissions';
 
 interface AuthContextType {
   currentUser: User | null;
@@ -60,14 +62,16 @@ interface AuthContextType {
   }) => void;
   allUsers: User[];
   accessibleUnits: Unit[];
-  assignLeaderUnit: (userId: string, unitId: number | null, roleId?: number) => boolean;
+  assignLeaderUnit: (userId: string, unitId: number | null | number[], roleId?: number) => boolean;
+  assignLeaderUnits: (userId: string, unitIds: number[], roleId?: number) => boolean;
   addMember: (memberData: Omit<Member, 'id'> & { id?: string }) => Member;
   addLeader: (leaderData: {
     full_name: string;
     email: string;
     phone?: string;
     role_id: number;
-    unit_id: number | null;
+    unit_id?: number | null;
+    unit_ids?: number[];
   }) => User;
   members: Member[];
   patrols: Patrol[];
@@ -77,53 +81,110 @@ interface AuthContextType {
   getAlbumPhotos: (albumId: string) => MediaItem[];
   getScoutAttendanceStats: (memberId?: string) => ScoutAttendanceStats;
   getScoutSessionRecords: (memberId?: string) => ScoutSessionRecord[];
+  // Permissions & Database state
+  overrides: UserPermissionOverride[];
+  permissions: Permission[];
+  roles: Role[];
+  rolePermissions: { roleId: number; permissionId: number }[];
+  isDbConnected: boolean;
+  updatePermissionOverride: (
+    userId: string,
+    permissionIds: number[],
+    unitId: number | null | (number | null)[],
+    isGranted: boolean
+  ) => Promise<boolean>;
+  resetPermissionOverrides: (
+    userId: string,
+    permissionIds?: number[],
+    unitId?: number | null | (number | null)[]
+  ) => Promise<boolean>;
+  refreshPermissions: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [currentUserId, setCurrentUserId] = useState<string>('u0'); // Default to Admin (Me)
+  const [currentUserId, setCurrentUserId] = useState<string>('u0'); // Default to Admin
   const [currentMemberId, setCurrentMemberId] = useState<string>(''); // For scout authentication
-  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>(INITIAL_AUDIT_LOGS);
-  const [users, setUsers] = useState<User[]>(INITIAL_USERS);
-  const [userRoles, setUserRoles] = useState<UserRole[]>(INITIAL_USER_ROLES);
-  const [members, setMembers] = useState<Member[]>(INITIAL_MEMBERS);
-  const [patrols] = useState<Patrol[]>(INITIAL_PATROLS);
+  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [userRoles, setUserRoles] = useState<UserRole[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [patrols, setPatrols] = useState<Patrol[]>([]);
 
-  // Initialize from localStorage if available
-  useEffect(() => {
+  // Live Database Permissions State
+  const [overrides, setOverrides] = useState<UserPermissionOverride[]>([]);
+  const [permissions, setPermissions] = useState<Permission[]>(INITIAL_PERMISSIONS);
+  const [roles, setRoles] = useState<Role[]>(INITIAL_ROLES);
+  const [rolePermissions, setRolePermissions] = useState<{ roleId: number; permissionId: number }[]>([]);
+  const [isDbConnected, setIsDbConnected] = useState<boolean>(false);
+
+  // Fetch live state from Microsoft SQL Server (ScoutsDB)
+  const refreshPermissions = useCallback(async () => {
     try {
-      const savedUsers = localStorage.getItem('scouts_users');
-      if (savedUsers) {
-        setUsers(JSON.parse(savedUsers));
-      }
-      const savedMemberId = localStorage.getItem('scouts_auth_member_id');
-      if (savedMemberId && INITIAL_MEMBERS.some((m) => m.id === savedMemberId)) {
-        setCurrentMemberId(savedMemberId);
-        setCurrentUserId('');
-      } else {
-        const savedUserId = localStorage.getItem('scouts_auth_user_id');
-        if (savedUserId) {
-          setCurrentUserId(savedUserId);
-          setCurrentMemberId('');
+      // 1. Fetch live RBAC & Users
+      const res = await fetch('/api/permissions', { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          setIsDbConnected(true);
+          if (Array.isArray(data.users)) setUsers(data.users);
+          if (Array.isArray(data.userRoles)) setUserRoles(data.userRoles);
+          if (Array.isArray(data.overrides)) setOverrides(data.overrides);
+          if (Array.isArray(data.permissions)) setPermissions(data.permissions);
+          if (Array.isArray(data.roles)) setRoles(data.roles);
+          if (Array.isArray(data.rolePermissions)) setRolePermissions(data.rolePermissions);
         }
       }
-      const savedLogs = localStorage.getItem('scouts_audit_logs');
-      if (savedLogs) {
-        setAuditLogs(JSON.parse(savedLogs));
+
+      // 2. Fetch live Members & Patrols
+      const memRes = await fetch('/api/members', { cache: 'no-store' });
+      if (memRes.ok) {
+        const memData = await memRes.json();
+        if (memData.success) {
+          if (Array.isArray(memData.members)) setMembers(memData.members);
+          if (Array.isArray(memData.patrols)) setPatrols(memData.patrols);
+        }
       }
-      const savedUserRoles = localStorage.getItem('scouts_user_roles');
-      if (savedUserRoles) {
-        setUserRoles(JSON.parse(savedUserRoles));
+
+      // 3. Fetch live Audit Logs
+      const auditRes = await fetch('/api/audit-logs?limit=50', { cache: 'no-store' });
+      if (auditRes.ok) {
+        const auditData = await auditRes.json();
+        if (auditData.success && Array.isArray(auditData.logs)) {
+          setAuditLogs(auditData.logs);
+        }
       }
-      const savedMembers = localStorage.getItem('scouts_members');
-      if (savedMembers) {
-        setMembers(JSON.parse(savedMembers));
-      }
-    } catch {
-      // Ignore local storage error in environments where disabled
+    } catch (err) {
+      console.warn('Could not connect to ScoutsDB API routes:', err);
+      setIsDbConnected(false);
     }
   }, []);
+
+  // Initialize auth session state from localStorage and fetch live DB on mount
+  useEffect(() => {
+    try {
+      const isLoggedOut = localStorage.getItem('scouts_auth_logged_out') === 'true';
+      if (isLoggedOut) {
+        setCurrentUserId('');
+        setCurrentMemberId('');
+      } else {
+        const savedMemberId = localStorage.getItem('scouts_auth_member_id');
+        if (savedMemberId) {
+          setCurrentMemberId(savedMemberId);
+          setCurrentUserId('');
+        } else {
+          const savedUserId = localStorage.getItem('scouts_auth_user_id');
+          if (savedUserId) {
+            setCurrentUserId(savedUserId);
+            setCurrentMemberId('');
+          }
+        }
+      }
+    } catch {}
+
+    refreshPermissions();
+  }, [refreshPermissions]);
 
   const isScout = useMemo(() => Boolean(currentMemberId), [currentMemberId]);
 
@@ -142,12 +203,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         is_active: currentMember.is_active,
       };
     }
-    return users.find((u) => u.id === currentUserId) || INITIAL_USERS.find((u) => u.id === currentUserId) || null;
+    if (!currentUserId) return null;
+    return (
+      users.find((u) => isSameUser(u.id, currentUserId) || u.email === currentUserId) ||
+      INITIAL_USERS.find((u) => isSameUser(u.id, currentUserId) || u.email === currentUserId) ||
+      null
+    );
   }, [isScout, currentMember, currentUserId, users]);
 
   const userRoleAssignment = useMemo(() => {
-    if (isScout) return null;
-    return userRoles.find((ur) => ur.user_id === currentUserId) || null;
+    if (isScout || !currentUserId) return null;
+    return userRoles.find((ur) => isSameUser(ur.user_id, currentUserId)) || null;
   }, [isScout, currentUserId, userRoles]);
 
   const currentRole = useMemo(() => {
@@ -158,9 +224,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         description: 'Scout Member (كشاف / شبل / عضو) - Youth Scout Space & Team Archive Access',
       };
     }
-    if (!userRoleAssignment) return null;
-    return INITIAL_ROLES.find((r) => r.id === userRoleAssignment.role_id) || null;
-  }, [isScout, userRoleAssignment]);
+    if (!currentUserId || !userRoleAssignment) return null;
+    return roles.find((r) => r.id === userRoleAssignment.role_id) || INITIAL_ROLES.find((r) => r.id === userRoleAssignment.role_id) || null;
+  }, [isScout, currentUserId, userRoleAssignment, roles]);
 
   const currentUnit = useMemo(() => {
     if (isScout && currentMember) {
@@ -171,33 +237,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [isScout, currentMember, userRoleAssignment]);
 
   const isSuperAdmin = useMemo(() => {
-    if (isScout) return false;
+    if (isScout || !currentUserId) return false;
+    const normId = normalizeUserId(currentUserId);
+    // Christine Nabil is strictly a scoped leader and never Super Admin
+    if (
+      currentUserId === 'u18' ||
+      normId === '11111111-0000-0000-0000-000000000018' ||
+      currentUser?.email?.toLowerCase() === 'christine.nabil@scouts.org'
+    ) {
+      return false;
+    }
     return (
       currentUserId === 'u0' ||
+      normId === '11111111-0000-0000-0000-000000000001' ||
       currentUser?.email?.toLowerCase() === 'admin@scouts.org' ||
       currentRole?.name === 'admin' ||
-      userRoles.some((ur) => ur.user_id === currentUserId && ur.role_id === 1)
+      userRoles.some((ur) => isSameUser(ur.user_id, currentUserId) && ur.role_id === 1)
     );
   }, [isScout, currentUserId, currentUser, currentRole, userRoles]);
 
+  // Dynamic Permission Engine Context connected to live database overrides
   const permContext = useMemo<PermissionContext>(() => {
     return {
       userId: currentUserId,
-      roles: INITIAL_ROLES,
-      userRoles: userRoles,
-      permissions: INITIAL_PERMISSIONS,
-      rolePermissions: INITIAL_ROLE_PERMISSIONS,
-      overrides: INITIAL_USER_OVERRIDES,
+      roles: roles.length > 0 ? roles : INITIAL_ROLES,
+      userRoles,
+      permissions: permissions.length > 0 ? permissions : INITIAL_PERMISSIONS,
+      rolePermissions: rolePermissions.length > 0 ? rolePermissions : INITIAL_ROLE_PERMISSIONS,
+      overrides,
     };
-  }, [currentUserId, userRoles]);
+  }, [currentUserId, userRoles, overrides, roles, permissions, rolePermissions]);
 
   const can = (permissionKey: string, targetUnitId?: number | null): boolean => {
+    if (!currentUserId && !isScout) {
+      return false;
+    }
     // Admin has everything unlocked unconditionally
     if (isSuperAdmin) {
       return true;
     }
     if (isScout) {
-      // Scout specific permissions
       if (
         permissionKey === 'scout.portal.view' ||
         permissionKey === 'scout.attendance.view_self' ||
@@ -211,25 +290,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const loginAs = (userId: string) => {
-    const targetUser = INITIAL_USERS.find((u) => u.id === userId);
+    const targetUser =
+      users.find((u) => isSameUser(u.id, userId) || u.id === userId || u.email === userId) ||
+      INITIAL_USERS.find((u) => isSameUser(u.id, userId) || u.id === userId || u.email === userId);
     if (targetUser) {
-      setCurrentUserId(userId);
+      setCurrentUserId(targetUser.id);
       setCurrentMemberId('');
       try {
-        localStorage.setItem('scouts_auth_user_id', userId);
+        localStorage.removeItem('scouts_auth_logged_out');
+        localStorage.setItem('scouts_auth_user_id', targetUser.id);
         localStorage.removeItem('scouts_auth_member_id');
-      } catch {
-        // ignore
-      }
+      } catch {}
 
-      // Log login event
       logAction({
         action_type: 'user_login',
         title_ar: 'تسجيل دخول قائد للمنظومة',
         title_en: 'Leader Logged In',
         description_ar: `قام ${targetUser.full_name} بتسجيل الدخول إلى النظام`,
         description_en: `${targetUser.full_name} authenticated into the system`,
-        unit_id: userRoles.find((ur) => ur.user_id === userId)?.unit_id,
+        unit_id: userRoles.find((ur) => isSameUser(ur.user_id, targetUser.id))?.unit_id,
       });
     }
   };
@@ -240,11 +319,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setCurrentMemberId(memberId);
       setCurrentUserId('');
       try {
+        localStorage.removeItem('scouts_auth_logged_out');
         localStorage.setItem('scouts_auth_member_id', memberId);
         localStorage.removeItem('scouts_auth_user_id');
-      } catch {
-        // ignore
-      }
+      } catch {}
 
       logAction({
         action_type: 'user_login',
@@ -266,21 +344,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     );
 
     if (!targetMember) {
-      return {
-        success: false,
-        error: 'كود الكشاف غير مسجل في المنظومة. تأكد من إدخال الكود الصحيح (مثال: SCT-2026-0001)',
-      };
+      return { success: false, error: 'كود الكشاف غير مسجل بالمنظومة (Invalid Scout Code)' };
     }
 
-    // Default PIN verification: accept '1234', or birth year, or member pin
-    const birthYear = targetMember.date_of_birth.split('-')[0];
-    const validPins = ['1234', targetMember.pin || '1234', birthYear];
-
-    if (!validPins.includes(cleanPin)) {
-      return {
-        success: false,
-        error: 'رمز المرور / سنة الميلاد غير صحيحة. جرب 1234 أو سنة ميلاد الكشاف.',
-      };
+    if (cleanPin !== '1234') {
+      return { success: false, error: 'رمز الدخول السري غير صحيح (Invalid PIN)' };
     }
 
     loginAsMember(targetMember.id);
@@ -288,12 +356,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const login = (email: string): boolean => {
-    // If entered a member code
-    if (email.startsWith('SCT-') || email.startsWith('CUB-') || email.startsWith('BRW-')) {
+    const cleanEmail = email.trim().toLowerCase();
+    if (cleanEmail.startsWith('sct-') || cleanEmail.includes('100') || cleanEmail.includes('200')) {
       const res = loginAsScout(email, '1234');
       return res.success;
     }
-    const user = INITIAL_USERS.find((u) => u.email.toLowerCase() === email.trim().toLowerCase());
+
+    const user = users.find((u) => u.email.toLowerCase() === cleanEmail);
     if (user) {
       loginAs(user.id);
       return true;
@@ -305,79 +374,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setCurrentUserId('');
     setCurrentMemberId('');
     try {
+      localStorage.setItem('scouts_auth_logged_out', 'true');
       localStorage.removeItem('scouts_auth_user_id');
       localStorage.removeItem('scouts_auth_member_id');
-    } catch {
-      // ignore
-    }
-  };
-
-  // Scout progression history
-  const scoutProgressionHistory = useMemo<MemberUnitHistory[]>(() => {
-    const targetId = currentMemberId || 'm1';
-    return INITIAL_MEMBER_UNIT_HISTORY.filter((h) => h.member_id === targetId);
-  }, [currentMemberId]);
-
-  // Scoped team photo albums matching scout's yearly stages
-  const getScoutAccessibleAlbums = (memberId?: string): MediaAlbum[] => {
-    const targetId = memberId || currentMemberId || 'm1';
-    const targetScout = members.find((m) => m.id === targetId);
-    const history = INITIAL_MEMBER_UNIT_HISTORY.filter((h) => h.member_id === targetId);
-
-    // Collect all (unit_id, year) pairs for this scout
-    const allowedPairs: { unit_id: number; year: number }[] = history.map((h) => ({
-      unit_id: h.unit_id,
-      year: h.year,
-    }));
-
-    // Also include their current unit in 2026 if not already included
-    if (targetScout && !allowedPairs.some((p) => p.unit_id === targetScout.unit_id && p.year === 2026)) {
-      allowedPairs.push({ unit_id: targetScout.unit_id, year: 2026 });
-    }
-
-    // Filter albums strictly to matching unit_id and year
-    return INITIAL_MEDIA_ALBUMS.filter((alb) =>
-      allowedPairs.some((p) => p.unit_id === alb.unit_id && p.year === alb.year)
-    ).sort((a, b) => b.year - a.year);
-  };
-
-  const getAlbumPhotos = (albumId: string): MediaItem[] => {
-    return INITIAL_MEDIA_ITEMS.filter((item) => item.album_id === albumId);
-  };
-
-  // Scout attendance statistics calculation
-  const getScoutAttendanceStats = (memberId?: string): ScoutAttendanceStats => {
-    const targetId = memberId || currentMemberId || 'm1';
-    const records = INITIAL_SCOUT_SESSION_RECORDS.filter((r) => r.member_id === targetId);
-
-    const totalSessions = records.length > 0 ? records.length : 10;
-    const presentCount = records.length > 0 ? records.filter((r) => r.status === 'present').length : 9;
-    const lateCount = records.length > 0 ? records.filter((r) => r.status === 'late').length : 1;
-    const excusedCount = records.length > 0 ? records.filter((r) => r.status === 'excused').length : 0;
-    const absentCount = records.length > 0 ? records.filter((r) => r.status === 'absent').length : 0;
-
-    const percentage = totalSessions > 0
-      ? Math.round(((presentCount + lateCount * 0.8 + excusedCount * 0.5) / totalSessions) * 100)
-      : 100;
-
-    const honorRank: 'gold' | 'silver' | 'bronze' =
-      percentage >= 90 ? 'gold' : percentage >= 75 ? 'silver' : 'bronze';
-
-    return {
-      totalSessions,
-      presentCount,
-      absentCount,
-      excusedCount,
-      lateCount,
-      percentage,
-      streak: 6,
-      honorRank,
-    };
-  };
-
-  const getScoutSessionRecords = (memberId?: string): ScoutSessionRecord[] => {
-    const targetId = memberId || currentMemberId || 'm1';
-    return INITIAL_SCOUT_SESSION_RECORDS.filter((r) => r.member_id === targetId);
+    } catch {}
   };
 
   const logAction = (action: {
@@ -389,138 +389,292 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     unit_id?: number | null;
     metadata?: Record<string, any>;
   }) => {
-    const newEntry: AuditLogEntry = {
-      id: `log-${Date.now()}-${Math.random().toString(36).substring(7)}`,
-      user_id: currentUser ? currentUser.id : 'anonymous',
-      user_name: currentUser ? currentUser.full_name : 'Guest User',
-      user_role_name: currentRole ? currentRole.description.split(' - ')[0] : 'Leader',
-      unit_id: action.unit_id !== undefined ? action.unit_id : (currentUnit ? currentUnit.id : null),
+    const newLog: AuditLogEntry = {
+      id: `log_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+      user_id: currentUserId || 'system',
+      user_name: currentUser?.full_name || 'System User',
+      unit_id: action.unit_id || null,
+      unit_name: action.unit_id ? INITIAL_UNITS.find((u) => u.id === action.unit_id)?.name_ar : undefined,
       action_type: action.action_type,
       title_ar: action.title_ar,
       title_en: action.title_en,
       description_ar: action.description_ar,
       description_en: action.description_en,
       metadata: action.metadata,
-      created_at: new Date().toISOString(),
+      timestamp: new Date().toISOString(),
     };
 
-    setAuditLogs((prev) => {
-      const updated = [newEntry, ...prev];
-      try {
-        localStorage.setItem('scouts_audit_logs', JSON.stringify(updated.slice(0, 100)));
-      } catch {
-        // ignore
-      }
-      return updated;
-    });
+    setAuditLogs((prev) => [newLog, ...prev.slice(0, 49)]);
+
+    // Live persistence to Microsoft SQL Server
+    fetch('/api/audit-logs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId: currentUserId,
+        unitId: action.unit_id,
+        actionType: action.action_type,
+        titleAr: action.title_ar,
+        titleEn: action.title_en,
+        descriptionAr: action.description_ar,
+        descriptionEn: action.description_en,
+        metadata: action.metadata,
+      }),
+    }).catch((e) => console.warn('Audit log write error:', e));
   };
 
-  const accessibleUnits = useMemo<Unit[]>(() => {
-    if (isSuperAdmin || currentRole?.name === 'admin' || currentRole?.name === 'group_leader') {
+  const accessibleUnits = useMemo(() => {
+    if (!currentUserId && !isScout) {
+      return [];
+    }
+    if (isSuperAdmin) {
       return INITIAL_UNITS;
     }
-    // Check all units assigned to this user in userRoles
-    const userAssignedUnitIds = userRoles
-      .filter((ur) => ur.user_id === currentUserId && ur.unit_id)
-      .map((ur) => ur.unit_id as number);
-
-    if (userAssignedUnitIds.length > 0) {
-      return INITIAL_UNITS.filter((u) => userAssignedUnitIds.includes(u.id));
+    if (isScout && currentMember) {
+      return INITIAL_UNITS.filter((u) => u.id === currentMember.unit_id);
     }
-
-    if (currentUnit) {
-      return [currentUnit];
-    }
-
-    // Quartermaster has inventory access across units
-    if (currentRole?.name === 'quartermaster') {
+    const myRoleUnits = userRoles.filter((ur) => isSameUser(ur.user_id, currentUserId));
+    if (myRoleUnits.some((ur) => ur.unit_id === null || ur.unit_id === undefined)) {
       return INITIAL_UNITS;
     }
+    const unitIds = myRoleUnits.map((ur) => ur.unit_id);
+    return INITIAL_UNITS.filter((u) => unitIds.includes(u.id));
+  }, [isSuperAdmin, isScout, currentMember, userRoles, currentUserId]);
 
-    return [];
-  }, [isSuperAdmin, currentUserId, currentUnit, currentRole, userRoles]);
-
-  // Admin Leader Team Assignment
-  const assignLeaderUnit = (userId: string, unitId: number | null, roleId?: number): boolean => {
-    if (!isSuperAdmin && !can('users.manage_roles')) {
-      return false;
+  // Update Permission Override with live Database persistence (supports single unit or array of units)
+  const updatePermissionOverride = async (
+    userId: string,
+    permissionIds: number[],
+    unitId: number | null | (number | null)[],
+    isGranted: boolean
+  ): Promise<boolean> => {
+    const normId = normalizeUserId(userId);
+    const unitIdsList: (number | null)[] = Array.isArray(unitId) ? unitId : [unitId];
+    try {
+      const res = await fetch('/api/permissions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'override',
+          userId: normId,
+          permissionIds,
+          unitIds: unitIdsList,
+          unitId: unitIdsList[0] ?? null,
+          isGranted,
+        }),
+      });
+      const data = await res.json();
+      if (data.success && data.overrides) {
+        setOverrides(data.overrides);
+        try {
+          localStorage.setItem('scouts_user_overrides', JSON.stringify(data.overrides));
+        } catch {}
+        return true;
+      }
+    } catch (err) {
+      console.error('Failed to save override to database:', err);
     }
 
-    const targetUser = INITIAL_USERS.find((u) => u.id === userId);
+    // Local optimistic update
+    setOverrides((prev) => {
+      const cleanPermIds = permissionIds.map(Number);
+      let next = [...prev];
+      for (const targetUId of unitIdsList) {
+        const cleanUnitId = targetUId !== null && targetUId !== undefined ? Number(targetUId) : null;
+        next = next.filter(
+          (ov) =>
+            !(
+              isSameUser(ov.user_id, userId) &&
+              cleanPermIds.includes(Number(ov.permission_id)) &&
+              (cleanUnitId !== null ? Number(ov.unit_id) === cleanUnitId : ov.unit_id === null || ov.unit_id === undefined)
+            )
+        );
+        cleanPermIds.forEach((pId, idx) => {
+          next.push({
+            id: Date.now() + idx + Math.floor(Math.random() * 1000),
+            user_id: normId,
+            permission_id: pId,
+            unit_id: cleanUnitId,
+            is_granted: isGranted,
+          });
+        });
+      }
+      try {
+        localStorage.setItem('scouts_user_overrides', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+    return true;
+  };
+
+  // Reset Permission Overrides with live Database persistence (supports single unit or array of units)
+  const resetPermissionOverrides = async (
+    userId: string,
+    permissionIds?: number[],
+    unitId?: number | null | (number | null)[]
+  ): Promise<boolean> => {
+    const normId = normalizeUserId(userId);
+    const unitIdsList = unitId !== undefined ? (Array.isArray(unitId) ? unitId : [unitId]) : undefined;
+    try {
+      const res = await fetch('/api/permissions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(
+          permissionIds && permissionIds.length > 0
+            ? { action: 'reset_module', userId: normId, permissionIds, unitIds: unitIdsList, unitId: unitIdsList?.[0] ?? null }
+            : { action: 'reset_all', userId: normId }
+        ),
+      });
+      const data = await res.json();
+      if (data.success && data.overrides) {
+        setOverrides(data.overrides);
+        try {
+          localStorage.setItem('scouts_user_overrides', JSON.stringify(data.overrides));
+        } catch {}
+        return true;
+      }
+    } catch (err) {
+      console.error('Failed to reset overrides in database:', err);
+    }
+
+    // Local fallback
+    setOverrides((prev) => {
+      let filtered: UserPermissionOverride[];
+      if (permissionIds && permissionIds.length > 0) {
+        const cleanPermIds = permissionIds.map(Number);
+        const unitsToDelete = unitIdsList || [null];
+        filtered = prev.filter((ov) => {
+          if (!isSameUser(ov.user_id, userId)) return true;
+          if (!cleanPermIds.includes(Number(ov.permission_id))) return true;
+          const ovUnitId = ov.unit_id !== null && ov.unit_id !== undefined ? Number(ov.unit_id) : null;
+          return !unitsToDelete.some((delUId) => (delUId !== null && delUId !== undefined ? Number(delUId) === ovUnitId : ovUnitId === null));
+        });
+      } else {
+        filtered = prev.filter((ov) => !isSameUser(ov.user_id, userId));
+      }
+      try {
+        localStorage.setItem('scouts_user_overrides', JSON.stringify(filtered));
+      } catch {}
+      return filtered;
+    });
+    return true;
+  };
+
+  // Assign Leader Units & Role with live Database persistence
+  const assignLeaderUnits = (userId: string, unitIds: number[], roleId?: number): boolean => {
+    const targetUser =
+      users.find((u) => isSameUser(u.id, userId)) ||
+      INITIAL_USERS.find((u) => isSameUser(u.id, userId));
     if (!targetUser) return false;
 
+    const existing = userRoles.find((ur) => isSameUser(ur.user_id, userId));
+    const effectiveRoleId = roleId !== undefined ? roleId : (existing?.role_id ?? 4);
+
+    // Save to Database
+    const normId = normalizeUserId(userId);
+    fetch('/api/permissions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'assign_roles',
+        userId: normId,
+        unitIds,
+        roleId: effectiveRoleId,
+      }),
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.success && data.userRoles) {
+          setUserRoles(data.userRoles);
+          try {
+            localStorage.setItem('scouts_user_roles', JSON.stringify(data.userRoles));
+          } catch {}
+        }
+      })
+      .catch((e) => console.error('Database role assignment error:', e));
+
+    // Optimistically update local state
     setUserRoles((prev) => {
-      const existing = prev.find((ur) => ur.user_id === userId);
-      let updated: UserRole[];
-      if (existing) {
-        updated = prev.map((ur) =>
-          ur.user_id === userId
-            ? {
-                ...ur,
-                unit_id: unitId,
-                role_id: roleId !== undefined ? roleId : ur.role_id,
-              }
-            : ur
-        );
-      } else {
-        updated = [
-          ...prev,
+      const otherUserRoles = prev.filter((ur) => !isSameUser(ur.user_id, userId));
+      let newRoles: UserRole[] = [];
+      if (unitIds.length === 0) {
+        newRoles = [
           {
             id: Date.now(),
-            user_id: userId,
-            role_id: roleId !== undefined ? roleId : 4, // Default to section_leader (role_id 4)
-            unit_id: unitId,
+            user_id: targetUser.id,
+            role_id: effectiveRoleId,
+            unit_id: null,
           },
         ];
+      } else {
+        newRoles = unitIds.map((uId, idx) => ({
+          id: Date.now() + idx,
+          user_id: targetUser.id,
+          role_id: effectiveRoleId,
+          unit_id: uId,
+        }));
       }
-
+      const updated = [...otherUserRoles, ...newRoles];
       try {
         localStorage.setItem('scouts_user_roles', JSON.stringify(updated));
-      } catch {
-        // ignore
-      }
+      } catch {}
       return updated;
     });
 
-    const unit = unitId ? INITIAL_UNITS.find((u) => u.id === unitId) : null;
-    const unitNameAr = unit ? unit.name_ar : 'نطاق عام (كامل الفوج)';
-    const unitNameEn = unit ? unit.name_en : 'Global Organization Scope';
+    const assignedUnitsObjs = unitIds
+      .map((id) => INITIAL_UNITS.find((u) => u.id === id))
+      .filter(Boolean);
+    const unitNamesAr = assignedUnitsObjs.length > 0
+      ? assignedUnitsObjs.map((u) => u!.name_ar).join('، ')
+      : 'نطاق عام (كامل الفوج)';
+    const unitNamesEn = assignedUnitsObjs.length > 0
+      ? assignedUnitsObjs.map((u) => u!.name_en).join(', ')
+      : 'Global Troop Scope';
 
     logAction({
       action_type: 'leader_team_assigned',
-      title_ar: 'تعيين قائد لفريق / مرحلة',
-      title_en: 'Leader Team Assigned',
-      description_ar: `قام قائد الفوج بتعيين القائد ${targetUser.full_name} إلى مرحلة: ${unitNameAr}`,
-      description_en: `Leader ${targetUser.full_name} assigned to unit: ${unitNameEn}`,
-      unit_id: unitId,
-      metadata: { target_user_id: userId, unit_id: unitId, role_id: roleId },
+      title_ar: 'تعيين قائد لفرق ومراحل',
+      title_en: 'Leader Teams Assigned',
+      description_ar: `قام قائد الفوج بتعيين القائد ${targetUser.full_name} إلى: ${unitNamesAr}`,
+      description_en: `Leader ${targetUser.full_name} assigned to teams: ${unitNamesEn}`,
+      unit_id: unitIds[0] || null,
+      metadata: { target_user_id: userId, unit_ids: unitIds, role_id: roleId },
     });
 
     return true;
   };
 
-  // Leader Scout Patrol Assignment
+  const assignLeaderUnit = (userId: string, unitId: number | null | number[], roleId?: number): boolean => {
+    if (Array.isArray(unitId)) {
+      return assignLeaderUnits(userId, unitId, roleId);
+    }
+    return assignLeaderUnits(userId, unitId === null ? [] : [unitId], roleId);
+  };
+
   const assignScoutPatrol = (memberId: string, patrolId: number | null): boolean => {
     const targetMember = members.find((m) => m.id === memberId);
     if (!targetMember) return false;
 
-    // Security check: Must be superadmin or have access to member's unit
     const hasAccess = isSuperAdmin || accessibleUnits.some((u) => u.id === targetMember.unit_id);
     if (!hasAccess) {
       return false;
     }
 
-    setMembers((prev) => {
-      const updated = prev.map((m) =>
-        m.id === memberId ? { ...m, patrol_id: patrolId } : m
-      );
-      try {
-        localStorage.setItem('scouts_members', JSON.stringify(updated));
-      } catch {
-        // ignore
-      }
-      return updated;
-    });
+    // Optimistically update local state
+    setMembers((prev) =>
+      prev.map((m) => (m.id === memberId ? { ...m, patrol_id: patrolId } : m))
+    );
+
+    // Persist to Microsoft SQL Server
+    fetch('/api/members', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'assign_patrol',
+        memberId,
+        patrolId,
+      }),
+    }).catch((e) => console.error('Failed to assign scout patrol in DB:', e));
 
     const targetPatrol = patrolId ? patrols.find((p) => p.id === patrolId) : null;
     const patrolNameAr = targetPatrol ? targetPatrol.name_ar : 'بدون طليعة';
@@ -539,24 +693,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return true;
   };
 
-  // Add Member to System
   const addMember = (memberData: Omit<Member, 'id'> & { id?: string }): Member => {
-    const newId = memberData.id || `m_${Date.now()}`;
+    const tempId = memberData.id || `m_${Date.now()}`;
     const newMember: Member = {
       ...memberData,
-      id: newId,
+      id: tempId,
       is_active: memberData.is_active !== undefined ? memberData.is_active : true,
     };
 
-    setMembers((prev) => {
-      const updated = [newMember, ...prev];
-      try {
-        localStorage.setItem('scouts_members', JSON.stringify(updated));
-      } catch {
-        // ignore
-      }
-      return updated;
-    });
+    setMembers((prev) => [newMember, ...prev]);
+
+    // Persist to Microsoft SQL Server
+    fetch('/api/members', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(memberData),
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.success && data.member) {
+          setMembers((prev) => prev.map((m) => (m.id === tempId ? data.member : m)));
+        }
+      })
+      .catch((e) => console.error('Failed to add member in DB:', e));
 
     logAction({
       action_type: 'member_created',
@@ -565,19 +724,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       description_ar: `تمت إضافة الكشاف (${newMember.full_name_ar}) إلى المنظومة`,
       description_en: `Scout member (${newMember.full_name_ar}) registered in the directory`,
       unit_id: newMember.unit_id,
-      metadata: { member_id: newId, member_code: newMember.member_code },
+      metadata: { member_id: tempId, member_code: newMember.member_code },
     });
 
     return newMember;
   };
 
-  // Add Leader to System
   const addLeader = (leaderData: {
     full_name: string;
     email: string;
     phone?: string;
     role_id: number;
-    unit_id: number | null;
+    unit_id?: number | null;
+    unit_ids?: number[];
   }): User => {
     const newId = `u_${Date.now()}`;
     const newUser: User = {
@@ -588,45 +747,136 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       is_active: true,
     };
 
-    setUsers((prev) => {
-      const updated = [...prev, newUser];
-      try {
-        localStorage.setItem('scouts_users', JSON.stringify(updated));
-      } catch {
-        // ignore
-      }
-      return updated;
-    });
+    // Save to database
+    fetch('/api/permissions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'create_leader',
+        full_name: leaderData.full_name,
+        email: leaderData.email,
+        phone: leaderData.phone,
+        role_id: leaderData.role_id,
+        unit_ids: leaderData.unit_ids || (leaderData.unit_id ? [leaderData.unit_id] : []),
+      }),
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.success) {
+          if (data.users) setUsers(data.users);
+          if (data.userRoles) setUserRoles(data.userRoles);
+        }
+      })
+      .catch((e) => console.error('Database leader creation error:', e));
 
-    const newRoleAssignment: UserRole = {
-      id: Date.now(),
-      user_id: newId,
-      role_id: leaderData.role_id,
-      unit_id: leaderData.unit_id,
-    };
+    setUsers((prev) => [...prev, newUser]);
 
-    setUserRoles((prev) => {
-      const updated = [...prev, newRoleAssignment];
-      try {
-        localStorage.setItem('scouts_user_roles', JSON.stringify(updated));
-      } catch {
-        // ignore
-      }
-      return updated;
-    });
+    const targetUnitIds: number[] = leaderData.unit_ids
+      ? leaderData.unit_ids
+      : leaderData.unit_id !== null && leaderData.unit_id !== undefined
+      ? [leaderData.unit_id]
+      : [];
+
+    let newRoleAssignments: UserRole[] = [];
+    if (targetUnitIds.length === 0) {
+      newRoleAssignments = [
+        {
+          id: Date.now(),
+          user_id: newId,
+          role_id: leaderData.role_id,
+          unit_id: null,
+        },
+      ];
+    } else {
+      newRoleAssignments = targetUnitIds.map((uId, idx) => ({
+        id: Date.now() + idx,
+        user_id: newId,
+        role_id: leaderData.role_id,
+        unit_id: uId,
+      }));
+    }
+
+    setUserRoles((prev) => [...prev, ...newRoleAssignments]);
 
     logAction({
-      action_type: 'leader_team_assigned',
+      action_type: 'leader_created',
       title_ar: 'إضافة قائد جديد للمنظومة',
       title_en: 'New Leader Registered',
-      description_ar: `تم تسجيل القائد (${newUser.full_name}) وتعيينه في الدور والفريق المخصص`,
-      description_en: `Leader (${newUser.full_name}) registered and assigned role/team`,
-      unit_id: leaderData.unit_id,
-      metadata: { user_id: newId, role_id: leaderData.role_id },
+      description_ar: `تم تسجيل القائد (${newUser.full_name}) وتعيينه في الدور والفرق المخصصة`,
+      description_en: `Leader (${newUser.full_name}) registered and assigned role/teams`,
+      unit_id: targetUnitIds[0] || null,
+      metadata: { user_id: newId, role_id: leaderData.role_id, unit_ids: targetUnitIds },
     });
 
     return newUser;
   };
+
+
+  const scoutProgressionHistory = useMemo(() => {
+    if (!currentMemberId) return [];
+    return INITIAL_MEMBER_UNIT_HISTORY.filter((h) => h.member_id === currentMemberId);
+  }, [currentMemberId]);
+
+  const getScoutAccessibleAlbums = useCallback(
+    (memberId?: string): MediaAlbum[] => {
+      const targetId = memberId || currentMemberId;
+      if (!targetId) return [];
+
+      const targetMem = members.find((m) => m.id === targetId);
+      if (!targetMem) return [];
+
+      const history = INITIAL_MEMBER_UNIT_HISTORY.filter((h) => h.member_id === targetId);
+      const allowedUnitYears = history.map((h) => ({ unit_id: h.unit_id, year: h.year }));
+      allowedUnitYears.push({ unit_id: targetMem.unit_id, year: 2026 });
+
+      return INITIAL_MEDIA_ALBUMS.filter((album) =>
+        allowedUnitYears.some((uy) => uy.unit_id === album.unit_id && uy.year === album.year)
+      );
+    },
+    [currentMemberId, members]
+  );
+
+  const getAlbumPhotos = useCallback((albumId: string): MediaItem[] => {
+    return INITIAL_MEDIA_ITEMS.filter((item) => item.album_id === albumId);
+  }, []);
+
+  const getScoutAttendanceStats = useCallback(
+    (memberId?: string): ScoutAttendanceStats => {
+      const targetId = memberId || currentMemberId;
+      if (!targetId) {
+        return {
+          totalSessions: 24,
+          presentCount: 22,
+          excusedCount: 1,
+          absentCount: 1,
+          lateCount: 0,
+          percentage: 92,
+          streak: 6,
+          honorRank: 'gold',
+        };
+      }
+      return {
+        totalSessions: 26,
+        presentCount: 24,
+        excusedCount: 1,
+        absentCount: 1,
+        lateCount: 0,
+        percentage: 92.3,
+        streak: 7,
+        honorRank: 'gold',
+      };
+    },
+    [currentMemberId]
+  );
+
+  const getScoutSessionRecords = useCallback(
+    (memberId?: string): ScoutSessionRecord[] => {
+      const targetId = memberId || currentMemberId;
+      if (!targetId) return INITIAL_SCOUT_SESSION_RECORDS;
+      return INITIAL_SCOUT_SESSION_RECORDS.filter((r) => r.member_id === targetId || r.member_id === 'm1');
+    },
+    [currentMemberId]
+  );
 
   return (
     <AuthContext.Provider
@@ -649,6 +899,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         allUsers: users,
         accessibleUnits,
         assignLeaderUnit,
+        assignLeaderUnits,
         addMember,
         addLeader,
         members,
@@ -659,6 +910,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         getAlbumPhotos,
         getScoutAttendanceStats,
         getScoutSessionRecords,
+        overrides,
+        permissions,
+        roles,
+        rolePermissions,
+        isDbConnected,
+        updatePermissionOverride,
+        resetPermissionOverrides,
+        refreshPermissions,
       }}
     >
       {children}
@@ -673,4 +932,3 @@ export function useAuth() {
   }
   return context;
 }
-

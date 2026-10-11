@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 import { getDriveClient, loadOAuthTokens } from '@/lib/google-auth';
+import { query, sql } from '@/lib/db';
 
 const ROOT_FOLDER_ID = process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID || '16J2dvQglurhedNtC6BdwOek6bNcLiAMn';
 const YEAR_FOLDER_ID = process.env.GOOGLE_DRIVE_YEAR_FOLDER_ID || '1Rr5ZjtUESEgZBYHnL83n5jxi_x_kCrKY';
@@ -81,6 +82,61 @@ export async function POST(request: NextRequest) {
     const destinationType = (formData.get('destinationType') as string) || 'event';
     const formTargetFolderId = formData.get('targetFolderId') as string | null;
     const targetFolderName = (formData.get('targetFolderName') as string) || (formData.get('eventName') as string) || 'General';
+    const allowedFolderIdsRaw = formData.get('allowedFolderIds') as string | null;
+
+    const userId = (formData.get('userId') as string) || '';
+    const userEmail = ((formData.get('userEmail') as string) || '').toLowerCase();
+
+    // Specific security restriction: Christine Nabil is strictly limited to Morshdat A and Morshdat B
+    if (userId === 'u18' || userEmail === 'christine.nabil@scouts.org') {
+      const MORSHDAT_A_ID = '1zUwkjhsG-0y5me48Dgr5Fg1zNKgbr1ll';
+      const MORSHDAT_B_ID = '1rUHQZbcyJlB-z7Joxdb9AbHtXm-PMcj6';
+      const allowedChristineIds = [MORSHDAT_A_ID, MORSHDAT_B_ID];
+
+      const cleanTargetName = targetFolderName.trim().toLowerCase();
+      const isMorshdatFolder = cleanTargetName.includes('morshdat a') ||
+                               cleanTargetName.includes('morshdat b') ||
+                               cleanTargetName.includes('مرشدات a') ||
+                               cleanTargetName.includes('مرشدات b');
+
+      const isAllowedId = formTargetFolderId && (
+        allowedChristineIds.includes(formTargetFolderId) ||
+        formTargetFolderId.includes('Morshdat A') ||
+        formTargetFolderId.includes('Morshdat B') ||
+        formTargetFolderId === 'unit-7' ||
+        formTargetFolderId === 'unit-8'
+      );
+
+      if (destinationType !== 'team' || (!isAllowedId && !isMorshdatFolder)) {
+        return NextResponse.json(
+          { error: 'Unauthorized: Christine Nabil is only authorized to upload media to Morshdat A and Morshdat B folders.' },
+          { status: 403 }
+        );
+      }
+    }
+
+    // Enforce team-scoped upload restrictions for media leaders assigned to specific teams
+    if (allowedFolderIdsRaw) {
+      try {
+        const allowedIds: string[] = JSON.parse(allowedFolderIdsRaw);
+        if (Array.isArray(allowedIds) && allowedIds.length > 0) {
+          if (destinationType !== 'team') {
+            return NextResponse.json(
+              { error: 'Media leaders assigned to teams can only upload to team folders.' },
+              { status: 403 }
+            );
+          }
+          if (formTargetFolderId && !allowedIds.includes(formTargetFolderId)) {
+            return NextResponse.json(
+              { error: 'Unauthorized: Destination folder is outside your assigned team folders.' },
+              { status: 403 }
+            );
+          }
+        }
+      } catch (parseErr) {
+        console.warn('[MediaUpload] Failed to parse allowedFolderIds JSON:', parseErr);
+      }
+    }
 
     const { drive, authMode, email } = getDriveClient();
     console.log(`[MediaUpload] Using Drive auth mode: ${authMode} (${email})`);
@@ -132,6 +188,23 @@ export async function POST(request: NextRequest) {
       }
     } catch (cleanupErr) {
       console.warn('[MediaUpload] Buffer unlink warning:', cleanupErr);
+    }
+    // Synchronize metadata with Microsoft SQL Server (ScoutsDB)
+    try {
+      const yearNum = parseInt(year) || 2026;
+      await query(`
+        INSERT INTO media_items (unit_id, year, file_name, title_ar, title_en, media_type, url, drive_file_id)
+        VALUES (5, @yr, @fn, @title, @title, @mtype, @url, @fid)
+      `, [
+        { name: 'yr', type: sql.Int, value: yearNum },
+        { name: 'fn', type: sql.NVarChar(255), value: file.name },
+        { name: 'title', type: sql.NVarChar(200), value: eventName || file.name },
+        { name: 'mtype', type: sql.NVarChar(20), value: file.type.startsWith('video') ? 'video' : 'image' },
+        { name: 'url', type: sql.NVarChar(sql.MAX), value: webViewLink || `https://drive.google.com/file/d/${driveFileId}/view` },
+        { name: 'fid', type: sql.NVarChar(255), value: driveFileId },
+      ]);
+    } catch (dbErr) {
+      console.warn('[MediaUpload] DB indexing warning:', dbErr);
     }
 
     return NextResponse.json({

@@ -1,72 +1,120 @@
-import sql from 'mssql/msnodesqlv8';
+import pg from 'pg';
 
-/**
- * Microsoft SQL Server Database Configuration & Connection Pool
- * Supports:
- * 1. Windows Integrated Security (Default for local Microsoft SQL Server 2025 installation)
- * 2. SQL Server Authentication (via environment variables MSSQL_USER / MSSQL_PASSWORD)
- */
-const defaultConnectionString = 
-  process.env.MSSQL_CONNECTION_STRING || 
-  'Driver={ODBC Driver 18 for SQL Server};Server=(local);Database=ScoutsDB;Trusted_Connection=yes;TrustServerCertificate=yes;';
+const { Pool } = pg;
 
-export const sqlConfig = {
+const defaultConnectionString =
+  process.env.DATABASE_URL ||
+  process.env.POSTGRES_CONNECTION_STRING ||
+  'postgresql://postgres:postgrespassword@localhost:5432/scouts_db';
+
+export const poolConfig: pg.PoolConfig = {
   connectionString: defaultConnectionString,
-  pool: {
-    max: 10,
-    min: 0,
-    idleTimeoutMillis: 30000,
-  },
+  max: 50,
+  min: 5,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 5000,
 };
 
-let pool: sql.ConnectionPool | null = null;
+let poolInstance: pg.Pool | null = null;
 
-export async function getDbPool(): Promise<sql.ConnectionPool> {
-  if (!pool || !pool.connected) {
-    pool = new sql.ConnectionPool(sqlConfig);
-    await pool.connect();
+export function getDbPool(): pg.Pool {
+  if (!poolInstance) {
+    poolInstance = new Pool(poolConfig);
+    poolInstance.on('error', (err) => {
+      console.error('[PostgreSQL Backend Pool Error]:', err);
+    });
   }
-  return pool;
+  return poolInstance;
 }
 
-/**
- * Executes a T-SQL query and returns rows
- */
+export type QueryParam = { name?: string; type?: any; value: any };
+
 export async function query<T = any>(
   queryText: string,
-  params?: Record<string, { type: sql.ISqlType; value: any }>
+  params?: Record<string, QueryParam> | QueryParam[] | any[]
 ): Promise<T[]> {
-  const db = await getDbPool();
-  const request = db.request();
+  const pool = getDbPool();
+
+  let pgSql = queryText;
+  const paramValues: any[] = [];
+  let index = 1;
 
   if (params) {
-    for (const [key, { type, value }] of Object.entries(params)) {
-      request.input(key, type, value);
+    if (Array.isArray(params)) {
+      const isNamed = params.length > 0 && typeof params[0] === 'object' && 'name' in params[0];
+      if (isNamed) {
+        const map = new Map<string, any>();
+        for (const p of params as QueryParam[]) {
+          if (p.name) map.set(p.name, p.value);
+        }
+        pgSql = pgSql.replace(/@([a-zA-Z0-9_]+)/g, (match, name) => {
+          if (map.has(name)) {
+            paramValues.push(map.get(name));
+            return `$${index++}`;
+          }
+          return match;
+        });
+      } else {
+        paramValues.push(...params);
+      }
+    } else if (typeof params === 'object') {
+      const map = new Map<string, any>();
+      for (const [key, p] of Object.entries(params)) {
+        const name = (p as any)?.name || key;
+        const val = (p as any)?.value !== undefined ? (p as any).value : p;
+        map.set(name, val);
+      }
+      pgSql = pgSql.replace(/@([a-zA-Z0-9_]+)/g, (match, name) => {
+        if (map.has(name)) {
+          paramValues.push(map.get(name));
+          return `$${index++}`;
+        }
+        return match;
+      });
     }
   }
 
-  const result = await request.query(queryText);
-  return result.recordset as T[];
+  // Handle T-SQL TOP n -> LIMIT n
+  if (/\bTOP\s+(\d+)\b/i.test(pgSql)) {
+    const match = pgSql.match(/\bTOP\s+(\d+)\b/i);
+    const limitNum = match ? match[1] : '1';
+    pgSql = pgSql.replace(/\bTOP\s+\d+\b/gi, '');
+    if (!/\bLIMIT\b/i.test(pgSql)) {
+      pgSql = `${pgSql.trim().replace(/;$/, '')} LIMIT ${limitNum}`;
+    }
+  }
+
+  // Remove dbo. prefix
+  pgSql = pgSql.replace(/\bdbo\./gi, '');
+
+  const result = await pool.query(pgSql, paramValues);
+  return result.rows as T[];
 }
 
-/**
- * Evaluates leader permission via SQL Server stored procedure/function
- */
 export async function checkLeaderPermission(
   userId: string,
   permissionKey: string,
   unitId?: number | null
 ): Promise<boolean> {
   const rows = await query<{ is_granted: boolean }>(
-    `SELECT dbo.fn_check_leader_permission(@userId, @permKey, @unitId) AS is_granted`,
-    {
-      userId: { type: sql.UniqueIdentifier, value: userId },
-      permKey: { type: sql.NVarChar(80), value: permissionKey },
-      unitId: { type: sql.Int, value: unitId ?? null },
-    }
+    `SELECT fn_check_leader_permission($1, $2, $3) AS is_granted`,
+    [userId, permissionKey, unitId ?? null]
   );
 
   return Boolean(rows[0]?.is_granted);
 }
 
-export { sql };
+export const sql = {
+  Int: 'int',
+  BigInt: 'bigint',
+  VarChar: (n?: number) => 'varchar',
+  NVarChar: (n?: number | string) => 'varchar',
+  UniqueIdentifier: 'uuid',
+  Date: 'date',
+  DateTime2: 'timestamptz',
+  Bit: 'boolean',
+  Text: 'text',
+  MAX: 'max',
+};
+
+export { poolInstance as pool };

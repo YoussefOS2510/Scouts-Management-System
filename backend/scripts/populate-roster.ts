@@ -117,7 +117,7 @@ async function main() {
     { id: '11111111-0000-0000-0000-000000000015', email: 'mark.wagdy@scouts.org', fullName: 'القائد مارك وجدي (Mark Wagdy)', phone: '+201011110005', roleName: 'section_leader', unitCode: 'scouts_a' },
     { id: '11111111-0000-0000-0000-000000000016', email: 'kirollos.samy@scouts.org', fullName: 'القائد كيرلس سامي (Kirollos Samy)', phone: '+201011110006', roleName: 'section_leader', unitCode: 'scouts_b' },
     { id: '11111111-0000-0000-0000-000000000017', email: 'sandra.magdy@scouts.org', fullName: 'القائدة ساندرا مجدي (Sandra Magdy)', phone: '+201011110007', roleName: 'section_leader', unitCode: 'guides_a' },
-    { id: '11111111-0000-0000-0000-000000000018', email: 'christine.nabil@scouts.org', fullName: 'القائدة كريستين نبيل (Christine Nabil)', phone: '+201011110008', roleName: 'section_leader', unitCode: 'guides_b' },
+    { id: '11111111-0000-0000-0000-000000000018', email: 'christine.nabil@scouts.org', fullName: 'القائدة كريستين نبيل (Christine Nabil)', phone: '+201011110008', roleName: 'media_officer', unitCode: 'guides_a', additionalUnitCodes: ['guides_b'] },
     { id: '11111111-0000-0000-0000-000000000019', email: 'george.emil@scouts.org', fullName: 'القائد جورج إميل (George Emil)', phone: '+201011110009', roleName: 'section_leader', unitCode: 'advanced_scouts' },
     { id: '11111111-0000-0000-0000-000000000020', email: 'lydia.raouf@scouts.org', fullName: 'القائدة ليديا رؤوف (Lydia Raouf)', phone: '+201011110010', roleName: 'section_leader', unitCode: 'senior_guides' },
     { id: '11111111-0000-0000-0000-000000000021', email: 'bishoy.nader@scouts.org', fullName: 'القائد بيشوي نادر (Bishoy Nader)', phone: '+201011110011', roleName: 'section_leader', unitCode: 'rovers' },
@@ -137,19 +137,26 @@ async function main() {
       VALUES (@id, @email, @password_hash, @full_name, @phone, 1);
     `);
 
-    const roleReq = pool.request();
-    roleReq.input('userId', sql.UniqueIdentifier, l.id);
-    roleReq.input('roleName', sql.NVarChar(50), l.roleName);
-    roleReq.input('unitCode', sql.NVarChar(50), l.unitCode ?? null);
+    const unitCodes = [l.unitCode, ...((l as any).additionalUnitCodes || [])].filter(Boolean);
+    if (unitCodes.length === 0) {
+      unitCodes.push(null);
+    }
 
-    await roleReq.query(`
-      DECLARE @rId INT = (SELECT id FROM roles WHERE name = @roleName);
-      DECLARE @uId INT = CASE WHEN @unitCode IS NOT NULL THEN (SELECT id FROM units WHERE code = @unitCode) ELSE NULL END;
-      INSERT INTO user_roles (user_id, role_id, unit_id)
-      VALUES (@userId, @rId, @uId);
-    `);
+    for (const uCode of unitCodes) {
+      const roleReq = pool.request();
+      roleReq.input('userId', sql.UniqueIdentifier, l.id);
+      roleReq.input('roleName', sql.NVarChar(50), l.roleName);
+      roleReq.input('unitCode', sql.NVarChar(50), uCode ?? null);
 
-    console.log(`  + Leader: ${l.fullName} [Role: ${l.roleName}, Unit: ${l.unitCode ?? 'Global'}]`);
+      await roleReq.query(`
+        DECLARE @rId INT = (SELECT id FROM roles WHERE name = @roleName);
+        DECLARE @uId INT = CASE WHEN @unitCode IS NOT NULL THEN (SELECT id FROM units WHERE code = @unitCode) ELSE NULL END;
+        INSERT INTO user_roles (user_id, role_id, unit_id)
+        VALUES (@userId, @rId, @uId);
+      `);
+    }
+
+    console.log(`  + Leader: ${l.fullName} [Role: ${l.roleName}, Units: ${unitCodes.join(', ')}]`);
   }
 
   // 4. Insert Kids (2 kids for each youth age group / team = 22 kids total)

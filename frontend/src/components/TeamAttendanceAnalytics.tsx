@@ -63,10 +63,24 @@ export function TeamAttendanceAnalytics({ initialUnitId, onBackToSession }: Team
     }
   }, [accessibleUnits, currentUnit, isSuperAdmin, selectedUnitId]);
 
-  // Analytics data for the selected unit
-  const data = useMemo(() => {
-    return getUnitAttendanceAnalytics(selectedUnitId);
+  // Live Database Analytics data for the selected unit
+  const [dbData, setDbData] = useState<any>(null);
+
+  React.useEffect(() => {
+    fetch(`/api/analytics?type=team&unitId=${selectedUnitId}`)
+      .then((r) => r.json())
+      .then((res) => {
+        if (res.success && res.data) {
+          setDbData(res.data);
+        }
+      })
+      .catch((err) => console.error('Failed to fetch team analytics:', err));
   }, [selectedUnitId]);
+
+  const data = useMemo(() => {
+    if (dbData) return dbData;
+    return getUnitAttendanceAnalytics(selectedUnitId);
+  }, [dbData, selectedUnitId]);
 
   // Click-to-sort toggle for table headers
   const handleSortToggle = (key: SortKey) => {
@@ -303,7 +317,7 @@ export function TeamAttendanceAnalytics({ initialUnitId, onBackToSession }: Team
           </div>
 
           <div className="space-y-2.5">
-            {data.patrolsStats.map((patrol, idx) => (
+            {data.patrolsStats.map((patrol: any, idx: number) => (
               <div
                 key={patrol.patrolId}
                 className="p-3 rounded-xl bg-[#F0F4F9] dark:bg-[#282A2C] flex items-center gap-3 text-xs"
@@ -357,7 +371,7 @@ export function TeamAttendanceAnalytics({ initialUnitId, onBackToSession }: Team
           </div>
 
           <div className="space-y-2.5">
-            {data.sessionsHistory.map((s, idx) => (
+            {data.sessionsHistory.map((s: any, idx: number) => (
               <div
                 key={idx}
                 className="p-3 rounded-xl bg-[#F0F4F9] dark:bg-[#282A2C] flex items-center gap-3 text-xs"
@@ -407,7 +421,7 @@ export function TeamAttendanceAnalytics({ initialUnitId, onBackToSession }: Team
           </div>
 
           <div className="space-y-2.5 pt-1">
-            {data.excuseBreakdown.map((exc, idx) => (
+            {data.excuseBreakdown.map((exc: any, idx: number) => (
               <div key={idx} className="flex items-center gap-3 text-xs p-2 rounded-xl bg-[#F0F4F9] dark:bg-[#282A2C]">
                 <div className="w-28 sm:w-32 shrink-0 font-medium text-[#1F1F1F] dark:text-[#E3E3E3] truncate">
                   {language === 'ar' ? exc.category_ar : exc.category_en}
@@ -438,7 +452,7 @@ export function TeamAttendanceAnalytics({ initialUnitId, onBackToSession }: Team
           </div>
 
           <div className="space-y-2 pt-1 max-h-56 overflow-y-auto">
-            {data.honorRoll.map((scout) => (
+            {data.honorRoll.map((scout: any) => (
               <div key={scout.id} className="p-2.5 rounded-xl bg-[#F0F4F9] dark:bg-[#282A2C] flex items-center justify-between text-xs">
                 <div>
                   <div className="font-medium text-[#1F1F1F] dark:text-[#E3E3E3]">
@@ -471,7 +485,7 @@ export function TeamAttendanceAnalytics({ initialUnitId, onBackToSession }: Team
           </div>
 
           <div className="space-y-2 pt-1">
-            {data.needsFollowUp.map((scout) => (
+            {data.needsFollowUp.map((scout: any) => (
               <div key={scout.id} className="p-2.5 rounded-xl bg-[#F9DEDC]/50 dark:bg-rose-950/20 border border-[#F9DEDC] dark:border-rose-900/30 flex items-center justify-between text-xs">
                 <div>
                   <div className="font-medium text-[#1F1F1F] dark:text-[#E3E3E3]">
@@ -545,7 +559,7 @@ export function TeamAttendanceAnalytics({ initialUnitId, onBackToSession }: Team
                 className="bg-transparent text-xs font-medium text-[#1F1F1F] dark:text-[#E3E3E3] focus:outline-none cursor-pointer border-none p-0 pe-4"
               >
                 <option value="all" className="dark:bg-[#1E1F20]">{language === 'ar' ? 'جميع الطلائع' : 'All Patrols'}</option>
-                {data.patrolsStats.map((p) => (
+                {data.patrolsStats.map((p: any) => (
                   <option key={p.patrolId} value={p.patrolId} className="dark:bg-[#1E1F20]">
                     {language === 'ar' ? p.name_ar : p.name_en}
                   </option>

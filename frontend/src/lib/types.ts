@@ -107,7 +107,7 @@ export interface Role {
 export interface Permission {
   id: number;
   key: string;
-  category: 'members' | 'attendance' | 'inventory' | 'media' | 'admin';
+  category: 'members' | 'attendance' | 'inventory' | 'media' | 'admin' | 'scout';
   description_en: string;
   description_ar: string;
 }
@@ -216,20 +216,23 @@ export type AuditActionType =
   | 'media_uploaded'
   | 'user_login'
   | 'leader_team_assigned'
-  | 'patrol_assigned';
+  | 'patrol_assigned'
+  | 'leader_created';
 
 export interface AuditLogEntry {
   id: string;
   user_id: string;
   user_name: string;
-  user_role_name: string;
+  user_role_name?: string;
   unit_id?: number | null;
+  unit_name?: string;
   action_type: AuditActionType;
   title_ar: string;
   title_en: string;
   description_ar: string;
   description_en: string;
   metadata?: Record<string, any>;
-  created_at: string;
+  created_at?: string;
+  timestamp?: string;
 }
 

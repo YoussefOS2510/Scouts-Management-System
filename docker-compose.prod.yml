@@ -1,0 +1,66 @@
+services:
+  # 1. PostgreSQL 16 Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: scouts_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgrespassword}
+      POSTGRES_DB: ${POSTGRES_DB:-scouts_db}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./backend/db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+      - ./backend/db/functions.sql:/docker-entrypoint-initdb.d/02-functions.sql
+      - ./backend/db/seed.sql:/docker-entrypoint-initdb.d/03-seed.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-scouts_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - scouts-network
+
+  # 2. Next.js 16 Web Application (Standalone Container)
+  web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: scouts_web
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgrespassword}@postgres:5432/${POSTGRES_DB:-scouts_db}
+      NEXT_PUBLIC_APP_NAME: "Scout Organization Platform"
+      MEDIA_STAGING_DIR: "/app/staging_buffer"
+    volumes:
+      - staging_data:/app/staging_buffer
+    networks:
+      - scouts-network
+
+  # 3. Nginx Reverse Proxy (SSL / Caching / Gzip)
+  nginx:
+    image: nginx:alpine
+    container_name: scouts_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - web
+    networks:
+      - scouts-network
+
+volumes:
+  pgdata:
+  staging_data:
+
+networks:
+  scouts-network:
+    driver: bridge

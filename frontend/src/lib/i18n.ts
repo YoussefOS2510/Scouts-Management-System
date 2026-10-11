@@ -2,8 +2,8 @@ export type Language = 'ar' | 'en';
 
 export const DICTIONARY = {
   ar: {
-    system_name: 'منظومة الفوج الكشفي',
-    system_subtitle: 'نظام إدارة شؤون الكشافة والمرشدات والعهدة والوسائط',
+    system_name: 'SMSR',
+    system_subtitle: 'المجموعة الكشفية البحرية بكنيسة السيدة العذراء بالرحاب',
     nav_dashboard: 'الرئيسية',
     nav_attendance: 'سجل الحضور',
     nav_members: 'كشف الأعضاء',
@@ -96,8 +96,8 @@ export const DICTIONARY = {
     permission_override_notice: 'صلاحية معدلة بقرار استثنائي من قائد الفوج',
   },
   en: {
-    system_name: 'Scout Group Platform',
-    system_subtitle: 'Scout Organization, Attendance, Inventory & Media Ingestion System',
+    system_name: 'SMSR',
+    system_subtitle: 'St. Mary Scouts Rehab',
     nav_dashboard: 'Dashboard',
     nav_attendance: 'Attendance',
     nav_members: 'Scout Directory',

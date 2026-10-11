@@ -1,16 +1,12 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
+import Link from 'next/link';
 import { useLanguage } from '../../lib/LanguageContext';
 import { useAuth } from '../../lib/AuthContext';
-import {
-  INITIAL_EQUIPMENT_CATEGORIES,
-  INITIAL_EQUIPMENT,
-  INITIAL_BOOKINGS,
-  INITIAL_UNITS,
-} from '../../lib/data';
+import { INITIAL_UNITS, INITIAL_EQUIPMENT_CATEGORIES } from '../../lib/data';
 import { calculateEquipmentAvailability } from '../../lib/booking-service';
-import { Booking, BookingStatus } from '../../lib/types';
+import { Booking, BookingStatus, EquipmentItem, EquipmentCategory } from '../../lib/types';
 import {
   Package,
   Calendar,
@@ -38,6 +34,13 @@ export default function InventoryPage() {
   const defaultUnit = accessibleUnits.length > 0 ? accessibleUnits[0].id : 5;
   const [selectedUnitId, setSelectedUnitId] = useState<number>(defaultUnit);
 
+  const canAccessInventory =
+    isSuperAdmin ||
+    can('inventory.view') ||
+    can('inventory.book') ||
+    can('inventory.manage') ||
+    can('inventory.approve');
+
   // Sync unit when user switches or accessibleUnits changes
   React.useEffect(() => {
     if (accessibleUnits.length > 0 && !accessibleUnits.some((u) => u.id === selectedUnitId)) {
@@ -52,14 +55,46 @@ export default function InventoryPage() {
 
   // Cart of requested items: { [equipmentId]: requestedQuantity }
   const [cart, setCart] = useState<Record<number, number>>({ 1: 5, 5: 2 });
-  const [bookings, setBookings] = useState<Booking[]>(INITIAL_BOOKINGS);
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [equipmentList, setEquipmentList] = useState<EquipmentItem[]>([]);
+  const [categoriesList, setCategoriesList] = useState<EquipmentCategory[]>([]);
   const [feedbackMessage, setFeedbackMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Fetch live inventory items and categories from ScoutsDB
+  const fetchInventory = React.useCallback(() => {
+    fetch(`/api/inventory?startDate=${startDate}&endDate=${endDate}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.success) {
+          if (Array.isArray(data.equipment)) setEquipmentList(data.equipment);
+          if (Array.isArray(data.categories)) setCategoriesList(data.categories);
+        }
+      })
+      .catch((err) => console.error('Failed to fetch inventory:', err));
+  }, [startDate, endDate]);
+
+  // Fetch live bookings from ScoutsDB
+  const fetchBookings = React.useCallback(() => {
+    fetch('/api/inventory/bookings')
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.success && Array.isArray(data.bookings)) {
+          setBookings(data.bookings);
+        }
+      })
+      .catch((err) => console.error('Failed to fetch bookings:', err));
+  }, []);
+
+  React.useEffect(() => {
+    fetchInventory();
+    fetchBookings();
+  }, [fetchInventory, fetchBookings]);
 
   // Filtered equipment items
   const filteredEquipment = useMemo(() => {
-    if (selectedCategory === 'all') return INITIAL_EQUIPMENT;
-    return INITIAL_EQUIPMENT.filter((item) => item.category_id === selectedCategory);
-  }, [selectedCategory]);
+    if (selectedCategory === 'all') return equipmentList;
+    return equipmentList.filter((item) => item.category_id === selectedCategory);
+  }, [selectedCategory, equipmentList]);
 
   // Update item quantity in request cart
   const handleQuantityChange = (equipmentId: number, qty: number) => {
@@ -101,7 +136,7 @@ export default function InventoryPage() {
 
     // Verify overlap rule for every item
     for (const req of requestedItems) {
-      const equip = INITIAL_EQUIPMENT.find((e) => e.id === req.equipmentId);
+      const equip = equipmentList.find((e) => e.id === req.equipmentId);
       if (!equip) continue;
 
       const check = calculateEquipmentAvailability(
@@ -121,59 +156,65 @@ export default function InventoryPage() {
       }
     }
 
-    // All available! Create new pending booking
-    const newBooking: Booking = {
-      id: `b-${Date.now()}`,
-      user_id: currentUser ? currentUser.id : 'u1',
-      unit_id: selectedUnitId,
-      start_date: startDate,
-      end_date: endDate,
-      purpose,
-      status: 'pending',
-      created_at: new Date().toISOString(),
-      items: requestedItems.map((item) => ({
-        booking_id: `b-${Date.now()}`,
-        equipment_id: item.equipmentId,
-        quantity: item.qty,
-      })),
-    };
-
-    setBookings((prev) => [newBooking, ...prev]);
-    setCart({});
-    setPurpose('');
-    setFeedbackMessage({
-      type: 'success',
-      text: t('booking_success'),
-    });
-
-    const currentUnitObj = INITIAL_UNITS.find((u) => u.id === selectedUnitId);
-    logAction({
-      action_type: 'booking_created',
-      title_ar: `طلب حجز مهمات عهدة (${currentUnitObj?.name_ar || ''})`,
-      title_en: `New Booking Request (${currentUnitObj?.name_en || ''})`,
-      description_ar: `قام ${currentUser?.full_name} بطلب ${requestedItems.length} مهمات لمخيم (${purpose}) للفترة ${startDate} إلى ${endDate}`,
-      description_en: `${currentUser?.full_name} requested ${requestedItems.length} items for camp (${purpose}) from ${startDate} to ${endDate}`,
-      unit_id: selectedUnitId,
-      metadata: { booking_id: newBooking.id, start_date: startDate, end_date: endDate },
-    });
+    // Persist to Microsoft SQL Server
+    fetch('/api/inventory/bookings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId: currentUser?.id,
+        unitId: selectedUnitId,
+        startDate,
+        endDate,
+        purpose,
+        items: requestedItems,
+      }),
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.success) {
+          fetchBookings();
+          fetchInventory();
+          setCart({});
+          setPurpose('');
+          setFeedbackMessage({
+            type: 'success',
+            text: t('booking_success'),
+          });
+        } else {
+          setFeedbackMessage({
+            type: 'error',
+            text: data.error || 'Failed to submit booking',
+          });
+        }
+      })
+      .catch((err) => {
+        console.error('Booking submission error:', err);
+        setFeedbackMessage({
+          type: 'error',
+          text: 'Database connection error',
+        });
+      });
   };
 
   // Quartermaster Quick Action to Approve Booking
   const handleApproveBooking = (bookingId: string) => {
-    setBookings((prev) =>
-      prev.map((b) => (b.id === bookingId ? { ...b, status: 'approved' as BookingStatus } : b))
-    );
-
-    const target = bookings.find((b) => b.id === bookingId);
-    logAction({
-      action_type: 'booking_approved',
-      title_ar: 'اعتماد طلب حجز عهدة',
-      title_en: 'Equipment Booking Approved',
-      description_ar: `قام المسؤول (${currentUser?.full_name}) باعتماد طلب الحجز لمخيم (${target?.purpose || ''})`,
-      description_en: `${currentUser?.full_name} approved equipment booking for (${target?.purpose || ''})`,
-      unit_id: target?.unit_id,
-      metadata: { booking_id: bookingId },
-    });
+    fetch('/api/inventory/bookings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        bookingId,
+        status: 'approved',
+        approverId: currentUser?.id,
+      }),
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.success) {
+          fetchBookings();
+          fetchInventory();
+        }
+      })
+      .catch((err) => console.error('Approve booking error:', err));
   };
 
   return (
@@ -413,7 +454,7 @@ export default function InventoryPage() {
               ) : (
                 <div className="space-y-0.5">
                   {Object.entries(cart).map(([id, qty]) => {
-                    const item = INITIAL_EQUIPMENT.find((i) => i.id === Number(id));
+                    const item = equipmentList.find((i) => i.id === Number(id));
                     return (
                       <div key={id} className="flex justify-between text-zinc-800 dark:text-zinc-200 text-xs font-mono">
                         <span>{item?.name.split(' (')[0]}</span>

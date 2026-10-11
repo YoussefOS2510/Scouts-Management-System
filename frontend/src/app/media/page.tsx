@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
+import Link from 'next/link';
 import { useLanguage } from '../../lib/LanguageContext';
 import { useAuth } from '../../lib/AuthContext';
 import { INITIAL_UNITS } from '../../lib/data';
@@ -25,6 +26,7 @@ import {
   Plus,
   X,
   ShieldCheck,
+  ShieldAlert,
 } from 'lucide-react';
 
 interface DriveFolderItem {
@@ -32,9 +34,40 @@ interface DriveFolderItem {
   name: string;
 }
 
+// Robust matcher between Google Drive folders and SMSR Teams
+function matchesUnit(folderName: string, unit: { id: number; name_en: string; name_ar: string; code?: string }): boolean {
+  const f = folderName.trim().toLowerCase();
+  const en = unit.name_en.trim().toLowerCase();
+  const ar = unit.name_ar.trim().toLowerCase();
+
+  // Exact match
+  if (f === en || f === ar) return true;
+
+  // Normalized alphanumeric match
+  const fClean = f.replace(/[^a-z0-9]/g, '');
+  const enClean = en.replace(/[^a-z0-9]/g, '');
+  if (fClean && enClean && fClean === enClean) return true;
+
+  // Specific unit variations & aliases
+  if (unit.id === 1 && (fClean === 'ashbala' || fClean === 'cubsa')) return true;
+  if (unit.id === 2 && (fClean === 'ashbalb' || fClean === 'cubsb')) return true;
+  if (unit.id === 3 && (fClean === 'zahrata' || fClean === 'browniesa')) return true;
+  if (unit.id === 4 && (fClean === 'zahratb' || fClean === 'browniesb')) return true;
+  if (unit.id === 5 && (fClean === 'kashafaa' || fClean === 'scoutsa')) return true;
+  if (unit.id === 6 && (fClean === 'kashafab' || fClean === 'scoutsb')) return true;
+  if (unit.id === 7 && (fClean === 'morshdata' || fClean === 'guidesa')) return true;
+  if (unit.id === 8 && (fClean === 'morshdatb' || fClean === 'guidesb')) return true;
+  if (unit.id === 9 && (fClean === 'motakadem' || fClean === 'advanced' || fClean === 'advancedscouts')) return true;
+  if (unit.id === 10 && (fClean === 'ra2edat' || fClean === 'raedat' || fClean === 'seniorguides')) return true;
+  if (unit.id === 11 && (fClean === 'gawala' || fClean === 'rovers')) return true;
+  if (unit.id === 12 && (fClean === 'leaders' || fClean === 'leadership' || fClean === 'leadershipstaff')) return true;
+
+  return false;
+}
+
 export default function MediaPortalPage() {
   const { language, t } = useLanguage();
-  const { isSuperAdmin, can, currentUser, currentUnit } = useAuth();
+  const { isSuperAdmin, can, currentUser, currentRole, currentUnit, accessibleUnits, userRoles } = useAuth();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [jobs, setJobs] = useState<MediaUploadJob[]>([]);
@@ -43,6 +76,46 @@ export default function MediaPortalPage() {
   const [eventFolders, setEventFolders] = useState<DriveFolderItem[]>([]);
   const [selectedFolderId, setSelectedFolderId] = useState<string>('');
   const [isLoadingFolders, setIsLoadingFolders] = useState<boolean>(true);
+
+  // Check if leader has specific assigned teams (e.g., Media Officer or Leader scoped to 1 or more teams)
+  const isTeamScopedLeader = useMemo(() => {
+    // Explicitly guarantee Christine Nabil is always scoped to her assigned teams
+    if (currentUser?.id === 'u18' || currentUser?.email?.toLowerCase() === 'christine.nabil@scouts.org') {
+      return true;
+    }
+    if (isSuperAdmin || currentRole?.name === 'admin' || currentRole?.name === 'group_leader') {
+      return false;
+    }
+    const assignedRoles = userRoles.filter(
+      (ur) => ur.user_id === currentUser?.id && ur.unit_id !== null && ur.unit_id !== undefined
+    );
+    if (assignedRoles.length > 0) return true;
+    if (currentUnit !== null && !isSuperAdmin) return true;
+    return false;
+  }, [isSuperAdmin, currentRole, userRoles, currentUser, currentUnit]);
+
+  // Restrict available team folders strictly to the assigned team(s)
+  const allowedTeamFolders = useMemo<DriveFolderItem[]>(() => {
+    if (!isTeamScopedLeader) {
+      return teamFolders;
+    }
+    const isChristine = currentUser?.id === 'u18' || currentUser?.email?.toLowerCase() === 'christine.nabil@scouts.org';
+    const effectiveUnits = isChristine
+      ? INITIAL_UNITS.filter((u) => u.id === 7 || u.id === 8)
+      : accessibleUnits;
+
+    const filtered = teamFolders.filter((f: DriveFolderItem) =>
+      effectiveUnits.some((unit) => matchesUnit(f.name, unit))
+    );
+    if (filtered.length === 0 && effectiveUnits.length > 0) {
+      return effectiveUnits.map((u) => {
+        if (u.id === 7) return { id: '1zUwkjhsG-0y5me48Dgr5Fg1zNKgbr1ll', name: 'Morshdat A' };
+        if (u.id === 8) return { id: '1rUHQZbcyJlB-z7Joxdb9AbHtXm-PMcj6', name: 'Morshdat B' };
+        return { id: `unit-${u.id}`, name: u.name_en };
+      });
+    }
+    return filtered;
+  }, [teamFolders, isTeamScopedLeader, accessibleUnits, currentUser]);
 
   // Admin Create Event Folder Modal state
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -68,6 +141,21 @@ export default function MediaPortalPage() {
     fetchFolders();
   }, []);
 
+  // Enforce 'team' destination and lock selected folder strictly to assigned teams
+  useEffect(() => {
+    if (isTeamScopedLeader) {
+      if (destinationType !== 'team') {
+        setDestinationType('team');
+      }
+      if (allowedTeamFolders.length > 0) {
+        const isCurrentValid = allowedTeamFolders.some((f: DriveFolderItem) => f.id === selectedFolderId);
+        if (!isCurrentValid) {
+          setSelectedFolderId(allowedTeamFolders[0].id);
+        }
+      }
+    }
+  }, [isTeamScopedLeader, destinationType, allowedTeamFolders, selectedFolderId]);
+
   const fetchFolders = async () => {
     try {
       setIsLoadingFolders(true);
@@ -75,15 +163,29 @@ export default function MediaPortalPage() {
       const data = await res.json();
 
       if (data.success) {
-        setTeamFolders(data.teams || []);
-        setEventFolders(data.events || []);
+        const teams: DriveFolderItem[] = data.teams || [];
+        const events: DriveFolderItem[] = data.events || [];
+        setTeamFolders(teams);
+        setEventFolders(events);
 
-        // Initial folder selection: default to Camp if events, or first team
-        if (data.events && data.events.length > 0) {
-          const campFolder = data.events.find((e: DriveFolderItem) => e.name.toLowerCase() === 'camp');
-          setSelectedFolderId(campFolder ? campFolder.id : data.events[0].id);
-        } else if (data.teams && data.teams.length > 0) {
-          setSelectedFolderId(data.teams[0].id);
+        // Initial folder selection:
+        if (isTeamScopedLeader) {
+          setDestinationType('team');
+          const matched = teams.find((f: DriveFolderItem) =>
+            accessibleUnits.some((u) => matchesUnit(f.name, u))
+          );
+          if (matched) {
+            setSelectedFolderId(matched.id);
+          } else if (teams.length > 0) {
+            setSelectedFolderId(teams[0].id);
+          }
+        } else {
+          if (events.length > 0) {
+            const campFolder = events.find((e: DriveFolderItem) => e.name.toLowerCase() === 'camp');
+            setSelectedFolderId(campFolder ? campFolder.id : events[0].id);
+          } else if (teams.length > 0) {
+            setSelectedFolderId(teams[0].id);
+          }
         }
       }
     } catch (err) {
@@ -95,22 +197,25 @@ export default function MediaPortalPage() {
 
   // Sync selected folder ID when switching tabs
   const handleDestinationTypeChange = (type: 'event' | 'team') => {
+    if (isTeamScopedLeader && type === 'event') {
+      return; // Locked strictly to team folders for assigned leaders
+    }
     setDestinationType(type);
     if (type === 'event' && eventFolders.length > 0) {
       const camp = eventFolders.find((e) => e.name.toLowerCase() === 'camp');
       setSelectedFolderId(camp ? camp.id : eventFolders[0].id);
-    } else if (type === 'team' && teamFolders.length > 0) {
-      // If user is assigned to a unit, try matching by name
-      if (currentUnit) {
-        const matched = teamFolders.find((f) =>
-          f.name.toLowerCase().includes(currentUnit.name_en.toLowerCase())
-        );
-        if (matched) {
-          setSelectedFolderId(matched.id);
-          return;
+    } else if (type === 'team') {
+      const availableTeams = isTeamScopedLeader ? allowedTeamFolders : teamFolders;
+      if (availableTeams.length > 0) {
+        if (currentUnit) {
+          const matched = availableTeams.find((f: DriveFolderItem) => matchesUnit(f.name, currentUnit));
+          if (matched) {
+            setSelectedFolderId(matched.id);
+            return;
+          }
         }
+        setSelectedFolderId(availableTeams[0].id);
       }
-      setSelectedFolderId(teamFolders[0].id);
     }
   };
 
@@ -169,9 +274,9 @@ export default function MediaPortalPage() {
   const canUpload = isSuperAdmin || can('media.upload');
 
   // Currently selected folder metadata
-  const currentFoldersList = destinationType === 'event' ? eventFolders : teamFolders;
-  const currentSelectedFolder = currentFoldersList.find((f) => f.id === selectedFolderId);
-  const currentFolderName = currentSelectedFolder?.name || 'General';
+  const currentFoldersList: DriveFolderItem[] = destinationType === 'event' && !isTeamScopedLeader ? eventFolders : allowedTeamFolders;
+  const currentSelectedFolder = currentFoldersList.find((f: DriveFolderItem) => f.id === selectedFolderId);
+  const currentFolderName = currentSelectedFolder?.name || (isTeamScopedLeader && allowedTeamFolders[0] ? allowedTeamFolders[0].name : 'General');
 
   // Staging buffer metrics (15 GB total volume)
   const totalBufferBytes = 15 * 1024 * 1024 * 1024; // 15 GB
@@ -180,10 +285,29 @@ export default function MediaPortalPage() {
     .reduce((sum, j) => sum + j.file_size_bytes, 0);
   const usedGb = (currentUsedBytes / (1024 * 1024 * 1024)).toFixed(2);
 
+  // Direct link to Drive folder (links directly to selected team folder for scoped leaders)
+  const driveFolderUrl =
+    isTeamScopedLeader && selectedFolderId && !selectedFolderId.startsWith('fallback-') && !selectedFolderId.startsWith('unit-')
+      ? `https://drive.google.com/drive/folders/${selectedFolderId}`
+      : 'https://drive.google.com/drive/folders/16J2dvQglurhedNtC6BdwOek6bNcLiAMn';
+
   // Handle actual files chosen from file input or drag-and-drop
   const handleFilesSelected = async (fileList: FileList | File[]) => {
     const files = Array.from(fileList);
     if (!files.length) return;
+
+    // Strict validation: scoped media leaders cannot upload outside assigned teams
+    if (isTeamScopedLeader) {
+      const isAllowed = allowedTeamFolders.some((f: DriveFolderItem) => f.id === selectedFolderId);
+      if (!isAllowed) {
+        setUploadError(
+          language === 'ar'
+            ? 'غير مصرح: بصفتك مسؤول إعلام معين، يمكنك فقط رفع الوسائط إلى مجلدات الفرق المعين لها.'
+            : 'Unauthorized: As an assigned media leader, you can only upload to your assigned team folders.'
+        );
+        return;
+      }
+    }
 
     setUploadError(null);
     setIsUploadingLive(true);
@@ -195,7 +319,7 @@ export default function MediaPortalPage() {
       const initialJob: MediaUploadJob = {
         id: tempJobId,
         uploaded_by: currentUser?.id || 'u0',
-        unit_id: currentUnit?.id || 1,
+        unit_id: currentUnit?.id || (accessibleUnits[0]?.id ?? 1),
         local_buffer_path: `staging_buffer/${file.name}`,
         file_name: file.name,
         mime_type: file.type || 'application/octet-stream',
@@ -215,6 +339,11 @@ export default function MediaPortalPage() {
         formData.append('targetFolderId', selectedFolderId);
         formData.append('targetFolderName', currentFolderName);
         formData.append('year', '2026-2027');
+        formData.append('userId', currentUser?.id || '');
+        formData.append('userEmail', currentUser?.email || '');
+        if (isTeamScopedLeader) {
+          formData.append('allowedFolderIds', JSON.stringify(allowedTeamFolders.map((f: DriveFolderItem) => f.id)));
+        }
 
         const response = await fetch('/api/media/upload', {
           method: 'POST',
@@ -278,6 +407,34 @@ export default function MediaPortalPage() {
   const syncedCount = jobs.filter((j) => j.status === 'synced').length;
   const totalCount = jobs.length;
 
+  const canAccessMedia = isSuperAdmin || can('media.upload') || can('media.view_all');
+
+  if (!canAccessMedia) {
+    return (
+      <div className="max-w-2xl mx-auto py-16 text-center space-y-4 animate-fadeIn">
+        <div className="w-14 h-14 rounded-2xl bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 mx-auto flex items-center justify-center border border-amber-200 dark:border-amber-800/60 shadow-xs">
+          <ShieldAlert className="w-7 h-7" strokeWidth={1.5} />
+        </div>
+        <h2 className="text-xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
+          {language === 'ar' ? 'وصول مقيّد: مكتبة الوسائط' : 'Restricted Access: Media Library'}
+        </h2>
+        <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 max-w-md mx-auto">
+          {language === 'ar'
+            ? 'حسابك الحالي لا يمتلك صلاحيات رفع أو استعراض الوسائط وأرشيف Google Drive.'
+            : 'Your current role does not have permission to upload or manage organizational media archives.'}
+        </p>
+        <div className="pt-2">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-zinc-100 dark:text-zinc-900 font-semibold text-xs transition-colors shadow-xs cursor-pointer"
+          >
+            {language === 'ar' ? 'العودة للرئيسية' : 'Return to Dashboard'}
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Hidden File Input */}
@@ -317,15 +474,23 @@ export default function MediaPortalPage() {
             </div>
           )}
 
-          {/* Direct Link to Google Drive Root Folder */}
+          {/* Direct Link to Google Drive Folder */}
           <a
-            href="https://drive.google.com/drive/folders/16J2dvQglurhedNtC6BdwOek6bNcLiAMn"
+            href={driveFolderUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 border border-zinc-200 dark:border-zinc-700 text-xs font-semibold shadow-xs transition-colors"
           >
             <FolderCheck className="w-4 h-4 text-emerald-600" />
-            <span>{language === 'ar' ? 'مجلد Drive' : 'Open Drive Folder'}</span>
+            <span>
+              {isTeamScopedLeader
+                ? language === 'ar'
+                  ? `مجلد ${currentFolderName}`
+                  : `Open ${currentFolderName} Folder`
+                : language === 'ar'
+                ? 'مجلد Drive'
+                : 'Open Drive Folder'}
+            </span>
             <ExternalLink className="w-3 h-3 text-zinc-500" />
           </a>
         </div>
@@ -333,6 +498,45 @@ export default function MediaPortalPage() {
 
       {/* Target Destination Structure Selector */}
       <div className="bg-white dark:bg-[#121214] p-5 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-xs space-y-4">
+        {/* Scoped Leader Security Banner: Active when media officer is assigned to specific team(s) */}
+        {isTeamScopedLeader && (
+          <div className="p-3.5 bg-amber-50/90 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/70 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-3 animate-in fade-in duration-200">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-amber-100 dark:bg-amber-900/60 border border-amber-200 dark:border-amber-700/60 flex items-center justify-center text-amber-700 dark:text-amber-400 shrink-0">
+                <ShieldCheck className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="text-xs font-bold text-amber-900 dark:text-amber-100 flex items-center gap-2">
+                  <span>
+                    {language === 'ar'
+                      ? 'صلاحيات رفع الوسائط مقيدة بفرقك المعينة فقط'
+                      : 'Upload Restricted to Assigned Team Folders'}
+                  </span>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-200 dark:bg-amber-900 text-amber-950 dark:text-amber-200 font-bold">
+                    {accessibleUnits.length} {language === 'ar' ? 'فرق' : 'Teams'}
+                  </span>
+                </div>
+                <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-0.5">
+                  {language === 'ar'
+                    ? `بصفتك مسؤول إعلام معين، يمكنك الرفع فقط لمجلدات الفرق التالية: ${accessibleUnits.map((u) => u.name_ar).join('، ')}`
+                    : `You are assigned to the following team(s) only: ${accessibleUnits.map((u) => u.name_en).join(', ')}. Uploads to other folders are locked.`}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {accessibleUnits.map((u) => (
+                <span
+                  key={u.id}
+                  className="text-[11px] font-semibold px-2.5 py-1 rounded-md bg-white dark:bg-zinc-900 border border-amber-300 dark:border-amber-700 text-zinc-900 dark:text-zinc-100 shadow-2xs flex items-center gap-1.5"
+                >
+                  <FolderCheck className="w-3 h-3 text-amber-600 dark:text-amber-400" />
+                  <span>{language === 'ar' ? u.name_ar : u.name_en}</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-zinc-100 dark:border-zinc-800">
           <div>
             <h2 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
@@ -340,7 +544,11 @@ export default function MediaPortalPage() {
               <span>{language === 'ar' ? 'وجهة رفع الوسائط في Google Drive' : 'Drive Target Folder Destination'}</span>
             </h2>
             <p className="text-xs text-zinc-500 mt-0.5">
-              {language === 'ar'
+              {isTeamScopedLeader
+                ? language === 'ar'
+                  ? 'يمكنك الاختيار بين مجلدات الفرق المعين لها فقط لرفع الوسائط'
+                  : 'You can only upload files to the Drive folders of your assigned teams.'
+                : language === 'ar'
                 ? 'اختر مجلد الفريق أو مجلد الفعاليات الكشفية لرفع الوسائط إليه'
                 : 'Select either a dedicated Team Folder or an Event Folder to direct your uploads.'}
             </p>
@@ -350,33 +558,53 @@ export default function MediaPortalPage() {
           <div className="flex items-center p-1 rounded-lg bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-xs font-medium self-start sm:self-auto">
             <button
               type="button"
+              disabled={isTeamScopedLeader}
               onClick={() => handleDestinationTypeChange('event')}
+              title={
+                isTeamScopedLeader
+                  ? language === 'ar'
+                    ? 'غير متاح: مخصص للفرق المعينة فقط'
+                    : 'Restricted: You are scoped to assigned teams only'
+                  : undefined
+              }
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all ${
-                destinationType === 'event'
+                destinationType === 'event' && !isTeamScopedLeader
                   ? 'bg-white dark:bg-zinc-800 text-sky-600 dark:text-sky-400 shadow-xs font-semibold'
+                  : isTeamScopedLeader
+                  ? 'text-zinc-400 dark:text-zinc-600 opacity-60 cursor-not-allowed'
                   : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
               }`}
             >
-              <Calendar className="w-3.5 h-3.5" />
+              {isTeamScopedLeader ? <Lock className="w-3.5 h-3.5" /> : <Calendar className="w-3.5 h-3.5" />}
               <span>{language === 'ar' ? 'فعاليات (Events)' : 'Events Folder'}</span>
-              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-sky-100 dark:bg-sky-950 text-sky-700 dark:text-sky-300">
-                {eventFolders.length}
-              </span>
+              {!isTeamScopedLeader && (
+                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-sky-100 dark:bg-sky-950 text-sky-700 dark:text-sky-300">
+                  {eventFolders.length}
+                </span>
+              )}
             </button>
 
             <button
               type="button"
               onClick={() => handleDestinationTypeChange('team')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all ${
-                destinationType === 'team'
+                destinationType === 'team' || isTeamScopedLeader
                   ? 'bg-white dark:bg-zinc-800 text-sky-600 dark:text-sky-400 shadow-xs font-semibold'
                   : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
               }`}
             >
               <Users className="w-3.5 h-3.5" />
-              <span>{language === 'ar' ? 'الفرق (12 Teams)' : 'Team Folders'}</span>
+              <span>
+                {isTeamScopedLeader
+                  ? language === 'ar'
+                    ? `فرقك المعينة (${allowedTeamFolders.length})`
+                    : `Your Teams (${allowedTeamFolders.length})`
+                  : language === 'ar'
+                  ? 'الفرق (12 Teams)'
+                  : 'Team Folders'}
+              </span>
               <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300">
-                {teamFolders.length}
+                {allowedTeamFolders.length}
               </span>
             </button>
           </div>
@@ -386,10 +614,14 @@ export default function MediaPortalPage() {
         <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
           <div className={isSuperAdmin && destinationType === 'event' ? 'md:col-span-8' : 'md:col-span-12'}>
             <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1.5">
-              {destinationType === 'event'
+              {destinationType === 'event' && !isTeamScopedLeader
                 ? language === 'ar'
                   ? 'اختر مجلد الفعالية المستهدف (داخل /2026-2027/Events/)'
                   : 'Select Target Event Folder (inside /2026-2027/Events/)'
+                : isTeamScopedLeader
+                ? language === 'ar'
+                  ? 'اختر مجلد الفريق المصرح لك برفع الوسائط إليه'
+                  : 'Select Authorized Team Folder for Upload'
                 : language === 'ar'
                 ? 'اختر مجلد الفريق المستهدف (داخل /2026-2027/)'
                 : 'Select Target Team Folder (inside /2026-2027/)'}
@@ -406,7 +638,7 @@ export default function MediaPortalPage() {
                 onChange={(e) => setSelectedFolderId(e.target.value)}
                 className="w-full text-xs font-medium rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2.5 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-sky-500"
               >
-                {currentFoldersList.map((folder) => (
+                {currentFoldersList.map((folder: DriveFolderItem) => (
                   <option key={folder.id} value={folder.id}>
                     📁 {folder.name}
                   </option>
