@@ -91,7 +91,39 @@ const DEFAULT_SERVICE_ACCOUNT = {
 };
 
 export function getDriveClient() {
-  // 1. Permanent, Non-Expiring Service Account (Enterprise Google Drive Cloud Authentication)
+  // 1. Direct Backend user OAuth2 refresh token (uses youssefosamame@gmail.com quota: 5 TB!)
+  const envRefreshToken =
+    process.env.GOOGLE_DRIVE_REFRESH_TOKEN ||
+    '1//03E0Z6fC8_a76CgYIARAAGAMSNgF-L9IrGgYEjFYPFEbOxEuNYnHNDhRITVQP8p-9FJdKNc_NJ3mHDbuYmU2HGTFJ30gopBiTyQ';
+
+  if (envRefreshToken) {
+    const oauth2Client = getOAuth2Client();
+    oauth2Client.setCredentials({ refresh_token: envRefreshToken });
+    return {
+      drive: google.drive({ version: 'v3', auth: oauth2Client }),
+      authMode: 'oauth2' as const,
+      email: 'youssefosamame@gmail.com',
+    };
+  }
+
+  // 2. Stored OAuth2 tokens on backend disk fallback
+  const tokens = loadOAuthTokens();
+  if (tokens && tokens.refresh_token) {
+    const oauth2Client = getOAuth2Client();
+    oauth2Client.setCredentials(tokens);
+
+    oauth2Client.on('tokens', (newTokens) => {
+      saveOAuthTokens({ ...tokens, ...newTokens });
+    });
+
+    return {
+      drive: google.drive({ version: 'v3', auth: oauth2Client }),
+      authMode: 'oauth2' as const,
+      email: tokens.email || 'youssefosamame@gmail.com',
+    };
+  }
+
+  // 3. Permanent Service Account fallback (for shared drives or read operations)
   try {
     let serviceAccountCredentials: any = DEFAULT_SERVICE_ACCOUNT;
     if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY) {
@@ -122,35 +154,6 @@ export function getDriveClient() {
     }
   } catch (saErr) {
     console.warn('[GoogleAuth] Service Account init warning:', saErr);
-  }
-
-  // 2. Direct Backend environment variable token fallback
-  const envRefreshToken = process.env.GOOGLE_DRIVE_REFRESH_TOKEN;
-  if (envRefreshToken) {
-    const oauth2Client = getOAuth2Client();
-    oauth2Client.setCredentials({ refresh_token: envRefreshToken });
-    return {
-      drive: google.drive({ version: 'v3', auth: oauth2Client }),
-      authMode: 'oauth2' as const,
-      email: 'Central Storage',
-    };
-  }
-
-  // 3. Stored OAuth2 tokens on backend disk fallback
-  const tokens = loadOAuthTokens();
-  if (tokens && tokens.refresh_token) {
-    const oauth2Client = getOAuth2Client();
-    oauth2Client.setCredentials(tokens);
-
-    oauth2Client.on('tokens', (newTokens) => {
-      saveOAuthTokens({ ...tokens, ...newTokens });
-    });
-
-    return {
-      drive: google.drive({ version: 'v3', auth: oauth2Client }),
-      authMode: 'oauth2' as const,
-      email: tokens.email || 'Central Storage',
-    };
   }
 
   throw new Error('No valid Google Drive credentials found');
