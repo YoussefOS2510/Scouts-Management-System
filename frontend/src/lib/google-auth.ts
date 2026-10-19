@@ -81,8 +81,50 @@ export function loadOAuthTokens(): any | null {
   return null;
 }
 
+const DEFAULT_SERVICE_ACCOUNT = {
+  type: 'service_account',
+  project_id: 'scouts-management-510520',
+  private_key_id: '5f3aa6d7bc4dc7e05e91bc80d92ea9f227f7fb98',
+  private_key:
+    '-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQC4yXvGHgr+paBp\niopb4xabbKof043TVRmd2ViYHcAClSsLMrbE1hPvlqSB4gJ4f2SSFNnwrvoZOmQC\nKUKMzgQDZ1rCXKawJf7EHD/7f4kJabFKUn5isR15R3URbh2oHVKKD5q7WQjpnsuy\nzy8BKCwBUW95T1/2cEdibwqRuMd0s5OEQuMsvEi1SyutrrgLApK4MsUZM0ndAe7+\n8sfhgD+z6r9Enx5zaEdnBHa0WuCAAyMmqBizwxWuMTEO4I39iD9hld3QDZKlneYN\nUlqATbVyONBc/KMfHGWTikRW5F48qKQmwOBjF7Z2r6dO0KTunE6tii7TC5aljWiW\n4sXNUd5XAgMBAAECggEAEmLx7uekXmwqhvXjCHuTD0oDr4EEVqfcEanDt/cV2Ovw\nyX91Uiae+zL5EXdkmYrLfgGXIey3M/VsaA6k8Y+6NIB/NmGzsElHjUnmT+cDwq0C\nmAuXScinzx5+FornZofsY5Jj6gpU6bIEQLl+ytWtc0AgIGj2enX3lGLKIW/KYOEm\nCedQCxtpdm1oBeg8qOYZ1aU/8nZXqa1YWLZPW336t5tm6L4pNfw+wSkGWqeR6sAa\nbdcbD7l/m2M3oBHQaZHY2jSqeYrIR11qRY6m8ea41YJcx1GoWVK2lL7buIRToMzA\n2zCaXFRiCCc9n48wyIn08yBGU2qBl5n0Q56etTprWQKBgQDnVQSzQ3LZ2nwGOEaj\nj+WAzf+wdUwShr+YcwSbJB+UxFnyb/taTuXEAvyD2zpMBwbhswEhHplkgax0SAtH\n/rovB/WZ49vHG4QVRu9AwO+B8YAs2hUYbgxEuE/6MYQDhlZo1FQx3LwGjfOZKKrS\nzKNJX22Pz24lRAJDad3k3aZOkwKBgQDMfdzKadaU5t3PoPj1Tg4Vf0walFiCW5kO\nvetEV2l0B8hyiDO57gqXR02SXXfd6U0UlRQvpkHcowFhX5Fgtv4FMuXDnrqTg0gx\nd8vIB8W7/jh9cZ0pSznS6WHr86yWVv0EPtsruHYN3wb3x6lcNoPHHhc5n5fADKWS\nLBTX/cxHrQKBgQCNf7SDTlN3LCxGxa93prIUKm0m62ifwGp7focnul3S6pO2NocB\nw1bJoaYBpVwwWu/7qDmdn5DmKGdrLRIxdH8/+1dgTT8GuC7/sMbxzdHyotzrEm5q\n5g19D1xkRltgqJA8SPxDD6i3PabuXTC4BlIutD9ZAuF1y/ayc5Q1xNpQHwKBgHvg\nfyErjm8zkAlYdZh8yXFiZSLw3NFTVdwlVuFWpq5AjMA9HEC1IDtWWXqiHpwS2bvv\nN4RKDjnvkUWAlFvnXuidVaz0eggkjlZRQOSTOMjSjzwG2HMMfCH1eXlraxDD75Bj\n13ebzgBHLDxr+n+/EoNMCjvBHzebMa3kAFh8CgUdAoGBAMLgh/36AmsdDZ+UBkYw\nOcg5VzL201ijIHZLkXa/7PVenUCMPvwd17V9av2Mz6Vc9nSl8KmKqXiNeUoyZ0lK\nGgNRiG57AsJj0OHCTmqWsjIV1ld1aarhmfKV7FXkC6hO18b71hswX6w+o7eh0og4\nxmUBcKbuXlXMBXhFDLm5gy00\n-----END PRIVATE KEY-----\n',
+  client_email: 'scouts-drive@scouts-management-510520.iam.gserviceaccount.com',
+};
+
 export function getDriveClient() {
-  // 1. Direct Backend environment variable token (100% headless, zero UI sign-in required)
+  // 1. Permanent, Non-Expiring Service Account (Enterprise Google Drive Cloud Authentication)
+  try {
+    let serviceAccountCredentials: any = DEFAULT_SERVICE_ACCOUNT;
+    if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY) {
+      try {
+        serviceAccountCredentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_KEY);
+      } catch {}
+    } else if (fs.existsSync(SERVICE_ACCOUNT_PATH)) {
+      try {
+        const fileContent = fs.readFileSync(SERVICE_ACCOUNT_PATH, 'utf8');
+        serviceAccountCredentials = JSON.parse(fileContent);
+      } catch {}
+    }
+
+    if (serviceAccountCredentials?.client_email && serviceAccountCredentials?.private_key) {
+      const auth = new google.auth.GoogleAuth({
+        credentials: {
+          client_email: serviceAccountCredentials.client_email,
+          private_key: serviceAccountCredentials.private_key,
+        },
+        scopes: ['https://www.googleapis.com/auth/drive'],
+      });
+
+      return {
+        drive: google.drive({ version: 'v3', auth }),
+        authMode: 'service_account' as const,
+        email: serviceAccountCredentials.client_email,
+      };
+    }
+  } catch (saErr) {
+    console.warn('[GoogleAuth] Service Account init warning:', saErr);
+  }
+
+  // 2. Direct Backend environment variable token fallback
   const envRefreshToken = process.env.GOOGLE_DRIVE_REFRESH_TOKEN;
   if (envRefreshToken) {
     const oauth2Client = getOAuth2Client();
@@ -94,13 +136,12 @@ export function getDriveClient() {
     };
   }
 
-  // 2. Try stored OAuth2 tokens on backend disk
+  // 3. Stored OAuth2 tokens on backend disk fallback
   const tokens = loadOAuthTokens();
   if (tokens && tokens.refresh_token) {
     const oauth2Client = getOAuth2Client();
     oauth2Client.setCredentials(tokens);
 
-    // Automatically update saved tokens on refresh
     oauth2Client.on('tokens', (newTokens) => {
       saveOAuthTokens({ ...tokens, ...newTokens });
     });
@@ -108,23 +149,9 @@ export function getDriveClient() {
     return {
       drive: google.drive({ version: 'v3', auth: oauth2Client }),
       authMode: 'oauth2' as const,
-      email: 'Central Storage',
+      email: tokens.email || 'Central Storage',
     };
   }
 
-  // 2. Fallback to Service Account
-  if (fs.existsSync(SERVICE_ACCOUNT_PATH)) {
-    const auth = new google.auth.GoogleAuth({
-      keyFile: SERVICE_ACCOUNT_PATH,
-      scopes: ['https://www.googleapis.com/auth/drive'],
-    });
-
-    return {
-      drive: google.drive({ version: 'v3', auth }),
-      authMode: 'service_account' as const,
-      email: 'scouts-drive@scouts-management-510520.iam.gserviceaccount.com',
-    };
-  }
-
-  throw new Error('No valid Google Drive credentials (neither OAuth tokens nor Service Account JSON found)');
+  throw new Error('No valid Google Drive credentials found');
 }
