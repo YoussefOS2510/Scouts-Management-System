@@ -12,7 +12,7 @@ export async function GET() {
       users,
       units,
     ] = await Promise.all([
-      query(`SELECT id, [key], category, description_en, description_ar FROM permissions ORDER BY id`),
+      query(`SELECT id, "key", category, description_en, description_ar FROM permissions ORDER BY id`),
       query(`SELECT id, name, description FROM roles ORDER BY id`),
       query(`SELECT role_id AS roleId, permission_id AS permissionId FROM role_permissions`),
       query(`SELECT id, user_id, permission_id, unit_id, is_granted FROM user_permission_overrides`),

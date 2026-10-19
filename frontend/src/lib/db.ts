@@ -94,6 +94,15 @@ export async function query<T = any>(
     }
   }
 
+  // Compatibility: Handle T-SQL square brackets [col] -> "col"
+  pgSql = pgSql.replace(/\[([a-zA-Z0-9_]+)\]/g, '"$1"');
+
+  // Compatibility: Handle T-SQL CONVERT(VARCHAR(n) | NVARCHAR(n), expr, 23 | 120) -> TO_CHAR(expr, 'YYYY-MM-DD')
+  pgSql = pgSql.replace(/CONVERT\s*\(\s*N?VARCHAR\s*\(\s*\d+\s*\)\s*,\s*([^,]+?)\s*,\s*(?:120|23)\s*\)/gi, "TO_CHAR($1, 'YYYY-MM-DD')");
+
+  // Compatibility: Handle T-SQL CONVERT(NVARCHAR(n), expr, 127) -> ISO timestamp string
+  pgSql = pgSql.replace(/CONVERT\s*\(\s*N?VARCHAR\s*\(\s*\d+\s*\)\s*,\s*([^,]+?)\s*,\s*127\s*\)/gi, 'TO_CHAR($1, \'YYYY-MM-DD"T"HH24:MI:SS"Z"\')');
+
   // Remove dbo. schema prefix if present
   pgSql = pgSql.replace(/\bdbo\./gi, '');
 

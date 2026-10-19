@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
         a.description_ar,
         a.description_en,
         a.metadata,
-        CONVERT(NVARCHAR(30), a.created_at, 127) AS timestamp,
+        TO_CHAR(a.created_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS timestamp,
         u.name_ar AS unit_name_ar,
         u.name_en AS unit_name_en,
         usr.full_name AS user_name,

@@ -12,7 +12,7 @@ export async function GET() {
           m.patrol_id,
           m.full_name_ar,
           m.full_name_en,
-          CONVERT(VARCHAR(10), m.date_of_birth, 23) AS date_of_birth,
+          TO_CHAR(m.date_of_birth, 'YYYY-MM-DD') AS date_of_birth,
           m.member_phone,
           m.father_phone,
           m.mother_phone,
@@ -28,14 +28,14 @@ export async function GET() {
           u.name_en AS unit_name_en,
           p.name_ar AS patrol_name_ar,
           p.name_en AS patrol_name_en
-        FROM dbo.members m
-        LEFT JOIN dbo.units u ON m.unit_id = u.id
-        LEFT JOIN dbo.patrols p ON m.patrol_id = p.id
+        FROM members m
+        LEFT JOIN units u ON m.unit_id = u.id
+        LEFT JOIN patrols p ON m.patrol_id = p.id
         ORDER BY m.created_at DESC
       `),
       query(`
         SELECT id, unit_id, name_ar, name_en 
-        FROM dbo.patrols 
+        FROM patrols 
         ORDER BY unit_id, id
       `),
     ]);

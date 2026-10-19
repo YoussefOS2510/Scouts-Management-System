@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
       SELECT 
         s.id,
         s.unit_id,
-        CONVERT(NVARCHAR(10), s.session_date, 120) AS session_date,
+        TO_CHAR(s.session_date, 'YYYY-MM-DD') AS session_date,
         s.session_title,
         s.recorded_by,
         s.created_at,
