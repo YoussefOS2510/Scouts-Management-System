@@ -87,6 +87,8 @@ interface AuthContextType {
   roles: Role[];
   rolePermissions: { roleId: number; permissionId: number }[];
   isDbConnected: boolean;
+  isLoadingPermissions: boolean;
+  isPermissionsLoaded: boolean;
   updatePermissionOverride: (
     userId: string,
     permissionIds: number[],
@@ -103,21 +105,148 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// LocalStorage Cache Keys for Instant Leader Permissions (Zero-flicker loading)
+const CACHE_KEY_RBAC = 'scouts_cached_rbac_v2';
+const CACHE_KEY_MEMBERS = 'scouts_cached_members_v2';
+
+interface CachedRbacState {
+  users: User[];
+  userRoles: UserRole[];
+  overrides: UserPermissionOverride[];
+  permissions: Permission[];
+  roles: Role[];
+  rolePermissions: { roleId: number; permissionId: number }[];
+  timestamp: number;
+}
+
+function getRbacCache(): CachedRbacState | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(CACHE_KEY_RBAC);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && Array.isArray(parsed.userRoles)) {
+        return parsed;
+      }
+    }
+    // Fallback to legacy keys if present
+    const legacyRoles = localStorage.getItem('scouts_user_roles');
+    const legacyOverrides = localStorage.getItem('scouts_user_overrides');
+    if (legacyRoles) {
+      return {
+        users: [],
+        userRoles: JSON.parse(legacyRoles),
+        overrides: legacyOverrides ? JSON.parse(legacyOverrides) : [],
+        permissions: INITIAL_PERMISSIONS,
+        roles: INITIAL_ROLES,
+        rolePermissions: INITIAL_ROLE_PERMISSIONS,
+        timestamp: Date.now(),
+      };
+    }
+  } catch {}
+  return null;
+}
+
+function saveRbacCache(data: Partial<CachedRbacState>) {
+  if (typeof window === 'undefined') return;
+  try {
+    const current = getRbacCache() || {
+      users: [],
+      userRoles: [],
+      overrides: [],
+      permissions: INITIAL_PERMISSIONS,
+      roles: INITIAL_ROLES,
+      rolePermissions: INITIAL_ROLE_PERMISSIONS,
+      timestamp: Date.now(),
+    };
+    const next: CachedRbacState = {
+      users: data.users ?? current.users,
+      userRoles: data.userRoles ?? current.userRoles,
+      overrides: data.overrides ?? current.overrides,
+      permissions: data.permissions ?? current.permissions,
+      roles: data.roles ?? current.roles,
+      rolePermissions: data.rolePermissions ?? current.rolePermissions,
+      timestamp: Date.now(),
+    };
+    localStorage.setItem(CACHE_KEY_RBAC, JSON.stringify(next));
+    if (data.userRoles) localStorage.setItem('scouts_user_roles', JSON.stringify(data.userRoles));
+    if (data.overrides) localStorage.setItem('scouts_user_overrides', JSON.stringify(data.overrides));
+  } catch {}
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [currentUserId, setCurrentUserId] = useState<string>('u0'); // Default to Admin
-  const [currentMemberId, setCurrentMemberId] = useState<string>(''); // For scout authentication
+  // Synchronously initialize current active identity from localStorage on first tick
+  const [currentUserId, setCurrentUserId] = useState<string>(() => {
+    if (typeof window === 'undefined') return 'u0';
+    try {
+      const isLoggedOut = localStorage.getItem('scouts_auth_logged_out') === 'true';
+      if (isLoggedOut) return '';
+      const savedMemberId = localStorage.getItem('scouts_auth_member_id');
+      if (savedMemberId) return '';
+      const savedUserId = localStorage.getItem('scouts_auth_user_id');
+      if (savedUserId) return savedUserId;
+    } catch {}
+    return 'u0';
+  });
+
+  const [currentMemberId, setCurrentMemberId] = useState<string>(() => {
+    if (typeof window === 'undefined') return '';
+    try {
+      const isLoggedOut = localStorage.getItem('scouts_auth_logged_out') === 'true';
+      if (isLoggedOut) return '';
+      const savedMemberId = localStorage.getItem('scouts_auth_member_id');
+      if (savedMemberId) return savedMemberId;
+    } catch {}
+    return '';
+  });
+
   const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
-  const [userRoles, setUserRoles] = useState<UserRole[]>([]);
-  const [members, setMembers] = useState<Member[]>([]);
+
+  // Synchronously initialize cached RBAC so permissions are present on Frame 0
+  const [users, setUsers] = useState<User[]>(() => {
+    const cached = getRbacCache();
+    return cached?.users?.length ? cached.users : [];
+  });
+  const [userRoles, setUserRoles] = useState<UserRole[]>(() => {
+    const cached = getRbacCache();
+    return cached?.userRoles?.length ? cached.userRoles : [];
+  });
+  const [overrides, setOverrides] = useState<UserPermissionOverride[]>(() => {
+    const cached = getRbacCache();
+    return cached?.overrides?.length ? cached.overrides : [];
+  });
+  const [permissions, setPermissions] = useState<Permission[]>(() => {
+    const cached = getRbacCache();
+    return cached?.permissions?.length ? cached.permissions : INITIAL_PERMISSIONS;
+  });
+  const [roles, setRoles] = useState<Role[]>(() => {
+    const cached = getRbacCache();
+    return cached?.roles?.length ? cached.roles : INITIAL_ROLES;
+  });
+  const [rolePermissions, setRolePermissions] = useState<{ roleId: number; permissionId: number }[]>(() => {
+    const cached = getRbacCache();
+    return cached?.rolePermissions?.length ? cached.rolePermissions : INITIAL_ROLE_PERMISSIONS;
+  });
+
+  const [members, setMembers] = useState<Member[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const raw = localStorage.getItem(CACHE_KEY_MEMBERS);
+      if (raw) return JSON.parse(raw);
+    } catch {}
+    return [];
+  });
   const [patrols, setPatrols] = useState<Patrol[]>([]);
 
-  // Live Database Permissions State
-  const [overrides, setOverrides] = useState<UserPermissionOverride[]>([]);
-  const [permissions, setPermissions] = useState<Permission[]>(INITIAL_PERMISSIONS);
-  const [roles, setRoles] = useState<Role[]>(INITIAL_ROLES);
-  const [rolePermissions, setRolePermissions] = useState<{ roleId: number; permissionId: number }[]>([]);
   const [isDbConnected, setIsDbConnected] = useState<boolean>(false);
+  const [isLoadingPermissions, setIsLoadingPermissions] = useState<boolean>(() => {
+    const cached = getRbacCache();
+    return !(cached && cached.userRoles && cached.userRoles.length > 0);
+  });
+  const [isPermissionsLoaded, setIsPermissionsLoaded] = useState<boolean>(() => {
+    const cached = getRbacCache();
+    return Boolean(cached && cached.userRoles && cached.userRoles.length > 0);
+  });
 
   // Fetch live state from Microsoft SQL Server (ScoutsDB)
   const refreshPermissions = useCallback(async () => {
@@ -128,12 +257,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const data = await res.json();
         if (data.success) {
           setIsDbConnected(true);
-          if (Array.isArray(data.users)) setUsers(data.users);
-          if (Array.isArray(data.userRoles)) setUserRoles(data.userRoles);
-          if (Array.isArray(data.overrides)) setOverrides(data.overrides);
-          if (Array.isArray(data.permissions)) setPermissions(data.permissions);
-          if (Array.isArray(data.roles)) setRoles(data.roles);
-          if (Array.isArray(data.rolePermissions)) setRolePermissions(data.rolePermissions);
+          const nextUsers = Array.isArray(data.users) ? data.users : [];
+          const nextUserRoles = Array.isArray(data.userRoles) ? data.userRoles : [];
+          const nextOverrides = Array.isArray(data.overrides) ? data.overrides : [];
+          const nextPermissions = Array.isArray(data.permissions) ? data.permissions : INITIAL_PERMISSIONS;
+          const nextRoles = Array.isArray(data.roles) ? data.roles : INITIAL_ROLES;
+          const nextRolePermissions = Array.isArray(data.rolePermissions) ? data.rolePermissions : INITIAL_ROLE_PERMISSIONS;
+
+          setUsers(nextUsers);
+          setUserRoles(nextUserRoles);
+          setOverrides(nextOverrides);
+          setPermissions(nextPermissions);
+          setRoles(nextRoles);
+          setRolePermissions(nextRolePermissions);
+
+          saveRbacCache({
+            users: nextUsers,
+            userRoles: nextUserRoles,
+            overrides: nextOverrides,
+            permissions: nextPermissions,
+            roles: nextRoles,
+            rolePermissions: nextRolePermissions,
+          });
+
+          setIsLoadingPermissions(false);
+          setIsPermissionsLoaded(true);
         }
       }
 
@@ -142,7 +290,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (memRes.ok) {
         const memData = await memRes.json();
         if (memData.success) {
-          if (Array.isArray(memData.members)) setMembers(memData.members);
+          if (Array.isArray(memData.members)) {
+            setMembers(memData.members);
+            try {
+              localStorage.setItem(CACHE_KEY_MEMBERS, JSON.stringify(memData.members));
+            } catch {}
+          }
           if (Array.isArray(memData.patrols)) setPatrols(memData.patrols);
         }
       }
@@ -158,31 +311,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       console.warn('Could not connect to ScoutsDB API routes:', err);
       setIsDbConnected(false);
+      setIsLoadingPermissions(false);
     }
   }, []);
 
   // Initialize auth session state from localStorage and fetch live DB on mount
   useEffect(() => {
-    try {
-      const isLoggedOut = localStorage.getItem('scouts_auth_logged_out') === 'true';
-      if (isLoggedOut) {
-        setCurrentUserId('');
-        setCurrentMemberId('');
-      } else {
-        const savedMemberId = localStorage.getItem('scouts_auth_member_id');
-        if (savedMemberId) {
-          setCurrentMemberId(savedMemberId);
-          setCurrentUserId('');
-        } else {
-          const savedUserId = localStorage.getItem('scouts_auth_user_id');
-          if (savedUserId) {
-            setCurrentUserId(savedUserId);
-            setCurrentMemberId('');
-          }
-        }
-      }
-    } catch {}
-
     refreshPermissions();
   }, [refreshPermissions]);
 
@@ -466,9 +600,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const data = await res.json();
       if (data.success && data.overrides) {
         setOverrides(data.overrides);
-        try {
-          localStorage.setItem('scouts_user_overrides', JSON.stringify(data.overrides));
-        } catch {}
+        saveRbacCache({ overrides: data.overrides });
         return true;
       }
     } catch (err) {
@@ -499,9 +631,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           });
         });
       }
-      try {
-        localStorage.setItem('scouts_user_overrides', JSON.stringify(next));
-      } catch {}
+      saveRbacCache({ overrides: next });
       return next;
     });
     return true;
@@ -528,9 +658,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const data = await res.json();
       if (data.success && data.overrides) {
         setOverrides(data.overrides);
-        try {
-          localStorage.setItem('scouts_user_overrides', JSON.stringify(data.overrides));
-        } catch {}
+        saveRbacCache({ overrides: data.overrides });
         return true;
       }
     } catch (err) {
@@ -552,9 +680,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } else {
         filtered = prev.filter((ov) => !isSameUser(ov.user_id, userId));
       }
-      try {
-        localStorage.setItem('scouts_user_overrides', JSON.stringify(filtered));
-      } catch {}
+      saveRbacCache({ overrides: filtered });
       return filtered;
     });
     return true;
@@ -586,9 +712,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .then((data) => {
         if (data.success && data.userRoles) {
           setUserRoles(data.userRoles);
-          try {
-            localStorage.setItem('scouts_user_roles', JSON.stringify(data.userRoles));
-          } catch {}
+          saveRbacCache({ userRoles: data.userRoles });
         }
       })
       .catch((e) => console.error('Database role assignment error:', e));
@@ -615,9 +739,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }));
       }
       const updated = [...otherUserRoles, ...newRoles];
-      try {
-        localStorage.setItem('scouts_user_roles', JSON.stringify(updated));
-      } catch {}
+      saveRbacCache({ userRoles: updated });
       return updated;
     });
 
@@ -764,7 +886,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .then((data) => {
         if (data.success) {
           if (data.users) setUsers(data.users);
-          if (data.userRoles) setUserRoles(data.userRoles);
+          if (data.userRoles) {
+            setUserRoles(data.userRoles);
+            saveRbacCache({ users: data.users, userRoles: data.userRoles });
+          }
         }
       })
       .catch((e) => console.error('Database leader creation error:', e));
@@ -915,6 +1040,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         roles,
         rolePermissions,
         isDbConnected,
+        isLoadingPermissions,
+        isPermissionsLoaded,
         updatePermissionOverride,
         resetPermissionOverrides,
         refreshPermissions,

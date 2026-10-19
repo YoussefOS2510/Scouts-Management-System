@@ -26,12 +26,13 @@ import {
   ChevronLeft,
   Folder,
   ShieldAlert,
+  RefreshCw,
 } from 'lucide-react';
 import { TeamAttendanceAnalytics } from '../../components/TeamAttendanceAnalytics';
 
 export default function AttendancePage() {
   const { language, t } = useLanguage();
-  const { currentUser, currentRole, currentUnit, isSuperAdmin, can, logAction, accessibleUnits, members, patrols } = useAuth();
+  const { currentUser, currentRole, currentUnit, isSuperAdmin, can, logAction, accessibleUnits, members, patrols, isLoadingPermissions } = useAuth();
 
   // Role permissions
   const canViewAllUnits = isSuperAdmin || currentRole?.name === 'group_leader';
@@ -247,6 +248,19 @@ export default function AttendancePage() {
   }, [activeMembers, records]);
 
   const currentUnitObj = INITIAL_UNITS.find((u) => u.id === selectedUnitId);
+
+  if (isLoadingPermissions) {
+    return (
+      <div className="max-w-md mx-auto py-24 text-center space-y-4 animate-fadeIn">
+        <div className="w-12 h-12 rounded-2xl bg-neutral-100 dark:bg-neutral-800 mx-auto flex items-center justify-center border border-neutral-200 dark:border-neutral-700 shadow-xs">
+          <RefreshCw className="w-5 h-5 animate-spin text-emerald-600 dark:text-emerald-400" />
+        </div>
+        <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 font-medium">
+          {language === 'ar' ? 'جاري التحقق من الصلاحيات...' : 'Verifying leader permissions...'}
+        </p>
+      </div>
+    );
+  }
 
   if (!canAccessAttendance) {
     return (

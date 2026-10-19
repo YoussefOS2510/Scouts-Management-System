@@ -67,7 +67,7 @@ function matchesUnit(folderName: string, unit: { id: number; name_en: string; na
 
 export default function MediaPortalPage() {
   const { language, t } = useLanguage();
-  const { isSuperAdmin, can, currentUser, currentRole, currentUnit, accessibleUnits, userRoles } = useAuth();
+  const { isSuperAdmin, can, currentUser, currentRole, currentUnit, accessibleUnits, userRoles, isLoadingPermissions } = useAuth();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [jobs, setJobs] = useState<MediaUploadJob[]>([]);
@@ -408,6 +408,19 @@ export default function MediaPortalPage() {
   const totalCount = jobs.length;
 
   const canAccessMedia = isSuperAdmin || can('media.upload') || can('media.view_all');
+
+  if (isLoadingPermissions) {
+    return (
+      <div className="max-w-md mx-auto py-24 text-center space-y-4 animate-fadeIn">
+        <div className="w-12 h-12 rounded-2xl bg-neutral-100 dark:bg-neutral-800 mx-auto flex items-center justify-center border border-neutral-200 dark:border-neutral-700 shadow-xs">
+          <RefreshCw className="w-5 h-5 animate-spin text-emerald-600 dark:text-emerald-400" />
+        </div>
+        <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 font-medium">
+          {language === 'ar' ? 'جاري التحقق من الصلاحيات...' : 'Verifying leader permissions...'}
+        </p>
+      </div>
+    );
+  }
 
   if (!canAccessMedia) {
     return (
