@@ -21,7 +21,7 @@ import {
 
 export default function AnalyticsDashboardPage() {
   const { language, t } = useLanguage();
-  const { isSuperAdmin, can, currentUnit } = useAuth();
+  const { isSuperAdmin, can, currentUnit, accessibleUnits } = useAuth();
   const [adminTab, setAdminTab] = useState<'executive' | 'team_attendance'>('executive');
 
   const canViewTeamAnalytics =
@@ -29,6 +29,8 @@ export default function AnalyticsDashboardPage() {
     can('admin.analytics') ||
     can('attendance.analytics') ||
     can('attendance.take');
+
+  const effectiveUnitId = currentUnit?.id || (accessibleUnits.length > 0 ? accessibleUnits[0].id : 5);
 
   // Permission Guard
   if (!canViewTeamAnalytics) {
@@ -57,7 +59,7 @@ export default function AnalyticsDashboardPage() {
 
   // If the user is a team leader (not Super Admin and without full executive analytics), directly render their Team Attendance Analytics!
   if (!isSuperAdmin && !can('admin.analytics')) {
-    return <TeamAttendanceAnalytics initialUnitId={currentUnit?.id} />;
+    return <TeamAttendanceAnalytics initialUnitId={effectiveUnitId} />;
   }
 
   // Live Database Analytics State
@@ -105,7 +107,7 @@ export default function AnalyticsDashboardPage() {
       </div>
 
       {adminTab === 'team_attendance' ? (
-        <TeamAttendanceAnalytics />
+        <TeamAttendanceAnalytics initialUnitId={effectiveUnitId} />
       ) : (
         <>
           {/* Header Command Bar */}

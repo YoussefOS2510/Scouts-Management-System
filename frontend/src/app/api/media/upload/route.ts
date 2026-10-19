@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import { getDriveClient, loadOAuthTokens } from '@/lib/google-auth';
 import { query, sql } from '@/lib/db';
 
@@ -8,7 +9,31 @@ const ROOT_FOLDER_ID = process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID || '16J2dvQglurhe
 const YEAR_FOLDER_ID = process.env.GOOGLE_DRIVE_YEAR_FOLDER_ID || '1Rr5ZjtUESEgZBYHnL83n5jxi_x_kCrKY';
 const EVENTS_FOLDER_ID = process.env.GOOGLE_DRIVE_EVENTS_FOLDER_ID || '1qTz_YJSTWGujpovGrqS_0M68JQvpnhmN';
 const CURRENT_YEAR = process.env.SCOUTS_CURRENT_YEAR || '2026-2027';
-const STAGING_DIR = process.env.MEDIA_STAGING_DIR || path.join(process.cwd(), 'staging_buffer');
+
+function getStagingDir(): string {
+  const envDir = process.env.MEDIA_STAGING_DIR;
+  if (envDir && path.isAbsolute(envDir)) {
+    try {
+      if (!fs.existsSync(envDir)) {
+        fs.mkdirSync(envDir, { recursive: true });
+      }
+      return envDir;
+    } catch {
+      // Fallback if not writable (e.g. read-only filesystem)
+    }
+  }
+
+  // Safe writable fallback for Serverless (Vercel / AWS Lambda) and local systems: os.tmpdir()
+  const fallback = path.join(os.tmpdir(), 'scouts_staging_buffer');
+  try {
+    if (!fs.existsSync(fallback)) {
+      fs.mkdirSync(fallback, { recursive: true });
+    }
+    return fallback;
+  } catch {
+    return os.tmpdir();
+  }
+}
 
 async function findOrCreateFolder(drive: any, folderName: string, parentId?: string): Promise<string> {
   const queryParts = [
@@ -64,14 +89,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No file uploaded' }, { status: 400 });
     }
 
-    // Ensure staging directory exists on local volume
-    if (!fs.existsSync(STAGING_DIR)) {
-      fs.mkdirSync(STAGING_DIR, { recursive: true });
-    }
+    // Ensure staging directory exists on local or temporary volume
+    const stagingDir = getStagingDir();
 
     // Write file to local staging buffer
     const tempFileName = `upload_${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
-    const stagingPath = path.join(STAGING_DIR, tempFileName);
+    const stagingPath = path.join(stagingDir, tempFileName);
 
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
