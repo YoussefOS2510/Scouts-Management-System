@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDriveClient } from '@/lib/google-auth';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 const YEAR_FOLDER_ID = process.env.GOOGLE_DRIVE_YEAR_FOLDER_ID || '1Rr5ZjtUESEgZBYHnL83n5jxi_x_kCrKY';
 const EVENTS_FOLDER_ID = process.env.GOOGLE_DRIVE_EVENTS_FOLDER_ID || '1qTz_YJSTWGujpovGrqS_0M68JQvpnhmN';
 
@@ -67,6 +70,7 @@ export async function GET() {
     return NextResponse.json({
       success: true,
       isFallback: true,
+      errorDetails: error?.message || String(error),
       year: '2026-2027',
       yearFolderId: YEAR_FOLDER_ID,
       eventsFolderId: EVENTS_FOLDER_ID,

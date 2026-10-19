@@ -5,6 +5,8 @@ import os from 'os';
 import { getDriveClient, loadOAuthTokens } from '@/lib/google-auth';
 import { query, sql } from '@/lib/db';
 
+export const dynamic = 'force-dynamic';
+
 const ROOT_FOLDER_ID = process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID || '16J2dvQglurhedNtC6BdwOek6bNcLiAMn';
 const YEAR_FOLDER_ID = process.env.GOOGLE_DRIVE_YEAR_FOLDER_ID || '1Rr5ZjtUESEgZBYHnL83n5jxi_x_kCrKY';
 const EVENTS_FOLDER_ID = process.env.GOOGLE_DRIVE_EVENTS_FOLDER_ID || '1qTz_YJSTWGujpovGrqS_0M68JQvpnhmN';
