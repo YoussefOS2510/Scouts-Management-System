@@ -145,10 +145,9 @@ export function checkPermission(
         );
       });
 
-      if (!hasAnyUnitAccess) {
-        return false;
+      if (hasAnyUnitAccess) {
+        return true;
       }
-      return true;
     }
   }
 

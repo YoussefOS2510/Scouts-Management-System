@@ -14,7 +14,7 @@ export async function GET() {
     ] = await Promise.all([
       query(`SELECT id, "key", category, description_en, description_ar FROM permissions ORDER BY id`),
       query(`SELECT id, name, description FROM roles ORDER BY id`),
-      query(`SELECT role_id AS roleId, permission_id AS permissionId FROM role_permissions`),
+      query(`SELECT role_id, permission_id FROM role_permissions`),
       query(`SELECT id, user_id, permission_id, unit_id, is_granted FROM user_permission_overrides`),
       query(`SELECT id, user_id, role_id, unit_id FROM user_roles`),
       query(`SELECT id, email, full_name, phone, is_active FROM users ORDER BY email`),
@@ -37,8 +37,8 @@ export async function GET() {
     }));
 
     const formattedRolePermissions = rolePermissions.map((rp: any) => ({
-      roleId: Number(rp.roleId),
-      permissionId: Number(rp.permissionId),
+      roleId: Number(rp.role_id ?? rp.roleid ?? rp.roleId),
+      permissionId: Number(rp.permission_id ?? rp.permissionid ?? rp.permissionId),
     }));
 
     const formattedOverrides = overrides.map((ov: any) => ({
@@ -96,44 +96,30 @@ export async function POST(req: NextRequest) {
           if (cleanUnitId !== null) {
             await query(
               `
-              IF EXISTS (SELECT 1 FROM user_permission_overrides WHERE user_id = @userId AND permission_id = @permId AND unit_id = @unitId)
-              BEGIN
-                UPDATE user_permission_overrides
-                SET is_granted = @isGranted, updated_at = SYSUTCDATETIME()
-                WHERE user_id = @userId AND permission_id = @permId AND unit_id = @unitId;
-              END
-              ELSE
-              BEGIN
-                INSERT INTO user_permission_overrides (user_id, permission_id, unit_id, is_granted)
-                VALUES (@userId, @permId, @unitId, @isGranted);
-              END
+              INSERT INTO user_permission_overrides (user_id, permission_id, unit_id, is_granted, updated_at)
+              VALUES (@userId, @permId, @unitId, @isGranted, CURRENT_TIMESTAMP)
+              ON CONFLICT (user_id, permission_id, unit_id) WHERE unit_id IS NOT NULL
+              DO UPDATE SET is_granted = EXCLUDED.is_granted, updated_at = CURRENT_TIMESTAMP
               `,
               {
                 userId: { type: sql.UniqueIdentifier, value: userId },
                 permId: { type: sql.Int, value: Number(pId) },
                 unitId: { type: sql.Int, value: cleanUnitId },
-                isGranted: { type: sql.Bit, value: cleanIsGranted },
+                isGranted: { type: sql.Bit, value: Boolean(isGranted) },
               }
             );
           } else {
             await query(
               `
-              IF EXISTS (SELECT 1 FROM user_permission_overrides WHERE user_id = @userId AND permission_id = @permId AND unit_id IS NULL)
-              BEGIN
-                UPDATE user_permission_overrides
-                SET is_granted = @isGranted, updated_at = SYSUTCDATETIME()
-                WHERE user_id = @userId AND permission_id = @permId AND unit_id IS NULL;
-              END
-              ELSE
-              BEGIN
-                INSERT INTO user_permission_overrides (user_id, permission_id, unit_id, is_granted)
-                VALUES (@userId, @permId, NULL, @isGranted);
-              END
+              INSERT INTO user_permission_overrides (user_id, permission_id, unit_id, is_granted, updated_at)
+              VALUES (@userId, @permId, NULL, @isGranted, CURRENT_TIMESTAMP)
+              ON CONFLICT (user_id, permission_id) WHERE unit_id IS NULL
+              DO UPDATE SET is_granted = EXCLUDED.is_granted, updated_at = CURRENT_TIMESTAMP
               `,
               {
                 userId: { type: sql.UniqueIdentifier, value: userId },
                 permId: { type: sql.Int, value: Number(pId) },
-                isGranted: { type: sql.Bit, value: cleanIsGranted },
+                isGranted: { type: sql.Bit, value: Boolean(isGranted) },
               }
             );
           }
@@ -232,10 +218,9 @@ export async function POST(req: NextRequest) {
       if (!userId) {
         const insertUser = await query(
           `
-          DECLARE @newUserId UNIQUEIDENTIFIER = NEWID();
-          INSERT INTO users (id, email, password_hash, full_name, phone, is_active)
-          VALUES (@newUserId, @email, 'hash_placeholder', @fullName, @phone, 1);
-          SELECT @newUserId AS id;
+          INSERT INTO users (email, password_hash, full_name, phone, is_active)
+          VALUES (@email, 'pbkdf2_sha256$260000$password123', @fullName, @phone, TRUE)
+          RETURNING id;
           `,
           {
             email: { type: sql.NVarChar(255), value: email.trim().toLowerCase() },
