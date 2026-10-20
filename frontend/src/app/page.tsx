@@ -55,6 +55,7 @@ export default function DashboardPage() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
   // Filter chips state
+  const [filterUnitId, setFilterUnitId] = useState<number | 'all'>('all');
   const [filterStage, setFilterStage] = useState<string>('all');
   const [filterGender, setFilterGender] = useState<string>('all');
 
@@ -132,7 +133,12 @@ export default function DashboardPage() {
   const displayUnits = useMemo(() => {
     const base = isSuperAdmin ? INITIAL_UNITS : accessibleUnits;
     return base.filter((unit) => {
-      // Stage filter
+      // 1. Direct unit filter
+      if (filterUnitId !== 'all' && unit.id !== filterUnitId) {
+        return false;
+      }
+
+      // 2. Stage filter
       if (filterStage === 'cubs') {
         const isCubs =
           unit.stage_group === 'cubs' ||
@@ -168,12 +174,15 @@ export default function DashboardPage() {
       }
       if (filterStage === 'parallel' && !unit.code.includes('_a') && !unit.code.includes('_b')) return false;
 
-      // Gender filter
+      // 3. Gender filter
       if (filterGender !== 'all' && unit.gender !== filterGender) return false;
 
       return true;
     });
-  }, [isSuperAdmin, accessibleUnits, filterStage, filterGender]);
+  }, [isSuperAdmin, accessibleUnits, filterUnitId, filterStage, filterGender]);
+
+  // Only leaders with more than 1 assigned team can filter
+  const hasMultipleTeams = accessibleUnits.length > 1;
 
   // Filtered youth scouts count (strictly members, excluding adult leaders)
   const filteredScoutsCount = useMemo(() => {
@@ -234,91 +243,183 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* 2. RESTRAINED FILTER CHIPS (Requirement 3: unified interactive accent) */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
-        <span className="text-xs font-medium text-neutral-400 dark:text-neutral-400 shrink-0 me-1">
-          <Filter className="w-3.5 h-3.5 inline me-1" />
-          {language === 'ar' ? 'تصفية:' : 'Filter:'}
-        </span>
+      {/* 2. RESTRAINED FILTER CHIPS (Shown only for leaders with more than 1 assigned team) */}
+      {hasMultipleTeams && (
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+          <span className="text-xs font-medium text-neutral-400 dark:text-neutral-400 shrink-0 me-1 flex items-center gap-1">
+            <Filter className="w-3.5 h-3.5" />
+            <span>{language === 'ar' ? 'تصفية الفرق:' : 'Filter Teams:'}</span>
+          </span>
 
-        {/* All Chips */}
-        <button
-          onClick={() => { setFilterStage('all'); setFilterGender('all'); }}
-          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all shrink-0 cursor-pointer ${
-            filterStage === 'all' && filterGender === 'all'
-              ? 'bg-sky-500/10 text-sky-700 dark:bg-sky-400/15 dark:text-sky-300 font-semibold border border-sky-500/30 shadow-2xs'
-              : 'bg-neutral-100 dark:bg-[#111827] text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200 border border-neutral-200/80 dark:border-neutral-800/80 hover:bg-neutral-200/60 dark:hover:bg-[#1E293B]'
-          }`}
-        >
-          {language === 'ar' ? 'الكل' : 'All'}
-        </button>
+          {accessibleUnits.length <= 8 ? (
+            <>
+              {/* All Assigned Teams */}
+              <button
+                onClick={() => setFilterUnitId('all')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all shrink-0 cursor-pointer ${
+                  filterUnitId === 'all'
+                    ? 'bg-sky-500/10 text-sky-700 dark:bg-sky-400/15 dark:text-sky-300 font-semibold border border-sky-500/30 shadow-2xs'
+                    : 'bg-neutral-100 dark:bg-[#111827] text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200 border border-neutral-200/80 dark:border-neutral-800/80 hover:bg-neutral-200/60 dark:hover:bg-[#1E293B]'
+                }`}
+              >
+                {language === 'ar' ? `كل الفرق (${accessibleUnits.length})` : `All Teams (${accessibleUnits.length})`}
+              </button>
 
-        <button
-          onClick={() => setFilterGender(filterGender === 'boys' ? 'all' : 'boys')}
-          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all shrink-0 cursor-pointer ${
-            filterGender === 'boys'
-              ? 'bg-sky-500/10 text-sky-700 dark:bg-sky-400/15 dark:text-sky-300 font-semibold border border-sky-500/30 shadow-2xs'
-              : 'bg-neutral-100 dark:bg-[#111827] text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200 border border-neutral-200/80 dark:border-neutral-800/80 hover:bg-neutral-200/60 dark:hover:bg-[#1E293B]'
-          }`}
-        >
-          {language === 'ar' ? 'بنين (Boys)' : 'Boys'}
-        </button>
+              {/* Individual Assigned Team Chips */}
+              {accessibleUnits.map((unit) => {
+                const stageStyle = getStageColor(unit.code);
+                const isSelected = filterUnitId === unit.id;
+                const count = unitMemberCounts[unit.id] ?? 0;
 
-        <button
-          onClick={() => setFilterGender(filterGender === 'girls' ? 'all' : 'girls')}
-          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all shrink-0 cursor-pointer ${
-            filterGender === 'girls'
-              ? 'bg-sky-500/10 text-sky-700 dark:bg-sky-400/15 dark:text-sky-300 font-semibold border border-sky-500/30 shadow-2xs'
-              : 'bg-neutral-100 dark:bg-[#111827] text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200 border border-neutral-200/80 dark:border-neutral-800/80 hover:bg-neutral-200/60 dark:hover:bg-[#1E293B]'
-          }`}
-        >
-          {language === 'ar' ? 'بنات (Girls)' : 'Girls'}
-        </button>
+                return (
+                  <button
+                    key={unit.id}
+                    onClick={() => setFilterUnitId(isSelected ? 'all' : unit.id)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all shrink-0 cursor-pointer flex items-center gap-1.5 ${
+                      isSelected
+                        ? 'bg-sky-500/10 text-sky-700 dark:bg-sky-400/15 dark:text-sky-300 font-semibold border border-sky-500/30 shadow-2xs'
+                        : 'bg-neutral-100 dark:bg-[#111827] text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200 border border-neutral-200/80 dark:border-neutral-800/80 hover:bg-neutral-200/60 dark:hover:bg-[#1E293B]'
+                    }`}
+                  >
+                    <span
+                      className="w-2 h-2 rounded-full shrink-0"
+                      style={{ backgroundColor: stageStyle.color }}
+                    />
+                    <span>{language === 'ar' ? unit.name_ar : unit.name_en}</span>
+                    <span className="text-[10px] font-mono opacity-70">({count})</span>
+                  </button>
+                );
+              })}
+            </>
+          ) : (
+            /* Super Admin / Group Leader with all 12 units */
+            <>
+              {/* All */}
+              <button
+                onClick={() => {
+                  setFilterStage('all');
+                  setFilterGender('all');
+                  setFilterUnitId('all');
+                }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all shrink-0 cursor-pointer ${
+                  filterStage === 'all' && filterGender === 'all' && filterUnitId === 'all'
+                    ? 'bg-sky-500/10 text-sky-700 dark:bg-sky-400/15 dark:text-sky-300 font-semibold border border-sky-500/30 shadow-2xs'
+                    : 'bg-neutral-100 dark:bg-[#111827] text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200 border border-neutral-200/80 dark:border-neutral-800/80 hover:bg-neutral-200/60 dark:hover:bg-[#1E293B]'
+                }`}
+              >
+                {language === 'ar' ? 'الكل' : 'All'}
+              </button>
 
-        <button
-          onClick={() => setFilterStage(filterStage === 'parallel' ? 'all' : 'parallel')}
-          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all shrink-0 cursor-pointer ${
-            filterStage === 'parallel'
-              ? 'bg-sky-500/10 text-sky-700 dark:bg-sky-400/15 dark:text-sky-300 font-semibold border border-sky-500/30 shadow-2xs'
-              : 'bg-neutral-100 dark:bg-[#111827] text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200 border border-neutral-200/80 dark:border-neutral-800/80 hover:bg-neutral-200/60 dark:hover:bg-[#1E293B]'
-          }`}
-        >
-          {language === 'ar' ? 'مسار متوازي (A / B)' : 'Parallel Streams'}
-        </button>
+              <button
+                onClick={() => {
+                  setFilterUnitId('all');
+                  setFilterGender(filterGender === 'boys' ? 'all' : 'boys');
+                }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all shrink-0 cursor-pointer ${
+                  filterGender === 'boys' && filterUnitId === 'all'
+                    ? 'bg-sky-500/10 text-sky-700 dark:bg-sky-400/15 dark:text-sky-300 font-semibold border border-sky-500/30 shadow-2xs'
+                    : 'bg-neutral-100 dark:bg-[#111827] text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200 border border-neutral-200/80 dark:border-neutral-800/80 hover:bg-neutral-200/60 dark:hover:bg-[#1E293B]'
+                }`}
+              >
+                {language === 'ar' ? 'بنين (Boys)' : 'Boys'}
+              </button>
 
-        <button
-          onClick={() => setFilterStage(filterStage === 'cubs' ? 'all' : 'cubs')}
-          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all shrink-0 cursor-pointer ${
-            filterStage === 'cubs'
-              ? 'bg-sky-500/10 text-sky-700 dark:bg-sky-400/15 dark:text-sky-300 font-semibold border border-sky-500/30 shadow-2xs'
-              : 'bg-neutral-100 dark:bg-[#111827] text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200 border border-neutral-200/80 dark:border-neutral-800/80 hover:bg-neutral-200/60 dark:hover:bg-[#1E293B]'
-          }`}
-        >
-          {language === 'ar' ? 'أشبال وزهرات' : 'Cubs & Brownies'}
-        </button>
+              <button
+                onClick={() => {
+                  setFilterUnitId('all');
+                  setFilterGender(filterGender === 'girls' ? 'all' : 'girls');
+                }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all shrink-0 cursor-pointer ${
+                  filterGender === 'girls' && filterUnitId === 'all'
+                    ? 'bg-sky-500/10 text-sky-700 dark:bg-sky-400/15 dark:text-sky-300 font-semibold border border-sky-500/30 shadow-2xs'
+                    : 'bg-neutral-100 dark:bg-[#111827] text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200 border border-neutral-200/80 dark:border-neutral-800/80 hover:bg-neutral-200/60 dark:hover:bg-[#1E293B]'
+                }`}
+              >
+                {language === 'ar' ? 'بنات (Girls)' : 'Girls'}
+              </button>
 
-        <button
-          onClick={() => setFilterStage(filterStage === 'scouts' ? 'all' : 'scouts')}
-          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all shrink-0 cursor-pointer ${
-            filterStage === 'scouts'
-              ? 'bg-sky-500/10 text-sky-700 dark:bg-sky-400/15 dark:text-sky-300 font-semibold border border-sky-500/30 shadow-2xs'
-              : 'bg-neutral-100 dark:bg-[#111827] text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200 border border-neutral-200/80 dark:border-neutral-800/80 hover:bg-neutral-200/60 dark:hover:bg-[#1E293B]'
-          }`}
-        >
-          {language === 'ar' ? 'كشافة ومرشدات' : 'Scouts & Guides'}
-        </button>
+              <button
+                onClick={() => {
+                  setFilterUnitId('all');
+                  setFilterStage(filterStage === 'cubs' ? 'all' : 'cubs');
+                }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all shrink-0 cursor-pointer ${
+                  filterStage === 'cubs' && filterUnitId === 'all'
+                    ? 'bg-sky-500/10 text-sky-700 dark:bg-sky-400/15 dark:text-sky-300 font-semibold border border-sky-500/30 shadow-2xs'
+                    : 'bg-neutral-100 dark:bg-[#111827] text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200 border border-neutral-200/80 dark:border-neutral-800/80 hover:bg-neutral-200/60 dark:hover:bg-[#1E293B]'
+                }`}
+              >
+                {language === 'ar' ? 'أشبال وزهرات' : 'Cubs & Brownies'}
+              </button>
 
-        <button
-          onClick={() => setFilterStage(filterStage === 'rovers' ? 'all' : 'rovers')}
-          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all shrink-0 cursor-pointer ${
-            filterStage === 'rovers'
-              ? 'bg-sky-500/10 text-sky-700 dark:bg-sky-400/15 dark:text-sky-300 font-semibold border border-sky-500/30 shadow-2xs'
-              : 'bg-neutral-100 dark:bg-[#111827] text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200 border border-neutral-200/80 dark:border-neutral-800/80 hover:bg-neutral-200/60 dark:hover:bg-[#1E293B]'
-          }`}
-        >
-          {language === 'ar' ? 'متقدم وجوالة' : 'Venturers & Rovers'}
-        </button>
-      </div>
+              <button
+                onClick={() => {
+                  setFilterUnitId('all');
+                  setFilterStage(filterStage === 'scouts' ? 'all' : 'scouts');
+                }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all shrink-0 cursor-pointer ${
+                  filterStage === 'scouts' && filterUnitId === 'all'
+                    ? 'bg-sky-500/10 text-sky-700 dark:bg-sky-400/15 dark:text-sky-300 font-semibold border border-sky-500/30 shadow-2xs'
+                    : 'bg-neutral-100 dark:bg-[#111827] text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200 border border-neutral-200/80 dark:border-neutral-800/80 hover:bg-neutral-200/60 dark:hover:bg-[#1E293B]'
+                }`}
+              >
+                {language === 'ar' ? 'كشافة ومرشدات' : 'Scouts & Guides'}
+              </button>
+
+              <button
+                onClick={() => {
+                  setFilterUnitId('all');
+                  setFilterStage(filterStage === 'rovers' ? 'all' : 'rovers');
+                }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all shrink-0 cursor-pointer ${
+                  filterStage === 'rovers' && filterUnitId === 'all'
+                    ? 'bg-sky-500/10 text-sky-700 dark:bg-sky-400/15 dark:text-sky-300 font-semibold border border-sky-500/30 shadow-2xs'
+                    : 'bg-neutral-100 dark:bg-[#111827] text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200 border border-neutral-200/80 dark:border-neutral-800/80 hover:bg-neutral-200/60 dark:hover:bg-[#1E293B]'
+                }`}
+              >
+                {language === 'ar' ? 'متقدم وجوالة' : 'Venturers & Rovers'}
+              </button>
+
+              <button
+                onClick={() => {
+                  setFilterUnitId('all');
+                  setFilterStage(filterStage === 'parallel' ? 'all' : 'parallel');
+                }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all shrink-0 cursor-pointer ${
+                  filterStage === 'parallel' && filterUnitId === 'all'
+                    ? 'bg-sky-500/10 text-sky-700 dark:bg-sky-400/15 dark:text-sky-300 font-semibold border border-sky-500/30 shadow-2xs'
+                    : 'bg-neutral-100 dark:bg-[#111827] text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200 border border-neutral-200/80 dark:border-neutral-800/80 hover:bg-neutral-200/60 dark:hover:bg-[#1E293B]'
+                }`}
+              >
+                {language === 'ar' ? 'مسار متوازي (A / B)' : 'Parallel Streams'}
+              </button>
+
+              {/* Specific Team Selector for Super Admin */}
+              <div className="ms-auto flex items-center shrink-0">
+                <select
+                  value={filterUnitId}
+                  onChange={(e) => {
+                    const val = e.target.value === 'all' ? 'all' : Number(e.target.value);
+                    setFilterUnitId(val);
+                    if (val !== 'all') {
+                      setFilterStage('all');
+                      setFilterGender('all');
+                    }
+                  }}
+                  className="bg-neutral-100 dark:bg-[#111827] text-neutral-700 dark:text-neutral-300 text-xs font-medium rounded-lg px-2.5 py-1.5 border border-neutral-200/80 dark:border-neutral-800/80 focus:outline-none focus:ring-1 focus:ring-sky-500 cursor-pointer"
+                >
+                  <option value="all">{language === 'ar' ? 'كل الفرق الـ 12' : 'All 12 Teams'}</option>
+                  {accessibleUnits.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {language === 'ar' ? u.name_ar : u.name_en}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       {/* 3. METRIC CARDS (Requirement 3: Surface elevation tokens #111827, #1E293B, border-neutral-800) */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
