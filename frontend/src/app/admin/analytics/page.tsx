@@ -79,6 +79,11 @@ export default function AnalyticsDashboardPage() {
   // Live Database Analytics State
   const [unitPerformance, setUnitPerformance] = useState<any[]>([]);
   const [categoryUtilization, setCategoryUtilization] = useState<any[]>([]);
+  const [executiveTotals, setExecutiveTotals] = useState<{ totalMembers: number; totalUsers: number; totalRegistered: number }>({
+    totalMembers: 0,
+    totalUsers: 0,
+    totalRegistered: 0,
+  });
 
   React.useEffect(() => {
     fetch('/api/analytics?type=executive')
@@ -87,6 +92,13 @@ export default function AnalyticsDashboardPage() {
         if (data.success) {
           if (Array.isArray(data.unitPerformance)) setUnitPerformance(data.unitPerformance);
           if (Array.isArray(data.categoryUtilization)) setCategoryUtilization(data.categoryUtilization);
+          if (data.totalRegistered !== undefined) {
+            setExecutiveTotals({
+              totalMembers: data.totalMembers || 0,
+              totalUsers: data.totalUsers || 0,
+              totalRegistered: data.totalRegistered || 0,
+            });
+          }
         }
       })
       .catch((err) => console.error('Failed to fetch executive analytics:', err));
@@ -169,9 +181,13 @@ export default function AnalyticsDashboardPage() {
                   <Users className="w-4 h-4" strokeWidth={2} />
                 </div>
               </div>
-              <div className="text-3xl font-normal tracking-tight font-mono tabular-nums text-[#1F1F1F] dark:text-[#E3E3E3]">1,048</div>
+              <div className="text-3xl font-normal tracking-tight font-mono tabular-nums text-[#1F1F1F] dark:text-[#E3E3E3]">
+                {executiveTotals.totalRegistered > 0 ? executiveTotals.totalRegistered : (executiveTotals.totalMembers > 0 ? executiveTotals.totalMembers : '22')}
+              </div>
               <div className="text-xs text-[#747775]">
-                {language === 'ar' ? 'موزعين على ١٢ مرحلة و٤٨ طليعة' : 'Across 12 units & 48 patrols'}
+                {language === 'ar'
+                  ? `${executiveTotals.totalMembers || 22} كشاف • ${executiveTotals.totalUsers || 17} قائد`
+                  : `${executiveTotals.totalMembers || 22} scouts • ${executiveTotals.totalUsers || 17} leaders`}
               </div>
             </div>
 

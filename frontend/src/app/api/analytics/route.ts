@@ -68,8 +68,16 @@ export async function GET(request: NextRequest) {
         };
       });
 
+      const memCountRes = await query(`SELECT COUNT(*) AS total FROM members WHERE is_active = TRUE`);
+      const userCountRes = await query(`SELECT COUNT(*) AS total FROM users WHERE is_active = TRUE`);
+      const totalMembers = Number(memCountRes[0]?.total || 0);
+      const totalUsers = Number(userCountRes[0]?.total || 0);
+
       return NextResponse.json({
         success: true,
+        totalMembers,
+        totalUsers,
+        totalRegistered: totalMembers + totalUsers,
         unitPerformance: formattedUnits,
         categoryUtilization: formattedCats,
       });

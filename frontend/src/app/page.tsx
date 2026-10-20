@@ -62,10 +62,22 @@ export default function DashboardPage() {
   const [activeMenuUnitId, setActiveMenuUnitId] = useState<number | null>(null);
 
   // Live Database stats
-  const [stats, setStats] = useState<{ totalMembers: number; totalEquipment: number; totalSessions: number }>({
+  const [stats, setStats] = useState<{
+    totalMembers: number;
+    totalUsers: number;
+    totalRegistered: number;
+    totalEquipment: number;
+    totalSessions: number;
+    totalUnits: number;
+    unitMemberCounts: Record<number, number>;
+  }>({
     totalMembers: 0,
+    totalUsers: 0,
+    totalRegistered: 0,
     totalEquipment: 0,
     totalSessions: 0,
+    totalUnits: 12,
+    unitMemberCounts: {},
   });
 
   React.useEffect(() => {
@@ -80,7 +92,11 @@ export default function DashboardPage() {
   }, []);
 
   const totalMembers = stats.totalMembers;
+  const totalUsers = stats.totalUsers;
+  const totalRegistered = stats.totalRegistered || (stats.totalMembers + stats.totalUsers);
   const totalEquipment = stats.totalEquipment;
+  const totalUnits = stats.totalUnits || 12;
+  const unitMemberCounts = stats.unitMemberCounts || {};
 
   // M3 Section color tokens for Google Drive Folder Icons
   const getStageColor = (code: string) => {
@@ -266,20 +282,20 @@ export default function DashboardPage() {
 
       {/* 3. METRIC CARDS (Requirement 3: Surface elevation tokens #111827, #1E293B, border-neutral-800) */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
-        {/* Metric 1: 12 Units */}
+        {/* Metric 1: Units */}
         <div className="bg-white dark:bg-[#111827] rounded-xl p-4 border border-neutral-200 dark:border-neutral-800/80 shadow-none hover:border-neutral-300 dark:hover:border-neutral-700/80 transition-colors">
           <div className="text-2xl sm:text-3xl font-bold text-neutral-900 dark:text-neutral-100 font-mono tabular-nums">
-            12
+            {totalUnits}
           </div>
           <div className="text-xs font-medium text-neutral-500 dark:text-neutral-400 mt-1">
             {language === 'ar' ? 'وحدة كشفية نشطة' : 'Active Scout Units'}
           </div>
         </div>
 
-        {/* Metric 2: 1,048 Scouts */}
+        {/* Metric 2: Registered Scouts & Leaders */}
         <div className="bg-white dark:bg-[#111827] rounded-xl p-4 border border-neutral-200 dark:border-neutral-800/80 shadow-none hover:border-neutral-300 dark:hover:border-neutral-700/80 transition-colors">
           <div className="text-2xl sm:text-3xl font-bold text-neutral-900 dark:text-neutral-100 font-mono tabular-nums">
-            1,048
+            {totalRegistered > 0 ? totalRegistered : totalMembers}
           </div>
           <div className="text-xs font-medium text-neutral-500 dark:text-neutral-400 mt-1">
             {language === 'ar' ? 'كشاف وقائد مسجل' : 'Registered Members'}
@@ -433,6 +449,10 @@ export default function DashboardPage() {
                             </bdi>
                           </>
                         )}
+                        <span>&bull;</span>
+                        <bdi className="font-mono text-neutral-600 dark:text-neutral-300">
+                          {unitMemberCounts[unit.id] ?? 0} {language === 'ar' ? 'عضو' : 'members'}
+                        </bdi>
                       </div>
                     </div>
                   </div>
@@ -515,7 +535,8 @@ export default function DashboardPage() {
               <div className="w-1/3 min-w-[180px]">{language === 'ar' ? 'اسم الوحدة الكشفية' : 'Unit Name'}</div>
               <div className="w-1/4 hidden sm:block">{language === 'ar' ? 'المرحلة والنوع' : 'Stage & Gender'}</div>
               <div className="w-1/4 hidden md:block">{language === 'ar' ? 'الصف الدراسي' : 'Target Grade'}</div>
-              <div className="w-24 text-center">{language === 'ar' ? 'المسار' : 'Stream'}</div>
+              <div className="w-20 text-center">{language === 'ar' ? 'الأعضاء' : 'Members'}</div>
+              <div className="w-20 text-center">{language === 'ar' ? 'المسار' : 'Stream'}</div>
               <div className="ms-auto text-end">{language === 'ar' ? 'الإجراء' : 'Action'}</div>
             </div>
 
@@ -555,7 +576,13 @@ export default function DashboardPage() {
                       <bdi>{unit.target_grade}</bdi>
                     </div>
 
-                    <div className="w-24 text-center">
+                    <div className="w-20 text-center">
+                      <span className="text-xs font-mono font-medium text-neutral-700 dark:text-neutral-300">
+                        {unitMemberCounts[unit.id] ?? 0}
+                      </span>
+                    </div>
+
+                    <div className="w-20 text-center">
                       <span className="text-[11px] font-mono px-2 py-0.5 rounded-md bg-neutral-100 dark:bg-[#1E293B] text-neutral-500 dark:text-neutral-400 border border-neutral-200/60 dark:border-neutral-800/60">
                         {isParallel ? (unit.code.includes('_a') ? 'A' : 'B') : '-'}
                       </span>
