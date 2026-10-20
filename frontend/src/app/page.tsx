@@ -100,25 +100,25 @@ export default function DashboardPage() {
 
   // M3 Section color tokens for Google Drive Folder Icons
   const getStageColor = (code: string) => {
-    if (code.includes('ashbal') || code.includes('zahrat')) {
+    if (code.startsWith('cubs') || code.startsWith('brownies') || code.includes('ashbal') || code.includes('zahrat')) {
       return {
         color: '#B06000', // Cubs / Brownies Warm Amber
         badgeBg: 'bg-[#FEF7EC] dark:bg-amber-950/40 text-[#7A3F00] dark:text-amber-300 border-[#FFCD85]/50',
-        stageName: language === 'ar' ? (code.includes('ashbal') ? 'أشبال' : 'زهرات') : (code.includes('ashbal') ? 'Cubs' : 'Brownies'),
+        stageName: language === 'ar' ? (code.includes('ashbal') || code.startsWith('cubs') ? 'أشبال' : 'زهرات') : (code.includes('ashbal') || code.startsWith('cubs') ? 'Cubs' : 'Brownies'),
       };
     }
-    if (code.includes('kashafa') || code.includes('morshdat')) {
+    if (code.startsWith('scouts') || code.startsWith('guides') || code.includes('kashafa') || code.includes('morshdat')) {
       return {
         color: '#146C2E', // Scouts / Guides Forest Green
         badgeBg: 'bg-[#E8F0EC] dark:bg-emerald-950/40 text-[#0A5326] dark:text-emerald-300 border-[#A8E5B6]/50',
-        stageName: language === 'ar' ? (code.includes('kashafa') ? 'كشافة' : 'مرشدات') : (code.includes('kashafa') ? 'Scouts' : 'Guides'),
+        stageName: language === 'ar' ? (code.includes('kashafa') || code.startsWith('scouts') ? 'كشافة' : 'مرشدات') : (code.includes('kashafa') || code.startsWith('scouts') ? 'Scouts' : 'Guides'),
       };
     }
-    if (code.includes('motakadem') || code.includes('ra2edat') || code.includes('gawala')) {
+    if (code.includes('motakadem') || code.includes('ra2edat') || code.includes('gawala') || code.includes('advanced') || code.includes('senior') || code.includes('rovers')) {
       return {
         color: '#0B57D0', // Venturers / Rovers Deep Ocean Blue
         badgeBg: 'bg-[#D3E3FD] dark:bg-sky-950/40 text-[#043372] dark:text-sky-300 border-[#A8C7FA]/50',
-        stageName: language === 'ar' ? (code.includes('gawala') ? 'جوالة' : code.includes('ra2edat') ? 'رائدات' : 'متقدم') : 'Rovers',
+        stageName: language === 'ar' ? (code.includes('gawala') || code.includes('rovers') ? 'جوالة' : (code.includes('ra2edat') || code.includes('senior') ? 'رائدات' : 'متقدم')) : 'Rovers',
       };
     }
     return {
@@ -128,14 +128,44 @@ export default function DashboardPage() {
     };
   };
 
-  // Units list scoped to role
+  // Units list scoped to role and interactive filters
   const displayUnits = useMemo(() => {
     const base = isSuperAdmin ? INITIAL_UNITS : accessibleUnits;
     return base.filter((unit) => {
       // Stage filter
-      if (filterStage === 'cubs' && !unit.code.includes('ashbal') && !unit.code.includes('zahrat')) return false;
-      if (filterStage === 'scouts' && !unit.code.includes('kashafa') && !unit.code.includes('morshdat')) return false;
-      if (filterStage === 'rovers' && !unit.code.includes('motakadem') && !unit.code.includes('ra2edat') && !unit.code.includes('gawala')) return false;
+      if (filterStage === 'cubs') {
+        const isCubs =
+          unit.stage_group === 'cubs' ||
+          unit.stage_group === 'brownies' ||
+          unit.code.startsWith('cubs') ||
+          unit.code.startsWith('brownies') ||
+          unit.code.includes('ashbal') ||
+          unit.code.includes('zahrat');
+        if (!isCubs) return false;
+      }
+      if (filterStage === 'scouts') {
+        const isScouts =
+          unit.stage_group === 'scouts' ||
+          unit.stage_group === 'guides' ||
+          unit.code.startsWith('scouts') ||
+          unit.code.startsWith('guides') ||
+          unit.code.includes('kashafa') ||
+          unit.code.includes('morshdat');
+        if (!isScouts) return false;
+      }
+      if (filterStage === 'rovers') {
+        const isRovers =
+          unit.stage_group === 'advanced_scouts' ||
+          unit.stage_group === 'senior_guides' ||
+          unit.stage_group === 'rovers' ||
+          unit.code.includes('advanced') ||
+          unit.code.includes('senior') ||
+          unit.code.includes('rovers') ||
+          unit.code.includes('motakadem') ||
+          unit.code.includes('ra2edat') ||
+          unit.code.includes('gawala');
+        if (!isRovers) return false;
+      }
       if (filterStage === 'parallel' && !unit.code.includes('_a') && !unit.code.includes('_b')) return false;
 
       // Gender filter
@@ -144,6 +174,16 @@ export default function DashboardPage() {
       return true;
     });
   }, [isSuperAdmin, accessibleUnits, filterStage, filterGender]);
+
+  // Filtered youth scouts count (strictly members, excluding adult leaders)
+  const filteredScoutsCount = useMemo(() => {
+    return displayUnits.reduce((acc, unit) => {
+      if (unit.is_leadership) return acc;
+      return acc + (unitMemberCounts[unit.id] ?? 0);
+    }, 0);
+  }, [displayUnits, unitMemberCounts]);
+
+  const filteredUnitsCount = displayUnits.length;
 
   return (
     <div className="space-y-6 animate-fadeIn pb-12">
@@ -285,20 +325,20 @@ export default function DashboardPage() {
         {/* Metric 1: Units */}
         <div className="bg-white dark:bg-[#111827] rounded-xl p-4 border border-neutral-200 dark:border-neutral-800/80 shadow-none hover:border-neutral-300 dark:hover:border-neutral-700/80 transition-colors">
           <div className="text-2xl sm:text-3xl font-bold text-neutral-900 dark:text-neutral-100 font-mono tabular-nums">
-            {totalUnits}
+            {filteredUnitsCount}
           </div>
           <div className="text-xs font-medium text-neutral-500 dark:text-neutral-400 mt-1">
             {language === 'ar' ? 'وحدة كشفية نشطة' : 'Active Scout Units'}
           </div>
         </div>
 
-        {/* Metric 2: Registered Scouts & Leaders */}
+        {/* Metric 2: Registered Scouts (Strictly youth members, reactive to filters) */}
         <div className="bg-white dark:bg-[#111827] rounded-xl p-4 border border-neutral-200 dark:border-neutral-800/80 shadow-none hover:border-neutral-300 dark:hover:border-neutral-700/80 transition-colors">
           <div className="text-2xl sm:text-3xl font-bold text-neutral-900 dark:text-neutral-100 font-mono tabular-nums">
-            {totalRegistered > 0 ? totalRegistered : totalMembers}
+            {filteredScoutsCount}
           </div>
           <div className="text-xs font-medium text-neutral-500 dark:text-neutral-400 mt-1">
-            {language === 'ar' ? 'كشاف وقائد مسجل' : 'Registered Members'}
+            {language === 'ar' ? 'كشاف مسجل' : 'Registered Scouts'}
           </div>
         </div>
 
