@@ -62,6 +62,8 @@ export function GoogleWorkspaceLayout({ children }: { children: React.ReactNode 
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isNewMenuOpen, setIsNewMenuOpen] = useState(false);
+  const [isMobileNewMenuOpen, setIsMobileNewMenuOpen] = useState(false);
+  const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -217,13 +219,54 @@ export function GoogleWorkspaceLayout({ children }: { children: React.ReactNode 
     });
   }
 
-  if (!isScout && (isSuperAdmin || can('admin.audit_logs'))) {
-    navItems.push({
-      href: '/admin/audit-logs',
-      label: language === 'ar' ? 'سجل التدقيق' : 'Audit Logs',
-      icon: History,
-    });
-  }
+  // Core mobile bottom navigation items
+  const bottomBarItems = isScout
+    ? [
+        {
+          href: '/scout',
+          label: language === 'ar' ? 'عريني' : 'My Space',
+          icon: Compass,
+        },
+        {
+          href: '/media',
+          label: language === 'ar' ? 'الوسائط' : 'Media',
+          icon: UploadCloud,
+        },
+      ]
+    : [
+        {
+          href: '/',
+          label: language === 'ar' ? 'الوحدات' : 'Units',
+          icon: Folder,
+        },
+        ...(canAccessAttendance
+          ? [
+              {
+                href: '/attendance',
+                label: language === 'ar' ? 'الحضور' : 'Attendance',
+                icon: CalendarCheck,
+              },
+            ]
+          : []),
+        ...(canAccessMembers
+          ? [
+              {
+                href: '/members',
+                label: language === 'ar' ? 'الأعضاء' : 'Members',
+                icon: Users,
+              },
+            ]
+          : []),
+        ...(canAccessInventory
+          ? [
+              {
+                href: '/inventory',
+                label: language === 'ar' ? 'العهدة' : 'Gear',
+                icon: Package,
+              },
+            ]
+          : []),
+      ];
 
   // Quick instant search filtering across units, members, and inventory
   const searchResults = searchQuery.trim().length > 1 ? {
@@ -243,252 +286,332 @@ export function GoogleWorkspaceLayout({ children }: { children: React.ReactNode 
   return (
     <div className="min-h-screen flex flex-col bg-[#F8FAFD] dark:bg-[#0B0F17] text-[#0F172A] dark:text-[#F1F5F9] font-sans antialiased">
       {/* 1. TOP APP BAR (SaaS Standard Header) */}
-      <header className="h-16 shrink-0 bg-white dark:bg-[#111827] px-4 sm:px-6 flex items-center justify-between gap-4 z-40 border-b border-neutral-200/80 dark:border-neutral-800/60">
-        {/* Leading: Hamburger + Brand / Logo */}
-        <div className="flex items-center gap-3 shrink-0">
-          <button
-            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-            className="hidden md:flex p-2 rounded-xl hover:bg-neutral-100 dark:hover:bg-neutral-800/70 text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors cursor-pointer"
-            title={language === 'ar' ? 'القائمة الرئيسية' : 'Main Menu'}
-          >
-            <Menu className="w-5 h-5" />
-          </button>
-          
-          <button
-            onClick={() => setIsMobileSidebarOpen(true)}
-            className="md:hidden p-2 rounded-xl hover:bg-neutral-100 dark:hover:bg-neutral-800/70 text-neutral-600 dark:text-neutral-400 transition-colors cursor-pointer"
-          >
-            <Menu className="w-5 h-5" />
-          </button>
-
-          <Link href="/" className="flex items-center gap-2.5 sm:gap-3 group cursor-pointer select-none">
-            {/* SMSR Official Logo */}
-            <div className="w-10 h-10 rounded-xl overflow-hidden bg-white p-0.5 border border-neutral-200 dark:border-neutral-700/80 shadow-xs group-hover:scale-105 transition-transform shrink-0 flex items-center justify-center">
-              <img
-                src="/smsr-logo.jpg"
-                alt="SMSR Logo"
-                className="w-full h-full object-contain rounded-lg"
-              />
-            </div>
-            <div>
-              <div className="text-sm sm:text-base font-extrabold text-neutral-900 dark:text-neutral-100 flex items-center gap-1.5 leading-tight tracking-tight">
-                <span>SMSR</span>
-                <span className="text-[10px] font-mono font-medium px-1.5 py-0.5 rounded-md bg-sky-500/10 text-sky-600 dark:bg-sky-400/15 dark:text-sky-300 border border-sky-500/20">
-                  {isScout ? 'Scout' : 'Leader'}
-                </span>
-              </div>
-              <div className="text-[11px] text-neutral-500 dark:text-neutral-400 font-medium leading-tight truncate max-w-[170px] sm:max-w-none">
-                {language === 'ar' ? 'كشافة السيدة العذراء بالرحاب' : 'St. Mary Scouts Rehab'}
-              </div>
-            </div>
-          </Link>
-        </div>
-
-        {/* Center: Central Search Bar */}
-        <div ref={searchRef} className="flex-1 max-w-2xl relative mx-2 hidden sm:block">
-          <div className={`flex items-center gap-3 bg-neutral-100 dark:bg-[#0B0F17] hover:bg-neutral-200/60 dark:hover:bg-[#161F30] rounded-xl h-10 px-3.5 transition-all border ${
-            isSearchFocused
-              ? 'border-sky-500/60 ring-1 ring-sky-500/40 bg-white dark:bg-[#111827]'
-              : 'border-transparent dark:border-neutral-800/80'
-          }`}>
-            <Search className="w-4 h-4 text-neutral-400 dark:text-neutral-500 shrink-0" />
+      <header className="h-16 shrink-0 bg-white dark:bg-[#111827] px-3 sm:px-6 flex items-center justify-between gap-2 sm:gap-4 z-40 border-b border-neutral-200/80 dark:border-neutral-800/60 relative">
+        {isMobileSearchOpen ? (
+          /* Mobile Search Bar Overlay (Active) */
+          <div className="flex-1 flex items-center gap-2 px-1">
+            <Search className="w-4 h-4 text-sky-500 shrink-0" />
             <input
               type="text"
+              autoFocus
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              onFocus={() => setIsSearchFocused(true)}
-              placeholder={language === 'ar' ? 'البحث السريع في الكشافين، الوحدات، والملفات...' : 'Search members, gear, units, and rosters...'}
-              className="w-full bg-transparent border-none text-xs sm:text-sm text-neutral-900 dark:text-neutral-100 placeholder-neutral-400 dark:placeholder-neutral-500 focus:outline-none focus:ring-0"
+              placeholder={language === 'ar' ? 'بحث في الكشافة، الوحدات، والعهدة...' : 'Search members, gear, units...'}
+              className="flex-1 bg-neutral-100 dark:bg-[#0B0F17] rounded-xl px-3 py-2 text-xs sm:text-sm text-neutral-900 dark:text-neutral-100 placeholder-neutral-400 focus:outline-none focus:ring-1 focus:ring-sky-500"
               dir="auto"
             />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery('')}
-                className="p-1 rounded-md hover:bg-neutral-200 dark:hover:bg-neutral-800 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200"
+                className="p-1 rounded-md text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200"
               >
-                <X className="w-3.5 h-3.5" />
+                <X className="w-4 h-4" />
               </button>
             )}
+            <button
+              onClick={() => {
+                setIsMobileSearchOpen(false);
+                setSearchQuery('');
+              }}
+              className="p-2 rounded-xl text-neutral-500 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800 text-xs font-semibold shrink-0 cursor-pointer"
+            >
+              {language === 'ar' ? 'إلغاء' : 'Cancel'}
+            </button>
           </div>
+        ) : (
+          <>
+            {/* Leading: Hamburger + Brand / Logo */}
+            <div className="flex items-center gap-2 sm:gap-3 shrink-0 min-w-0">
+              <button
+                onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                className="hidden md:flex p-2 rounded-xl hover:bg-neutral-100 dark:hover:bg-neutral-800/70 text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors cursor-pointer"
+                title={language === 'ar' ? 'القائمة الرئيسية' : 'Main Menu'}
+              >
+                <Menu className="w-5 h-5" />
+              </button>
+              
+              <button
+                onClick={() => setIsMobileSidebarOpen(true)}
+                className="md:hidden p-2 rounded-xl hover:bg-neutral-100 dark:hover:bg-neutral-800/70 text-neutral-600 dark:text-neutral-400 transition-colors cursor-pointer"
+                title={language === 'ar' ? 'القائمة' : 'Menu'}
+              >
+                <Menu className="w-5 h-5" />
+              </button>
 
-          {/* Instant Search Results Dropdown */}
-          {isSearchFocused && searchResults && (
-            <div className="absolute top-12 start-0 end-0 bg-white dark:bg-[#111827] rounded-xl shadow-2xl border border-neutral-200 dark:border-neutral-800/90 p-3 z-50 space-y-3 mt-1 max-h-96 overflow-y-auto">
-              {searchResults.units.length > 0 && (
-                <div>
-                  <div className="text-[11px] font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-400 px-2 py-1">
-                    {language === 'ar' ? 'الوحدات الكشفية' : 'Units'}
-                  </div>
-                  {searchResults.units.map((u) => (
-                    <Link
-                      key={u.id}
-                      href={`/attendance?unit=${u.id}`}
-                      onClick={() => setIsSearchFocused(false)}
-                      className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-neutral-100 dark:hover:bg-[#1E293B] text-xs font-medium text-neutral-800 dark:text-neutral-200 transition-colors"
-                    >
-                      <Folder className="w-4 h-4 text-sky-500" />
-                      <span dir="auto">{language === 'ar' ? u.name_ar : u.name_en}</span>
-                      <span className="text-[10px] font-mono text-neutral-400 ms-auto">{u.code}</span>
-                    </Link>
-                  ))}
+              <Link href="/" className="flex items-center gap-2 sm:gap-3 group cursor-pointer select-none min-w-0">
+                {/* SMSR Official Logo */}
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl overflow-hidden bg-white p-0.5 border border-neutral-200 dark:border-neutral-700/80 shadow-xs group-hover:scale-105 transition-transform shrink-0 flex items-center justify-center">
+                  <img
+                    src="/smsr-logo.jpg"
+                    alt="SMSR Logo"
+                    className="w-full h-full object-contain rounded-lg"
+                  />
                 </div>
-              )}
-
-              {searchResults.members.length > 0 && (
-                <div>
-                  <div className="text-[11px] font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-400 px-2 py-1">
-                    {language === 'ar' ? 'الأعضاء والكشافون' : 'Members'}
+                <div className="min-w-0">
+                  <div className="text-xs sm:text-base font-extrabold text-neutral-900 dark:text-neutral-100 flex items-center gap-1.5 leading-tight tracking-tight">
+                    <span>SMSR</span>
+                    <span className="text-[10px] font-mono font-medium px-1.5 py-0.2 rounded-md bg-sky-500/10 text-sky-600 dark:bg-sky-400/15 dark:text-sky-300 border border-sky-500/20">
+                      {isScout ? 'Scout' : 'Leader'}
+                    </span>
                   </div>
-                  {searchResults.members.map((m) => (
-                    <Link
-                      key={m.id}
-                      href="/members"
-                      onClick={() => setIsSearchFocused(false)}
-                      className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-neutral-100 dark:hover:bg-[#1E293B] text-xs font-medium text-neutral-800 dark:text-neutral-200 transition-colors"
-                    >
-                      <Users className="w-4 h-4 text-emerald-500" />
-                      <span dir="auto">{language === 'ar' ? m.full_name_ar : (m.full_name_en || m.full_name_ar)}</span>
-                      <span className="text-[10px] font-mono text-neutral-400 ms-auto">{m.member_code}</span>
-                    </Link>
-                  ))}
+                  <div className="text-[10px] sm:text-[11px] text-neutral-500 dark:text-neutral-400 font-medium leading-tight truncate max-w-[100px] xs:max-w-[140px] sm:max-w-none">
+                    {language === 'ar' ? 'كشافة الرحاب' : 'St. Mary Scouts'}
+                  </div>
                 </div>
-              )}
+              </Link>
+            </div>
 
-              {searchResults.equipment.length > 0 && (
-                <div>
-                  <div className="text-[11px] font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-400 px-2 py-1">
-                    {language === 'ar' ? 'مهمات العهدة' : 'Equipment'}
-                  </div>
-                  {searchResults.equipment.map((e) => (
-                    <Link
-                      key={e.id}
-                      href="/inventory"
-                      onClick={() => setIsSearchFocused(false)}
-                      className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-neutral-100 dark:hover:bg-[#1E293B] text-xs font-medium text-neutral-800 dark:text-neutral-200 transition-colors"
-                    >
-                      <Package className="w-4 h-4 text-amber-500" />
-                      <span dir="auto">{e.name}</span>
-                      <span className="text-[10px] font-mono text-neutral-400 ms-auto">{e.sku}</span>
-                    </Link>
-                  ))}
+            {/* Center: Central Search Bar (Desktop) */}
+            <div ref={searchRef} className="flex-1 max-w-2xl relative mx-2 hidden sm:block">
+              <div className={`flex items-center gap-3 bg-neutral-100 dark:bg-[#0B0F17] hover:bg-neutral-200/60 dark:hover:bg-[#161F30] rounded-xl h-10 px-3.5 transition-all border ${
+                isSearchFocused
+                  ? 'border-sky-500/60 ring-1 ring-sky-500/40 bg-white dark:bg-[#111827]'
+                  : 'border-transparent dark:border-neutral-800/80'
+              }`}>
+                <Search className="w-4 h-4 text-neutral-400 dark:text-neutral-500 shrink-0" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onFocus={() => setIsSearchFocused(true)}
+                  placeholder={language === 'ar' ? 'البحث السريع في الكشافين، الوحدات، والملفات...' : 'Search members, gear, units, and rosters...'}
+                  className="w-full bg-transparent border-none text-xs sm:text-sm text-neutral-900 dark:text-neutral-100 placeholder-neutral-400 dark:placeholder-neutral-500 focus:outline-none focus:ring-0"
+                  dir="auto"
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="p-1 rounded-md hover:bg-neutral-200 dark:hover:bg-neutral-800 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200 cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* Instant Search Results Dropdown (Desktop) */}
+              {isSearchFocused && searchResults && (
+                <div className="absolute top-12 start-0 end-0 bg-white dark:bg-[#111827] rounded-xl shadow-2xl border border-neutral-200 dark:border-neutral-800/90 p-3 z-50 space-y-3 mt-1 max-h-96 overflow-y-auto">
+                  {searchResults.units.length > 0 && (
+                    <div>
+                      <div className="text-[11px] font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-400 px-2 py-1">
+                        {language === 'ar' ? 'الوحدات الكشفية' : 'Units'}
+                      </div>
+                      {searchResults.units.map((u) => (
+                        <Link
+                          key={u.id}
+                          href={`/attendance?unit=${u.id}`}
+                          onClick={() => {
+                            setIsSearchFocused(false);
+                            setSearchQuery('');
+                          }}
+                          className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-neutral-100 dark:hover:bg-[#1E293B] text-xs font-medium text-neutral-800 dark:text-neutral-200 transition-colors"
+                        >
+                          <Folder className="w-4 h-4 text-sky-500" />
+                          <span dir="auto">{language === 'ar' ? u.name_ar : u.name_en}</span>
+                          <span className="text-[10px] font-mono text-neutral-400 ms-auto">{u.code}</span>
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+
+                  {searchResults.members.length > 0 && (
+                    <div>
+                      <div className="text-[11px] font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-400 px-2 py-1">
+                        {language === 'ar' ? 'الأعضاء والكشافون' : 'Members'}
+                      </div>
+                      {searchResults.members.map((m) => (
+                        <Link
+                          key={m.id}
+                          href="/members"
+                          onClick={() => {
+                            setIsSearchFocused(false);
+                            setSearchQuery('');
+                          }}
+                          className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-neutral-100 dark:hover:bg-[#1E293B] text-xs font-medium text-neutral-800 dark:text-neutral-200 transition-colors"
+                        >
+                          <Users className="w-4 h-4 text-emerald-500" />
+                          <span dir="auto">{language === 'ar' ? m.full_name_ar : (m.full_name_en || m.full_name_ar)}</span>
+                          <span className="text-[10px] font-mono text-neutral-400 ms-auto">{m.member_code}</span>
+                        </Link>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
-          )}
-        </div>
 
-        {/* Trailing: Settings, Theme, Lang, Avatar & Role Switcher */}
-        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-          {/* Active Testing Persona Quick Return Button */}
-          {!isSuperAdmin && (
-            <button
-              onClick={() => loginAs('u0')}
-              className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/30 text-xs font-semibold hover:bg-amber-500/20 transition-colors cursor-pointer"
-              title={language === 'ar' ? 'الرجوع لحساب مدير النظام لتعديل الصلاحيات' : 'Switch back to System Admin to edit permissions'}
-            >
-              <ShieldCheck className="w-3.5 h-3.5 text-amber-500" />
-              <span>{language === 'ar' ? 'اختبار كـ:' : 'Testing as:'} {currentUser?.full_name?.split(' (')[0]?.split(' ')[0]}</span>
-              <span className="text-[10px] underline font-bold ms-1">{language === 'ar' ? '(رجوع للأدمن)' : '(Switch to Admin)'}</span>
-            </button>
-          )}
-
-          {/* Language Switch */}
-          <button
-            onClick={toggleLanguage}
-            className="p-2 rounded-xl hover:bg-neutral-100 dark:hover:bg-neutral-800/70 text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 text-xs font-medium transition-colors flex items-center gap-1.5 cursor-pointer"
-            title={language === 'ar' ? 'Switch to English' : 'التحويل للعربية'}
-          >
-            <Globe className="w-4 h-4" />
-            <span className="hidden sm:inline font-mono text-xs">{language === 'ar' ? 'EN' : 'عربي'}</span>
-          </button>
-
-          {/* Dark Mode */}
-          <button
-            onClick={toggleDarkMode}
-            className="p-2 rounded-xl hover:bg-neutral-100 dark:hover:bg-neutral-800/70 text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors cursor-pointer"
-            title={isDarkMode ? 'Light Mode' : 'Dark Mode'}
-          >
-            {isDarkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-          </button>
-
-          {/* Settings Modal Trigger */}
-          <button
-            onClick={() => setIsSettingsOpen(true)}
-            className="p-2 rounded-xl hover:bg-neutral-100 dark:hover:bg-neutral-800/70 text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors cursor-pointer"
-            title={language === 'ar' ? 'إعدادات المنظومة' : 'Workspace Settings'}
-          >
-            <Settings className="w-4 h-4" />
-          </button>
-
-          {/* User Profile Avatar with Integrated Role / Persona Switcher */}
-          <div ref={userMenuRef} className="relative ms-1">
-            <button
-              onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
-              className="flex items-center gap-2 p-1 sm:ps-2 sm:pe-2.5 rounded-xl hover:bg-neutral-100 dark:hover:bg-neutral-800/70 transition-colors cursor-pointer border border-transparent hover:border-neutral-200 dark:hover:border-neutral-700/60"
-            >
-              <div className="w-8 h-8 rounded-lg bg-sky-600 text-white flex items-center justify-center font-bold text-xs shadow-xs">
-                {currentUser?.full_name?.charAt(0) || <Users className="w-4 h-4" />}
-              </div>
-              <div className="hidden lg:block text-start leading-tight">
-                <div className="text-xs font-semibold text-neutral-900 dark:text-neutral-100 truncate max-w-[120px]" dir="auto">
-                  {currentUser ? currentUser.full_name.split(' (')[0] : (language === 'ar' ? 'تسجيل الدخول' : 'Sign in')}
-                </div>
-                <div className="text-[10px] text-neutral-500 dark:text-neutral-400 truncate max-w-[120px]" dir="auto">
-                  {currentUser ? (isScout ? (currentMember?.member_code || 'Scout') : (currentRole?.name || 'Leader')) : (language === 'ar' ? 'غير مسجل' : 'Guest')}
-                </div>
-              </div>
-              <ChevronDown className="w-3.5 h-3.5 text-neutral-400 hidden sm:block" />
-            </button>
-
-            {/* User Dropdown with Role / Persona Switcher (Section 1 requirement) */}
-            {isUserMenuOpen && (
-              <div className="absolute end-0 top-12 w-72 bg-white dark:bg-[#111827] rounded-2xl shadow-2xl border border-neutral-200 dark:border-neutral-800/90 p-3 z-50 animate-fadeIn space-y-3">
-                {/* User Identity Header */}
-                {currentUser ? (
-                  <div className="p-2 rounded-xl bg-neutral-50 dark:bg-[#0B0F17] border border-neutral-200/60 dark:border-neutral-800/60">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-9 h-9 rounded-lg bg-sky-600 text-white font-bold text-sm flex items-center justify-center shrink-0">
-                        {currentUser.full_name.charAt(0)}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="text-xs font-bold text-neutral-900 dark:text-neutral-100 truncate" dir="auto">
-                          {currentUser.full_name}
-                        </div>
-                        <div className="text-[11px] text-neutral-500 dark:text-neutral-400 truncate font-mono">
-                          {currentUser.email}
-                        </div>
-                      </div>
+            {/* Instant Search Results Dropdown (Mobile Overlay) */}
+            {isMobileSearchOpen && searchResults && (
+              <div className="sm:hidden fixed top-16 inset-x-2 bg-white dark:bg-[#111827] rounded-2xl shadow-2xl border border-neutral-200 dark:border-neutral-800/90 p-3 z-50 space-y-3 max-h-[75vh] overflow-y-auto animate-fadeIn">
+                {searchResults.units.length > 0 && (
+                  <div>
+                    <div className="text-[11px] font-semibold uppercase tracking-wider text-neutral-400 px-2 py-1">
+                      {language === 'ar' ? 'الوحدات الكشفية' : 'Units'}
                     </div>
-                    <div className="mt-2 flex items-center justify-between">
-                      <span className="inline-block px-2 py-0.5 rounded text-[10px] font-semibold bg-sky-500/10 text-sky-600 dark:bg-sky-400/15 dark:text-sky-300 border border-sky-500/20 font-mono">
-                        {isScout ? (language === 'ar' ? 'حساب كشاف' : 'Scout Persona') : (currentRole?.description ? currentRole.description.split(' - ')[0] : 'Leader')}
-                      </span>
-                      {isScout && currentMember && (
-                        <span className="text-[10px] font-mono text-neutral-400">
-                          {currentMember.member_code}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="p-2.5 rounded-xl bg-neutral-50 dark:bg-[#0B0F17] border border-neutral-200/60 dark:border-neutral-800/60 flex items-center justify-between">
-                    <div>
-                      <div className="text-xs font-bold text-neutral-900 dark:text-neutral-100">
-                        {language === 'ar' ? 'غير مسجل دخول' : 'Not Signed In'}
-                      </div>
-                      <div className="text-[11px] text-neutral-500 dark:text-neutral-400">
-                        {language === 'ar' ? 'يرجى تسجيل الدخول' : 'Please sign in'}
-                      </div>
-                    </div>
-                    <Link
-                      href="/login"
-                      onClick={() => setIsUserMenuOpen(false)}
-                      className="px-2.5 py-1 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold transition-colors"
-                    >
-                      {language === 'ar' ? 'دخول' : 'Sign in'}
-                    </Link>
+                    {searchResults.units.map((u) => (
+                      <Link
+                        key={u.id}
+                        href={`/attendance?unit=${u.id}`}
+                        onClick={() => {
+                          setIsMobileSearchOpen(false);
+                          setSearchQuery('');
+                        }}
+                        className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg hover:bg-neutral-100 dark:hover:bg-[#1E293B] text-xs font-medium text-neutral-800 dark:text-neutral-200 transition-colors"
+                      >
+                        <Folder className="w-4 h-4 text-sky-500" />
+                        <span dir="auto">{language === 'ar' ? u.name_ar : u.name_en}</span>
+                        <span className="text-[10px] font-mono text-neutral-400 ms-auto">{u.code}</span>
+                      </Link>
+                    ))}
                   </div>
                 )}
+
+                {searchResults.members.length > 0 && (
+                  <div>
+                    <div className="text-[11px] font-semibold uppercase tracking-wider text-neutral-400 px-2 py-1">
+                      {language === 'ar' ? 'الأعضاء والكشافون' : 'Members'}
+                    </div>
+                    {searchResults.members.map((m) => (
+                      <Link
+                        key={m.id}
+                        href="/members"
+                        onClick={() => {
+                          setIsMobileSearchOpen(false);
+                          setSearchQuery('');
+                        }}
+                        className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg hover:bg-neutral-100 dark:hover:bg-[#1E293B] text-xs font-medium text-neutral-800 dark:text-neutral-200 transition-colors"
+                      >
+                        <Users className="w-4 h-4 text-emerald-500" />
+                        <span dir="auto">{language === 'ar' ? m.full_name_ar : (m.full_name_en || m.full_name_ar)}</span>
+                        <span className="text-[10px] font-mono text-neutral-400 ms-auto">{m.member_code}</span>
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Trailing: Mobile Search Button, Settings, Theme, Lang, Avatar & Role Switcher */}
+            <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+              {/* Mobile Search Icon Trigger */}
+              <button
+                onClick={() => setIsMobileSearchOpen(true)}
+                className="sm:hidden p-2 rounded-xl hover:bg-neutral-100 dark:hover:bg-neutral-800/70 text-neutral-600 dark:text-neutral-400 transition-colors cursor-pointer"
+                title={language === 'ar' ? 'بحث' : 'Search'}
+              >
+                <Search className="w-4 h-4" />
+              </button>
+
+              {/* Active Testing Persona Quick Return Button (Desktop) */}
+              {!isSuperAdmin && (
+                <button
+                  onClick={() => loginAs('u0')}
+                  className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/30 text-xs font-semibold hover:bg-amber-500/20 transition-colors cursor-pointer"
+                  title={language === 'ar' ? 'الرجوع لحساب مدير النظام لتعديل الصلاحيات' : 'Switch back to System Admin to edit permissions'}
+                >
+                  <ShieldCheck className="w-3.5 h-3.5 text-amber-500" />
+                  <span>{language === 'ar' ? 'اختبار كـ:' : 'Testing as:'} {currentUser?.full_name?.split(' (')[0]?.split(' ')[0]}</span>
+                  <span className="text-[10px] underline font-bold ms-1">{language === 'ar' ? '(رجوع للأدمن)' : '(Switch to Admin)'}</span>
+                </button>
+              )}
+
+              {/* Language Switch */}
+              <button
+                onClick={toggleLanguage}
+                className="p-2 rounded-xl hover:bg-neutral-100 dark:hover:bg-neutral-800/70 text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 text-xs font-medium transition-colors flex items-center gap-1 cursor-pointer"
+                title={language === 'ar' ? 'Switch to English' : 'التحويل للعربية'}
+              >
+                <Globe className="w-4 h-4" />
+                <span className="hidden sm:inline font-mono text-xs">{language === 'ar' ? 'EN' : 'عربي'}</span>
+              </button>
+
+              {/* Dark Mode */}
+              <button
+                onClick={toggleDarkMode}
+                className="p-2 rounded-xl hover:bg-neutral-100 dark:hover:bg-neutral-800/70 text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors cursor-pointer"
+                title={isDarkMode ? 'Light Mode' : 'Dark Mode'}
+              >
+                {isDarkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+              </button>
+
+              {/* Settings Modal Trigger (Desktop/Tablet) */}
+              <button
+                onClick={() => setIsSettingsOpen(true)}
+                className="hidden sm:flex p-2 rounded-xl hover:bg-neutral-100 dark:hover:bg-neutral-800/70 text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors cursor-pointer"
+                title={language === 'ar' ? 'إعدادات المنظومة' : 'Workspace Settings'}
+              >
+                <Settings className="w-4 h-4" />
+              </button>
+
+              {/* User Profile Avatar with Integrated Role / Persona Switcher */}
+              <div ref={userMenuRef} className="relative ms-0.5 sm:ms-1">
+                <button
+                  onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+                  className="flex items-center gap-1.5 p-1 sm:ps-2 sm:pe-2 rounded-xl hover:bg-neutral-100 dark:hover:bg-neutral-800/70 transition-colors cursor-pointer border border-transparent hover:border-neutral-200 dark:hover:border-neutral-700/60"
+                >
+                  <div className="w-8 h-8 rounded-lg bg-sky-600 text-white flex items-center justify-center font-bold text-xs shadow-xs">
+                    {currentUser?.full_name?.charAt(0) || <Users className="w-4 h-4" />}
+                  </div>
+                  <div className="hidden lg:block text-start leading-tight">
+                    <div className="text-xs font-semibold text-neutral-900 dark:text-neutral-100 truncate max-w-[120px]" dir="auto">
+                      {currentUser ? currentUser.full_name.split(' (')[0] : (language === 'ar' ? 'تسجيل الدخول' : 'Sign in')}
+                    </div>
+                    <div className="text-[10px] text-neutral-500 dark:text-neutral-400 truncate max-w-[120px]" dir="auto">
+                      {currentUser ? (isScout ? (currentMember?.member_code || 'Scout') : (currentRole?.name || 'Leader')) : (language === 'ar' ? 'غير مسجل' : 'Guest')}
+                    </div>
+                  </div>
+                  <ChevronDown className="w-3.5 h-3.5 text-neutral-400 hidden sm:block" />
+                </button>
+
+                {/* User Dropdown with Role / Persona Switcher */}
+                {isUserMenuOpen && (
+                  <div className="absolute end-0 top-12 w-[calc(100vw-1.5rem)] max-w-sm sm:w-80 bg-white dark:bg-[#111827] rounded-2xl shadow-2xl border border-neutral-200 dark:border-neutral-800/90 p-3 z-50 animate-fadeIn space-y-3 max-h-[80vh] overflow-y-auto">
+                    {/* User Identity Header */}
+                    {currentUser ? (
+                      <div className="p-2 rounded-xl bg-neutral-50 dark:bg-[#0B0F17] border border-neutral-200/60 dark:border-neutral-800/60">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-9 h-9 rounded-lg bg-sky-600 text-white font-bold text-sm flex items-center justify-center shrink-0">
+                            {currentUser.full_name.charAt(0)}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="text-xs font-bold text-neutral-900 dark:text-neutral-100 truncate" dir="auto">
+                              {currentUser.full_name}
+                            </div>
+                            <div className="text-[11px] text-neutral-500 dark:text-neutral-400 truncate font-mono">
+                              {currentUser.email}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="mt-2 flex items-center justify-between">
+                          <span className="inline-block px-2 py-0.5 rounded text-[10px] font-semibold bg-sky-500/10 text-sky-600 dark:bg-sky-400/15 dark:text-sky-300 border border-sky-500/20 font-mono">
+                            {isScout ? (language === 'ar' ? 'حساب كشاف' : 'Scout Persona') : (currentRole?.description ? currentRole.description.split(' - ')[0] : 'Leader')}
+                          </span>
+                          {isScout && currentMember && (
+                            <span className="text-[10px] font-mono text-neutral-400">
+                              {currentMember.member_code}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-2.5 rounded-xl bg-neutral-50 dark:bg-[#0B0F17] border border-neutral-200/60 dark:border-neutral-800/60 flex items-center justify-between">
+                        <div>
+                          <div className="text-xs font-bold text-neutral-900 dark:text-neutral-100">
+                            {language === 'ar' ? 'غير مسجل دخول' : 'Not Signed In'}
+                          </div>
+                          <div className="text-[11px] text-neutral-500 dark:text-neutral-400">
+                            {language === 'ar' ? 'يرجى تسجيل الدخول' : 'Please sign in'}
+                          </div>
+                        </div>
+                        <Link
+                          href="/login"
+                          onClick={() => setIsUserMenuOpen(false)}
+                          className="px-2.5 py-1 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold transition-colors"
+                        >
+                          {language === 'ar' ? 'دخول' : 'Sign in'}
+                        </Link>
+                      </div>
+                    )}
 
                 {/* ROLE & PERSONA SWITCHER (Moved here from primary navigation) */}
                 <div className="space-y-1">
@@ -671,6 +794,8 @@ export function GoogleWorkspaceLayout({ children }: { children: React.ReactNode 
             )}
           </div>
         </div>
+        </>
+      )}
       </header>
 
       {/* 2. BODY WORKSPACE (Collapsible Drawer + Main Canvas) */}
@@ -806,11 +931,12 @@ export function GoogleWorkspaceLayout({ children }: { children: React.ReactNode 
         {isMobileSidebarOpen && (
           <div className="fixed inset-0 z-50 md:hidden flex">
             <div
-              className="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity"
+              className="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity animate-fadeIn"
               onClick={() => setIsMobileSidebarOpen(false)}
             />
-            <div className="relative w-64 bg-white dark:bg-[#111827] h-full p-4 flex flex-col z-10 shadow-2xl border-e border-neutral-200 dark:border-neutral-800/80">
-              <div className="flex items-center justify-between pb-3 border-b border-neutral-200 dark:border-neutral-800/80">
+            <div className="relative w-72 max-w-[85vw] bg-white dark:bg-[#111827] h-full p-4 flex flex-col z-10 shadow-2xl border-e border-neutral-200 dark:border-neutral-800/80 overflow-y-auto animate-in slide-in-from-start duration-200">
+              {/* Drawer Header */}
+              <div className="flex items-center justify-between pb-3 border-b border-neutral-200 dark:border-neutral-800/80 shrink-0">
                 <div className="flex items-center gap-2.5">
                   <div className="w-8 h-8 rounded-lg overflow-hidden bg-white p-0.5 border border-neutral-200 dark:border-neutral-700 shrink-0">
                     <img
@@ -820,23 +946,119 @@ export function GoogleWorkspaceLayout({ children }: { children: React.ReactNode 
                     />
                   </div>
                   <div>
-                    <div className="font-extrabold text-sm text-neutral-900 dark:text-neutral-100">
-                      SMSR
+                    <div className="font-extrabold text-sm text-neutral-900 dark:text-neutral-100 flex items-center gap-1.5">
+                      <span>SMSR</span>
+                      <span className="text-[9px] font-mono font-medium px-1.5 py-0.2 rounded bg-sky-500/10 text-sky-600 dark:bg-sky-400/15 dark:text-sky-300 border border-sky-500/20">
+                        {isScout ? 'Scout' : 'Leader'}
+                      </span>
                     </div>
-                    <div className="text-[10px] text-neutral-500 dark:text-neutral-400">
+                    <div className="text-[10px] text-neutral-500 dark:text-neutral-400 truncate max-w-[150px]">
                       {language === 'ar' ? 'كشافة السيدة العذراء بالرحاب' : 'St. Mary Scouts Rehab'}
                     </div>
                   </div>
                 </div>
                 <button
                   onClick={() => setIsMobileSidebarOpen(false)}
-                  className="p-1.5 rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-400"
+                  className="p-1.5 rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200 cursor-pointer"
                 >
-                  <X className="w-4 h-4" />
+                  <X className="w-5 h-5" />
                 </button>
               </div>
 
-              <nav className="mt-4 flex-1 space-y-1">
+              {/* Active User Card in Mobile Drawer */}
+              {currentUser && (
+                <div className="mt-3 p-2.5 rounded-xl bg-neutral-50 dark:bg-[#0B0F17] border border-neutral-200/60 dark:border-neutral-800/60 shrink-0">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-lg bg-sky-600 text-white font-bold text-xs flex items-center justify-center shrink-0">
+                      {currentUser.full_name.charAt(0)}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs font-bold text-neutral-900 dark:text-neutral-100 truncate" dir="auto">
+                        {currentUser.full_name}
+                      </div>
+                      <div className="text-[10px] text-neutral-500 dark:text-neutral-400 truncate font-mono">
+                        {isScout ? (currentMember?.member_code || 'Scout') : (currentRole?.name || 'Leader')}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* "+ New Action" Menu for Mobile */}
+              {hasAnyNewAction && (
+                <div className="mt-3 shrink-0">
+                  <button
+                    onClick={() => setIsMobileNewMenuOpen(!isMobileNewMenuOpen)}
+                    className="w-full bg-sky-600 hover:bg-sky-500 active:bg-sky-700 text-white rounded-xl px-3 py-2.5 flex items-center justify-between text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Plus className="w-4 h-4" strokeWidth={2.5} />
+                      <span>{language === 'ar' ? 'إجراء جديد' : 'New Action'}</span>
+                    </div>
+                    <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isMobileNewMenuOpen ? 'rotate-180' : ''}`} />
+                  </button>
+
+                  {isMobileNewMenuOpen && (
+                    <div className="mt-1.5 p-1 rounded-xl bg-neutral-100 dark:bg-[#0B0F17] border border-neutral-200 dark:border-neutral-800 space-y-0.5 animate-fadeIn">
+                      {canNewAttendance && (
+                        <Link
+                          href="/attendance"
+                          onClick={() => {
+                            setIsMobileNewMenuOpen(false);
+                            setIsMobileSidebarOpen(false);
+                          }}
+                          className="flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-neutral-800 dark:text-neutral-200 hover:bg-neutral-200/60 dark:hover:bg-[#1E293B] rounded-lg transition-colors"
+                        >
+                          <CalendarCheck className="w-3.5 h-3.5 text-emerald-500" />
+                          <span>{language === 'ar' ? 'تسجيل كشف حضور جديد' : 'New Attendance Roster'}</span>
+                        </Link>
+                      )}
+                      {canNewMemberOrLeader && (
+                        <Link
+                          href="/members"
+                          onClick={() => {
+                            setIsMobileNewMenuOpen(false);
+                            setIsMobileSidebarOpen(false);
+                          }}
+                          className="flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-neutral-800 dark:text-neutral-200 hover:bg-neutral-200/60 dark:hover:bg-[#1E293B] rounded-lg transition-colors"
+                        >
+                          <UserPlus className="w-3.5 h-3.5 text-sky-500" />
+                          <span>{language === 'ar' ? 'إضافة كشاف أو قائد' : 'New Scout or Leader'}</span>
+                        </Link>
+                      )}
+                      {canNewGear && (
+                        <Link
+                          href="/inventory"
+                          onClick={() => {
+                            setIsMobileNewMenuOpen(false);
+                            setIsMobileSidebarOpen(false);
+                          }}
+                          className="flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-neutral-800 dark:text-neutral-200 hover:bg-neutral-200/60 dark:hover:bg-[#1E293B] rounded-lg transition-colors"
+                        >
+                          <Package className="w-3.5 h-3.5 text-amber-500" />
+                          <span>{language === 'ar' ? 'حجز مهمات عهدة كشفية' : 'New Gear Reservation'}</span>
+                        </Link>
+                      )}
+                      {canNewMedia && (
+                        <Link
+                          href="/media"
+                          onClick={() => {
+                            setIsMobileNewMenuOpen(false);
+                            setIsMobileSidebarOpen(false);
+                          }}
+                          className="flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-neutral-800 dark:text-neutral-200 hover:bg-neutral-200/60 dark:hover:bg-[#1E293B] rounded-lg transition-colors"
+                        >
+                          <UploadCloud className="w-3.5 h-3.5 text-purple-500" />
+                          <span>{language === 'ar' ? 'رفع صور وألبومات' : 'Upload Media to Drive'}</span>
+                        </Link>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Mobile Drawer Navigation List */}
+              <nav className="mt-3 flex-1 space-y-1">
                 {navItems.map((item) => {
                   const Icon = item.icon;
                   const isActive = pathname === item.href;
@@ -845,29 +1067,124 @@ export function GoogleWorkspaceLayout({ children }: { children: React.ReactNode 
                       key={item.href}
                       href={item.href}
                       onClick={() => setIsMobileSidebarOpen(false)}
-                      className={`flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium transition-colors ${
+                      className={`flex items-center justify-between px-3 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-colors ${
                         isActive
                           ? 'bg-sky-500/10 text-sky-700 dark:bg-sky-400/15 dark:text-sky-300 font-semibold border-s-2 border-sky-500'
-                          : 'text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800'
+                          : 'text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-[#1E293B]'
                       }`}
                     >
-                      <Icon className="w-4 h-4" />
-                      <span>{item.label}</span>
+                      <div className="flex items-center gap-3">
+                        <Icon className="w-4 h-4" />
+                        <span>{item.label}</span>
+                      </div>
+                      {item.badge && (
+                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-md bg-neutral-100 dark:bg-[#1E293B] text-neutral-500 dark:text-neutral-400 border border-neutral-200/60 dark:border-neutral-800/60">
+                          {item.badge}
+                        </span>
+                      )}
                     </Link>
                   );
                 })}
               </nav>
+
+              {/* Bottom Quick Tools in Drawer */}
+              <div className="pt-3 border-t border-neutral-200/80 dark:border-neutral-800/60 space-y-2 shrink-0">
+                <button
+                  onClick={() => {
+                    setIsMobileSidebarOpen(false);
+                    setIsSettingsOpen(true);
+                  }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-[#1E293B] transition-colors cursor-pointer"
+                >
+                  <Settings className="w-4 h-4 text-sky-500" />
+                  <span>{language === 'ar' ? 'إعدادات المنظومة' : 'Workspace Settings'}</span>
+                </button>
+
+                {/* Drive Storage Indicator */}
+                <div className="p-2.5 rounded-xl bg-neutral-50 dark:bg-[#0B0F17] border border-neutral-200/60 dark:border-neutral-800/60 space-y-1.5">
+                  <div className="flex items-center justify-between text-[11px] text-neutral-500 dark:text-neutral-400">
+                    <div className="flex items-center gap-1.5">
+                      <HardDrive className="w-3 h-3 text-sky-500" />
+                      <span>{language === 'ar' ? 'سحابة درايف' : 'Storage'}</span>
+                    </div>
+                    <span className="font-mono text-[10px]">15%</span>
+                  </div>
+                  <div className="w-full h-1 bg-neutral-200 dark:bg-[#1E293B] rounded-full overflow-hidden">
+                    <div className="w-[15%] h-full bg-sky-500 rounded-full" />
+                  </div>
+                  <div className="text-[9px] text-neutral-400 dark:text-neutral-400 font-mono">
+                    {language === 'ar' ? '15 GB من 100 GB مستخدمة' : '15 GB of 100 GB used'}
+                  </div>
+                </div>
+
+                {currentUser && (
+                  <button
+                    onClick={() => {
+                      logout();
+                      setIsMobileSidebarOpen(false);
+                      router.push('/login');
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors cursor-pointer"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                    <span>{language === 'ar' ? 'تسجيل الخروج' : 'Sign out'}</span>
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         )}
 
         {/* 3. MAIN CANVAS */}
-        <main className="flex-1 overflow-y-auto bg-[#F8FAFD] dark:bg-[#0B0F17] p-4 sm:p-6 lg:p-8">
+        <main className="flex-1 overflow-y-auto bg-[#F8FAFD] dark:bg-[#0B0F17] p-3.5 sm:p-6 lg:p-8 pb-24 md:pb-8">
           <div className="max-w-7xl mx-auto w-full">
             {children}
           </div>
         </main>
       </div>
+
+      {/* 4. MOBILE BOTTOM APP BAR (Native iOS / Android experience) */}
+      <nav className="md:hidden fixed bottom-0 inset-x-0 bg-white/95 dark:bg-[#111827]/95 backdrop-blur-md border-t border-neutral-200/80 dark:border-neutral-800/80 z-40 px-2 py-1.5 pb-safe flex items-center justify-around select-none">
+        {bottomBarItems.map((item) => {
+          const Icon = item.icon;
+          const isActive = pathname === item.href;
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={`flex-1 flex flex-col items-center justify-center py-1 rounded-xl text-xs font-medium transition-colors cursor-pointer ${
+                isActive
+                  ? 'text-sky-600 dark:text-sky-400 font-bold'
+                  : 'text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100'
+              }`}
+            >
+              <div className="relative">
+                <Icon className={`w-5 h-5 ${isActive ? 'stroke-[2.5]' : 'stroke-2'}`} />
+                {isActive && (
+                  <span className="absolute -bottom-1.5 inset-x-0 mx-auto w-1.5 h-1.5 rounded-full bg-sky-500" />
+                )}
+              </div>
+              <span className="text-[10px] mt-1 leading-none truncate max-w-[60px] text-center">
+                {item.label}
+              </span>
+            </Link>
+          );
+        })}
+
+        {/* Menu Toggle in Bottom Bar */}
+        <button
+          onClick={() => setIsMobileSidebarOpen(true)}
+          className={`flex-1 flex flex-col items-center justify-center py-1 rounded-xl text-xs font-medium transition-colors cursor-pointer ${
+            isMobileSidebarOpen
+              ? 'text-sky-600 dark:text-sky-400 font-bold'
+              : 'text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100'
+          }`}
+          title={language === 'ar' ? 'المزيد' : 'More'}
+        >
+          <Menu className="w-5 h-5 stroke-2" />
+          <span className="text-[10px] mt-1 leading-none">{language === 'ar' ? 'المزيد' : 'More'}</span>
+        </button>
+      </nav>
 
       {/* Settings Modal */}
       {isSettingsOpen && (

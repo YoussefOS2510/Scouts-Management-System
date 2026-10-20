@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Noto_Sans_Arabic, Inter, JetBrains_Mono } from 'next/font/google';
 import './globals.css';
 import { LanguageProvider } from '../lib/LanguageContext';
@@ -25,6 +25,18 @@ const mono = JetBrains_Mono({
   weight: ['400', '500', '700'],
   display: 'swap',
 });
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 5,
+  userScalable: true,
+  viewportFit: 'cover',
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#F8FAFD' },
+    { media: '(prefers-color-scheme: dark)', color: '#0B0F17' },
+  ],
+};
 
 export const metadata: Metadata = {
   title: 'SMSR | St. Mary Scouts Rehab - كشافة السيدة العذراء بالرحاب',

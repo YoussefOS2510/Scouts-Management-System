@@ -340,22 +340,24 @@ export default function InventoryPage() {
                     </div>
 
                     {/* Quantity Selector Controls */}
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1.5">
                       <button
                         type="button"
                         onClick={() => handleQuantityChange(item.id, reqQty - 1)}
-                        className="w-6 h-6 rounded bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 font-bold text-xs flex items-center justify-center transition-colors cursor-pointer"
+                        className="w-8 h-8 sm:w-7 sm:h-7 rounded-md bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 font-bold text-sm sm:text-xs flex items-center justify-center transition-colors cursor-pointer active:scale-95 touch-manipulation"
+                        aria-label="Decrease quantity"
                       >
                         -
                       </button>
-                      <span className="w-7 text-center text-xs font-mono font-medium text-zinc-900 dark:text-zinc-100 tabular-nums">
+                      <span className="w-8 text-center text-xs font-mono font-medium text-zinc-900 dark:text-zinc-100 tabular-nums">
                         {reqQty}
                       </span>
                       <button
                         type="button"
                         onClick={() => handleQuantityChange(item.id, reqQty + 1)}
                         disabled={reqQty >= check.availableQuantity}
-                        className="w-6 h-6 rounded bg-zinc-900 dark:bg-zinc-100 hover:bg-zinc-800 dark:hover:bg-white disabled:bg-zinc-100 disabled:dark:bg-zinc-800 disabled:text-zinc-400 text-white dark:text-zinc-900 font-bold text-xs flex items-center justify-center transition-colors cursor-pointer"
+                        className="w-8 h-8 sm:w-7 sm:h-7 rounded-md bg-zinc-900 dark:bg-zinc-100 hover:bg-zinc-800 dark:hover:bg-white disabled:bg-zinc-100 disabled:dark:bg-zinc-800 disabled:text-zinc-400 text-white dark:text-zinc-900 font-bold text-sm sm:text-xs flex items-center justify-center transition-colors cursor-pointer active:scale-95 touch-manipulation"
+                        aria-label="Increase quantity"
                       >
                         +
                       </button>

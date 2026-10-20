@@ -377,32 +377,34 @@ export default function AttendancePage() {
       ) : (
         <>
           {/* 2. REFACTORED CONTROL TOOLBAR (Unit, Date, Compact Batch Actions, Export, Save) */}
-          <div className="bg-white dark:bg-[#111827] rounded-xl p-3 sm:p-4 border border-neutral-200 dark:border-neutral-800/80 flex flex-wrap items-center justify-between gap-3 shadow-none">
-            <div className="flex flex-wrap items-center gap-2.5">
+          <div className="bg-white dark:bg-[#111827] rounded-xl p-3 sm:p-4 border border-neutral-200 dark:border-neutral-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-none">
+            <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2 sm:gap-2.5">
               {/* Unit Dropdown */}
-              <div className="flex items-center gap-2 bg-neutral-100 dark:bg-[#0B0F17] rounded-lg px-2.5 py-1.5 border border-neutral-200/80 dark:border-neutral-800/80">
-                <Folder className="w-4 h-4 text-sky-500" />
-                <select
-                  value={selectedUnitId}
-                  onChange={(e) => setSelectedUnitId(Number(e.target.value))}
-                  disabled={!canViewAllUnits && accessibleUnits.length <= 1}
-                  className="bg-transparent border-none text-xs font-medium text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-0 cursor-pointer"
-                >
-                  {accessibleUnits.map((unit) => (
-                    <option key={unit.id} value={unit.id} className="dark:bg-[#111827]">
-                      {language === 'ar' ? unit.name_ar : unit.name_en}
-                    </option>
-                  ))}
-                </select>
+              <div className="flex items-center gap-2 bg-neutral-100 dark:bg-[#0B0F17] rounded-lg px-2.5 py-1.5 border border-neutral-200/80 dark:border-neutral-800/80 justify-between sm:justify-start">
+                <div className="flex items-center gap-2">
+                  <Folder className="w-4 h-4 text-sky-500 shrink-0" />
+                  <select
+                    value={selectedUnitId}
+                    onChange={(e) => setSelectedUnitId(Number(e.target.value))}
+                    disabled={!canViewAllUnits && accessibleUnits.length <= 1}
+                    className="bg-transparent border-none text-xs font-medium text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-0 cursor-pointer"
+                  >
+                    {accessibleUnits.map((unit) => (
+                      <option key={unit.id} value={unit.id} className="dark:bg-[#111827]">
+                        {language === 'ar' ? unit.name_ar : unit.name_en}
+                      </option>
+                    ))}
+                  </select>
+                </div>
                 {!canViewAllUnits && accessibleUnits.length <= 1 && (
-                  <span className="text-[10px] text-amber-500 flex items-center gap-0.5">
+                  <span className="text-[10px] text-amber-500 flex items-center gap-0.5 shrink-0">
                     <Lock className="w-3 h-3" />
                   </span>
                 )}
               </div>
 
               {/* Date Picker */}
-              <div className="flex items-center gap-2 bg-neutral-100 dark:bg-[#0B0F17] rounded-lg px-2.5 py-1.5 border border-neutral-200/80 dark:border-neutral-800/80">
+              <div className="flex items-center gap-2 bg-neutral-100 dark:bg-[#0B0F17] rounded-lg px-2.5 py-1.5 border border-neutral-200/80 dark:border-neutral-800/80 justify-between sm:justify-start">
                 <span className="text-xs text-neutral-500 dark:text-neutral-400 font-medium">{t('date')}:</span>
                 <input
                   type="date"
@@ -412,12 +414,12 @@ export default function AttendancePage() {
                 />
               </div>
 
-              {/* Compact Batch Action Buttons in Toolbar (Requirement 2) */}
+              {/* Compact Batch Action Buttons in Toolbar */}
               {canTakeAttendance && (
-                <div className="flex items-center gap-1.5 ms-0 sm:ms-2">
+                <div className="flex items-center gap-1.5 w-full sm:w-auto justify-between sm:justify-start">
                   <button
                     onClick={handleMarkAllPresent}
-                    className="px-2.5 py-1.5 rounded-lg text-xs font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 flex items-center gap-1.5 transition-colors cursor-pointer"
+                    className="flex-1 sm:flex-initial px-2.5 py-1.5 rounded-lg text-xs font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                     title={t('mark_all_present')}
                   >
                     <CheckCircle2 className="w-3.5 h-3.5" />
@@ -425,7 +427,7 @@ export default function AttendancePage() {
                   </button>
                   <button
                     onClick={handleClearAll}
-                    className="px-2.5 py-1.5 rounded-lg text-xs font-medium text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800 border border-neutral-200 dark:border-neutral-700/60 flex items-center gap-1.5 transition-colors cursor-pointer"
+                    className="px-2.5 py-1.5 rounded-lg text-xs font-medium text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800 border border-neutral-200 dark:border-neutral-700/60 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                     title={language === 'ar' ? 'إعادة ضبط الاختيارات' : 'Clear selection'}
                   >
                     <RotateCcw className="w-3.5 h-3.5" />
@@ -436,7 +438,7 @@ export default function AttendancePage() {
             </div>
 
             {/* Actions: Export Excel & Save Session */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 w-full sm:w-auto justify-end pt-1 sm:pt-0 border-t sm:border-t-0 border-neutral-100 dark:border-neutral-800">
               {can('attendance.export', selectedUnitId) && (
                 <button
                   onClick={() => {
@@ -453,7 +455,7 @@ export default function AttendancePage() {
                   className="px-3 py-2 rounded-xl text-xs font-medium bg-neutral-100 hover:bg-neutral-200/70 dark:bg-[#1E293B] dark:hover:bg-neutral-700/80 text-neutral-800 dark:text-neutral-200 flex items-center gap-1.5 transition-colors cursor-pointer border border-neutral-200/80 dark:border-neutral-700/50"
                 >
                   <FileSpreadsheet className="w-4 h-4 text-emerald-500" />
-                  <span>{language === 'ar' ? 'تصدير إكسيل' : 'Export'}</span>
+                  <span>{language === 'ar' ? 'تصدير' : 'Export'}</span>
                 </button>
               )}
 
@@ -461,7 +463,7 @@ export default function AttendancePage() {
                 <button
                   onClick={handleSave}
                   disabled={isDuplicateDate}
-                  className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer ${
+                  className={`flex-1 sm:flex-initial px-4 py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
                     isDuplicateDate
                       ? 'bg-neutral-200 dark:bg-neutral-800 text-neutral-400 cursor-not-allowed'
                       : 'bg-sky-600 hover:bg-sky-500 text-white shadow-xs'
@@ -496,8 +498,8 @@ export default function AttendancePage() {
           )}
 
           {/* 3. SLEEK SINGLE-ROW SUMMARY BAR (Requirement 2) */}
-          <div className="bg-white dark:bg-[#111827] rounded-xl px-4 py-3 border border-neutral-200 dark:border-neutral-800/80 flex flex-wrap items-center justify-between gap-4 shadow-none">
-            <div className="flex flex-wrap items-center gap-4 sm:gap-6 divide-x rtl:divide-x-reverse divide-neutral-200 dark:divide-neutral-800/80 text-xs">
+          <div className="bg-white dark:bg-[#111827] rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 border border-neutral-200 dark:border-neutral-800/80 flex flex-wrap items-center justify-between gap-3 sm:gap-4 shadow-none">
+            <div className="flex flex-wrap items-center gap-3 sm:gap-6 divide-x rtl:divide-x-reverse divide-neutral-200 dark:divide-neutral-800/80 text-xs">
               {/* Enrolled Total */}
               <div className="flex items-center gap-2">
                 <span className="text-neutral-500 dark:text-neutral-400 font-medium">
@@ -509,7 +511,7 @@ export default function AttendancePage() {
               </div>
 
               {/* Present */}
-              <div className="ps-4 sm:ps-6 flex items-center gap-2">
+              <div className="ps-3 sm:ps-6 flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
                 <span className="text-neutral-500 dark:text-neutral-400 font-medium">{t('present_count')}</span>
                 <span className="text-sm sm:text-base font-bold font-mono text-emerald-600 dark:text-emerald-400 tabular-nums">
@@ -609,11 +611,11 @@ export default function AttendancePage() {
                           </div>
 
                           {/* Unified Compact Segmented Radio-Group Control */}
-                          <div className="flex items-center gap-2 self-start sm:self-auto shrink-0 flex-wrap">
+                          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto shrink-0">
                             <div
                               role="radiogroup"
                               aria-label={`Attendance for ${member.full_name_ar}`}
-                              className="inline-flex p-0.5 rounded-lg bg-neutral-100 dark:bg-[#0B0F17] border border-neutral-200/90 dark:border-neutral-800 shrink-0"
+                              className="w-full sm:w-auto grid grid-cols-4 sm:inline-flex p-0.5 rounded-xl sm:rounded-lg bg-neutral-100 dark:bg-[#0B0F17] border border-neutral-200/90 dark:border-neutral-800 shrink-0"
                             >
                               {/* Present Segment */}
                               <button
@@ -621,14 +623,14 @@ export default function AttendancePage() {
                                 role="radio"
                                 aria-checked={currentStatus === 'present'}
                                 onClick={() => handleStatusChange(member.id, 'present')}
-                                className={`px-2.5 py-1 text-xs rounded-md flex items-center gap-1.5 transition-all cursor-pointer ${
+                                className={`px-1.5 sm:px-2.5 py-2 sm:py-1 text-xs rounded-lg sm:rounded-md flex items-center justify-center gap-1 sm:gap-1.5 transition-all cursor-pointer ${
                                   currentStatus === 'present'
                                     ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/40 shadow-xs font-semibold'
                                     : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200 hover:bg-white/60 dark:hover:bg-neutral-800/50 border border-transparent'
                                 }`}
                                 title={t('status_present')}
                               >
-                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
                                 <span>{t('status_present')}</span>
                               </button>
 
@@ -638,14 +640,14 @@ export default function AttendancePage() {
                                 role="radio"
                                 aria-checked={currentStatus === 'absent'}
                                 onClick={() => handleStatusChange(member.id, 'absent')}
-                                className={`px-2.5 py-1 text-xs rounded-md flex items-center gap-1.5 transition-all cursor-pointer ${
+                                className={`px-1.5 sm:px-2.5 py-2 sm:py-1 text-xs rounded-lg sm:rounded-md flex items-center justify-center gap-1 sm:gap-1.5 transition-all cursor-pointer ${
                                   currentStatus === 'absent'
                                     ? 'bg-rose-500/15 text-rose-700 dark:text-rose-400 border border-rose-500/40 shadow-xs font-semibold'
                                     : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200 hover:bg-white/60 dark:hover:bg-neutral-800/50 border border-transparent'
                                 }`}
                                 title={t('status_absent')}
                               >
-                                <XCircle className="w-3.5 h-3.5" />
+                                <XCircle className="w-3.5 h-3.5 shrink-0" />
                                 <span>{t('status_absent')}</span>
                               </button>
 
@@ -655,14 +657,14 @@ export default function AttendancePage() {
                                 role="radio"
                                 aria-checked={currentStatus === 'excused'}
                                 onClick={() => handleStatusChange(member.id, 'excused')}
-                                className={`px-2.5 py-1 text-xs rounded-md flex items-center gap-1.5 transition-all cursor-pointer ${
+                                className={`px-1.5 sm:px-2.5 py-2 sm:py-1 text-xs rounded-lg sm:rounded-md flex items-center justify-center gap-1 sm:gap-1.5 transition-all cursor-pointer ${
                                   currentStatus === 'excused'
                                     ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/40 shadow-xs font-semibold'
                                     : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200 hover:bg-white/60 dark:hover:bg-neutral-800/50 border border-transparent'
                                 }`}
                                 title={t('status_excused')}
                               >
-                                <HelpCircle className="w-3.5 h-3.5" />
+                                <HelpCircle className="w-3.5 h-3.5 shrink-0" />
                                 <span>{t('status_excused')}</span>
                               </button>
 
@@ -672,14 +674,14 @@ export default function AttendancePage() {
                                 role="radio"
                                 aria-checked={currentStatus === 'late'}
                                 onClick={() => handleStatusChange(member.id, 'late')}
-                                className={`px-2.5 py-1 text-xs rounded-md flex items-center gap-1.5 transition-all cursor-pointer ${
+                                className={`px-1.5 sm:px-2.5 py-2 sm:py-1 text-xs rounded-lg sm:rounded-md flex items-center justify-center gap-1 sm:gap-1.5 transition-all cursor-pointer ${
                                   currentStatus === 'late'
                                     ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/40 shadow-xs font-semibold'
                                     : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200 hover:bg-white/60 dark:hover:bg-neutral-800/50 border border-transparent'
                                 }`}
                                 title={t('status_late')}
                               >
-                                <Clock className="w-3.5 h-3.5" />
+                                <Clock className="w-3.5 h-3.5 shrink-0" />
                                 <span>{t('status_late')}</span>
                               </button>
                             </div>

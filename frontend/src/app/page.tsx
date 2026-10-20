@@ -421,45 +421,45 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* 3. METRIC CARDS (Requirement 3: Surface elevation tokens #111827, #1E293B, border-neutral-800) */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+      {/* 3. METRIC CARDS */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3.5">
         {/* Metric 1: Units */}
-        <div className="bg-white dark:bg-[#111827] rounded-xl p-4 border border-neutral-200 dark:border-neutral-800/80 shadow-none hover:border-neutral-300 dark:hover:border-neutral-700/80 transition-colors">
-          <div className="text-2xl sm:text-3xl font-bold text-neutral-900 dark:text-neutral-100 font-mono tabular-nums">
+        <div className="bg-white dark:bg-[#111827] rounded-xl p-3 sm:p-4 border border-neutral-200 dark:border-neutral-800/80 shadow-none hover:border-neutral-300 dark:hover:border-neutral-700/80 transition-colors">
+          <div className="text-xl sm:text-2xl lg:text-3xl font-bold text-neutral-900 dark:text-neutral-100 font-mono tabular-nums">
             {filteredUnitsCount}
           </div>
-          <div className="text-xs font-medium text-neutral-500 dark:text-neutral-400 mt-1">
+          <div className="text-[11px] sm:text-xs font-medium text-neutral-500 dark:text-neutral-400 mt-0.5 sm:mt-1 truncate">
             {language === 'ar' ? 'وحدة كشفية نشطة' : 'Active Scout Units'}
           </div>
         </div>
 
-        {/* Metric 2: Registered Scouts (Strictly youth members, reactive to filters) */}
-        <div className="bg-white dark:bg-[#111827] rounded-xl p-4 border border-neutral-200 dark:border-neutral-800/80 shadow-none hover:border-neutral-300 dark:hover:border-neutral-700/80 transition-colors">
-          <div className="text-2xl sm:text-3xl font-bold text-neutral-900 dark:text-neutral-100 font-mono tabular-nums">
+        {/* Metric 2: Registered Scouts */}
+        <div className="bg-white dark:bg-[#111827] rounded-xl p-3 sm:p-4 border border-neutral-200 dark:border-neutral-800/80 shadow-none hover:border-neutral-300 dark:hover:border-neutral-700/80 transition-colors">
+          <div className="text-xl sm:text-2xl lg:text-3xl font-bold text-neutral-900 dark:text-neutral-100 font-mono tabular-nums">
             {filteredScoutsCount}
           </div>
-          <div className="text-xs font-medium text-neutral-500 dark:text-neutral-400 mt-1">
+          <div className="text-[11px] sm:text-xs font-medium text-neutral-500 dark:text-neutral-400 mt-0.5 sm:mt-1 truncate">
             {language === 'ar' ? 'كشاف مسجل' : 'Registered Scouts'}
           </div>
         </div>
 
         {/* Metric 3: Equipment Items */}
-        <div className="bg-white dark:bg-[#111827] rounded-xl p-4 border border-neutral-200 dark:border-neutral-800/80 shadow-none hover:border-neutral-300 dark:hover:border-neutral-700/80 transition-colors">
-          <div className="text-2xl sm:text-3xl font-bold text-neutral-900 dark:text-neutral-100 font-mono tabular-nums">
+        <div className="bg-white dark:bg-[#111827] rounded-xl p-3 sm:p-4 border border-neutral-200 dark:border-neutral-800/80 shadow-none hover:border-neutral-300 dark:hover:border-neutral-700/80 transition-colors">
+          <div className="text-xl sm:text-2xl lg:text-3xl font-bold text-neutral-900 dark:text-neutral-100 font-mono tabular-nums">
             {totalEquipment}
           </div>
-          <div className="text-xs font-medium text-neutral-500 dark:text-neutral-400 mt-1">
-            {language === 'ar' ? 'قطعة عهدة ومهمات' : 'Equipment & Gear Items'}
+          <div className="text-[11px] sm:text-xs font-medium text-neutral-500 dark:text-neutral-400 mt-0.5 sm:mt-1 truncate">
+            {language === 'ar' ? 'قطعة عهدة ومهمات' : 'Equipment & Gear'}
           </div>
         </div>
 
         {/* Metric 4: Cloud Storage */}
-        <div className="bg-white dark:bg-[#111827] rounded-xl p-4 border border-neutral-200 dark:border-neutral-800/80 shadow-none hover:border-neutral-300 dark:hover:border-neutral-700/80 transition-colors">
-          <div className="text-2xl sm:text-3xl font-bold text-neutral-900 dark:text-neutral-100 font-mono tabular-nums">
+        <div className="bg-white dark:bg-[#111827] rounded-xl p-3 sm:p-4 border border-neutral-200 dark:border-neutral-800/80 shadow-none hover:border-neutral-300 dark:hover:border-neutral-700/80 transition-colors">
+          <div className="text-xl sm:text-2xl lg:text-3xl font-bold text-neutral-900 dark:text-neutral-100 font-mono tabular-nums">
             15 GB
           </div>
-          <div className="text-xs font-medium text-neutral-500 dark:text-neutral-400 mt-1">
-            {language === 'ar' ? 'تخزين سحابي مستخدم' : 'Google Drive Storage'}
+          <div className="text-[11px] sm:text-xs font-medium text-neutral-500 dark:text-neutral-400 mt-0.5 sm:mt-1 truncate">
+            {language === 'ar' ? 'تخزين سحابي مستخدم' : 'Drive Storage'}
           </div>
         </div>
       </div>
@@ -670,19 +670,20 @@ export default function DashboardPage() {
 
         {/* View 2: Table Rows (List View) */}
         {viewMode === 'list' && (
-          <div className="bg-white dark:bg-[#111827] rounded-xl border border-neutral-200 dark:border-neutral-800/80 overflow-hidden shadow-none">
-            {/* Table Header */}
-            <div className="h-10 px-4 border-b border-neutral-200/80 dark:border-neutral-800/80 bg-neutral-50 dark:bg-[#161F30] flex items-center text-xs font-semibold text-neutral-500 dark:text-neutral-400">
-              <div className="w-1/3 min-w-[180px]">{language === 'ar' ? 'اسم الوحدة الكشفية' : 'Unit Name'}</div>
-              <div className="w-1/4 hidden sm:block">{language === 'ar' ? 'المرحلة والنوع' : 'Stage & Gender'}</div>
-              <div className="w-1/4 hidden md:block">{language === 'ar' ? 'الصف الدراسي' : 'Target Grade'}</div>
-              <div className="w-20 text-center">{language === 'ar' ? 'الأعضاء' : 'Members'}</div>
-              <div className="w-20 text-center">{language === 'ar' ? 'المسار' : 'Stream'}</div>
-              <div className="ms-auto text-end">{language === 'ar' ? 'الإجراء' : 'Action'}</div>
-            </div>
+          <div className="bg-white dark:bg-[#111827] rounded-xl border border-neutral-200 dark:border-neutral-800/80 overflow-x-auto shadow-none">
+            <div className="min-w-[540px]">
+              {/* Table Header */}
+              <div className="h-10 px-4 border-b border-neutral-200/80 dark:border-neutral-800/80 bg-neutral-50 dark:bg-[#161F30] flex items-center text-xs font-semibold text-neutral-500 dark:text-neutral-400">
+                <div className="w-1/3 min-w-[180px]">{language === 'ar' ? 'اسم الوحدة الكشفية' : 'Unit Name'}</div>
+                <div className="w-1/4 hidden sm:block">{language === 'ar' ? 'المرحلة والنوع' : 'Stage & Gender'}</div>
+                <div className="w-1/4 hidden md:block">{language === 'ar' ? 'الصف الدراسي' : 'Target Grade'}</div>
+                <div className="w-20 text-center">{language === 'ar' ? 'الأعضاء' : 'Members'}</div>
+                <div className="w-20 text-center">{language === 'ar' ? 'المسار' : 'Stream'}</div>
+                <div className="ms-auto text-end">{language === 'ar' ? 'الإجراء' : 'Action'}</div>
+              </div>
 
-            {/* Rows */}
-            <div className="divide-y divide-neutral-200/80 dark:divide-neutral-800/60">
+              {/* Rows */}
+              <div className="divide-y divide-neutral-200/80 dark:divide-neutral-800/60">
               {displayUnits.map((unit) => {
                 const stageStyle = getStageColor(unit.code);
                 const isParallel = unit.code.includes('_a') || unit.code.includes('_b');
@@ -758,7 +759,8 @@ export default function DashboardPage() {
               })}
             </div>
           </div>
-        )}
+        </div>
+      )}
       </div>
     </div>
   );
