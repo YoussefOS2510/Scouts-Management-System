@@ -88,25 +88,196 @@ export async function POST(request: NextRequest) {
     const res = await query(`
       INSERT INTO equipment (category_id, name, sku, total_quantity, storage_bay, condition)
       VALUES (@cat, @name, @sku, @qty, @bay, @cond)
-      RETURNING id
+      RETURNING id, category_id, name, sku, total_quantity, storage_bay, condition
     `, [
-      { name: 'cat', type: sql.Int, value: categoryId || null },
-      { name: 'name', type: sql.NVarChar(150), value: name },
-      { name: 'sku', type: sql.NVarChar(50), value: sku || `EQ-${Date.now().toString().slice(-4)}` },
+      { name: 'cat', type: sql.Int, value: categoryId ? Number(categoryId) : null },
+      { name: 'name', type: sql.NVarChar(150), value: name.trim() },
+      { name: 'sku', type: sql.NVarChar(50), value: sku ? sku.trim() : `EQ-${Date.now().toString().slice(-4)}` },
       { name: 'qty', type: sql.Int, value: Number(totalQuantity) },
-      { name: 'bay', type: sql.NVarChar(100), value: storageBay || 'Bay General' },
+      { name: 'bay', type: sql.NVarChar(100), value: storageBay ? storageBay.trim() : 'المخزن العام' },
       { name: 'cond', type: sql.NVarChar(50), value: condition || 'good' },
     ]);
 
+    const createdItem = res[0];
+
+    // Log to audit_logs
+    try {
+      await query(`
+        INSERT INTO audit_logs (user_id, unit_id, action_type, title_ar, title_en, description_ar, description_en)
+        VALUES (
+          (SELECT id FROM users WHERE email = 'admin@scouts.org' LIMIT 1),
+          NULL,
+          'equipment_created',
+          'إضافة مهمة عهدة جديدة',
+          'New Equipment Added',
+          CONCAT('تم تسجيل مهمة العهدة (', @name, ') برصيد إجمالي ', @qty, ' قطعة'),
+          CONCAT('Registered new gear item (', @name, ') with total stock ', @qty)
+        )
+      `, [
+        { name: 'name', type: sql.NVarChar(150), value: name.trim() },
+        { name: 'qty', type: sql.Int, value: Number(totalQuantity) },
+      ]);
+    } catch {}
+
     return NextResponse.json({
       success: true,
-      id: res[0]?.id,
+      equipment: createdItem,
       message: 'Equipment item added successfully to ScoutsDB',
     });
   } catch (error: any) {
     console.error('[API /api/inventory POST] Error:', error);
     return NextResponse.json(
       { success: false, error: error.message || 'Failed to add equipment' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function PUT(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { id, categoryId, name, sku, totalQuantity, storageBay, condition } = body;
+
+    if (!id || !name || totalQuantity === undefined) {
+      return NextResponse.json(
+        { success: false, error: 'id, name, and totalQuantity are required' },
+        { status: 400 }
+      );
+    }
+
+    const res = await query(`
+      UPDATE equipment
+      SET category_id = @cat,
+          name = @name,
+          sku = @sku,
+          total_quantity = @qty,
+          storage_bay = @bay,
+          condition = @cond
+      WHERE id = @id
+      RETURNING id, category_id, name, sku, total_quantity, storage_bay, condition
+    `, [
+      { name: 'id', type: sql.Int, value: Number(id) },
+      { name: 'cat', type: sql.Int, value: categoryId ? Number(categoryId) : null },
+      { name: 'name', type: sql.NVarChar(150), value: name.trim() },
+      { name: 'sku', type: sql.NVarChar(50), value: sku ? sku.trim() : `EQ-${id}` },
+      { name: 'qty', type: sql.Int, value: Number(totalQuantity) },
+      { name: 'bay', type: sql.NVarChar(100), value: storageBay ? storageBay.trim() : 'المخزن العام' },
+      { name: 'cond', type: sql.NVarChar(50), value: condition || 'good' },
+    ]);
+
+    if (res.length === 0) {
+      return NextResponse.json(
+        { success: false, error: 'Equipment item not found' },
+        { status: 404 }
+      );
+    }
+
+    // Log to audit_logs
+    try {
+      await query(`
+        INSERT INTO audit_logs (user_id, unit_id, action_type, title_ar, title_en, description_ar, description_en)
+        VALUES (
+          (SELECT id FROM users WHERE email = 'admin@scouts.org' LIMIT 1),
+          NULL,
+          'equipment_updated',
+          'تعديل بيانات صنف عهدة',
+          'Equipment Updated',
+          CONCAT('تم تعديل مهمة العهدة (', @name, ') وتحديث بياناتها والرصيد'),
+          CONCAT('Updated gear item (', @name, ')')
+        )
+      `, [
+        { name: 'name', type: sql.NVarChar(150), value: name.trim() },
+      ]);
+    } catch {}
+
+    return NextResponse.json({
+      success: true,
+      equipment: res[0],
+      message: 'Equipment item updated successfully in ScoutsDB',
+    });
+  } catch (error: any) {
+    console.error('[API /api/inventory PUT] Error:', error);
+    return NextResponse.json(
+      { success: false, error: error.message || 'Failed to update equipment' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    let id: number | null = null;
+    const { searchParams } = new URL(request.url);
+    const paramId = searchParams.get('id');
+
+    if (paramId) {
+      id = Number(paramId);
+    } else {
+      try {
+        const body = await request.json();
+        id = Number(body.id);
+      } catch {}
+    }
+
+    if (!id || isNaN(id)) {
+      return NextResponse.json(
+        { success: false, error: 'Valid equipment id is required' },
+        { status: 400 }
+      );
+    }
+
+    // 1. Get equipment details for audit log
+    const existing = await query(`SELECT id, name, sku FROM equipment WHERE id = @id`, [
+      { name: 'id', type: sql.Int, value: id },
+    ]);
+
+    if (existing.length === 0) {
+      return NextResponse.json(
+        { success: false, error: 'Equipment item not found' },
+        { status: 404 }
+      );
+    }
+
+    const equip = existing[0];
+
+    // 2. Cascading deletion of booking_items referencing this equipment
+    await query(`DELETE FROM booking_items WHERE equipment_id = @id`, [
+      { name: 'id', type: sql.Int, value: id },
+    ]);
+
+    // 3. Delete the equipment item
+    await query(`DELETE FROM equipment WHERE id = @id`, [
+      { name: 'id', type: sql.Int, value: id },
+    ]);
+
+    // 4. Log to audit_logs
+    try {
+      await query(`
+        INSERT INTO audit_logs (user_id, unit_id, action_type, title_ar, title_en, description_ar, description_en)
+        VALUES (
+          (SELECT id FROM users WHERE email = 'admin@scouts.org' LIMIT 1),
+          NULL,
+          'equipment_deleted',
+          'حذف صنف من العهدة',
+          'Equipment Deleted',
+          CONCAT('تم حذف مهمة العهدة (', @name, ') [', @sku, '] نهائياً من المنظومة'),
+          CONCAT('Permanently deleted gear item (', @name, ') [', @sku, '] from inventory')
+        )
+      `, [
+        { name: 'name', type: sql.NVarChar(150), value: equip.name },
+        { name: 'sku', type: sql.NVarChar(50), value: equip.sku },
+      ]);
+    } catch {}
+
+    return NextResponse.json({
+      success: true,
+      id,
+      message: `Equipment item ${equip.name} successfully deleted from ScoutsDB`,
+    });
+  } catch (error: any) {
+    console.error('[API /api/inventory DELETE] Error:', error);
+    return NextResponse.json(
+      { success: false, error: error.message || 'Failed to delete equipment' },
       { status: 500 }
     );
   }

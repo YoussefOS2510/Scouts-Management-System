@@ -219,7 +219,10 @@ export type AuditActionType =
   | 'leader_team_assigned'
   | 'patrol_assigned'
   | 'leader_created'
-  | 'leader_deleted';
+  | 'leader_deleted'
+  | 'equipment_created'
+  | 'equipment_updated'
+  | 'equipment_deleted';
 
 export interface AuditLogEntry {
   id: string;
