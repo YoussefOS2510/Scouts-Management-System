@@ -16,6 +16,7 @@ export interface Patrol {
   unit_id: number;
   name_ar: string;
   name_en: string;
+  order_index?: number;
 }
 
 export interface Member {
@@ -222,7 +223,11 @@ export type AuditActionType =
   | 'leader_deleted'
   | 'equipment_created'
   | 'equipment_updated'
-  | 'equipment_deleted';
+  | 'equipment_deleted'
+  | 'patrol_created'
+  | 'patrol_updated'
+  | 'patrol_reordered'
+  | 'patrol_deleted';
 
 export interface AuditLogEntry {
   id: string;

@@ -78,6 +78,10 @@ interface AuthContextType {
   members: Member[];
   patrols: Patrol[];
   assignScoutPatrol: (memberId: string, patrolId: number | null) => boolean;
+  addPatrol: (unitId: number, nameAr: string, nameEn?: string) => Promise<Patrol | null>;
+  updatePatrol: (patrolId: number, nameAr: string, nameEn?: string) => Promise<boolean>;
+  reorderPatrols: (unitId: number, orderedIds: number[]) => Promise<boolean>;
+  deletePatrol: (patrolId: number) => Promise<boolean>;
   scoutProgressionHistory: MemberUnitHistory[];
   getScoutAccessibleAlbums: (memberId?: string) => MediaAlbum[];
   getAlbumPhotos: (albumId: string) => MediaItem[];
@@ -1018,6 +1022,97 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const addPatrol = async (unitId: number, nameAr: string, nameEn?: string): Promise<Patrol | null> => {
+    try {
+      const res = await fetch('/api/patrols', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ unit_id: unitId, name_ar: nameAr, name_en: nameEn }),
+      });
+      const data = await res.json();
+      if (data.success && data.patrol) {
+        setPatrols((prev) => [...prev, data.patrol]);
+        return data.patrol;
+      }
+      return null;
+    } catch (e) {
+      console.error('Failed to create patrol:', e);
+      return null;
+    }
+  };
+
+  const updatePatrol = async (patrolId: number, nameAr: string, nameEn?: string): Promise<boolean> => {
+    try {
+      const res = await fetch('/api/patrols', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: patrolId, name_ar: nameAr, name_en: nameEn }),
+      });
+      const data = await res.json();
+      if (data.success && data.patrol) {
+        setPatrols((prev) =>
+          prev.map((p) => (p.id === patrolId ? { ...p, name_ar: nameAr, name_en: nameEn || '' } : p))
+        );
+        return true;
+      }
+      return false;
+    } catch (e) {
+      console.error('Failed to update patrol:', e);
+      return false;
+    }
+  };
+
+  const reorderPatrols = async (unitId: number, orderedIds: number[]): Promise<boolean> => {
+    // Optimistically update order_index in state
+    setPatrols((prev) => {
+      return prev.map((p) => {
+        if (p.unit_id === unitId) {
+          const newIdx = orderedIds.indexOf(p.id);
+          if (newIdx !== -1) {
+            return { ...p, order_index: newIdx };
+          }
+        }
+        return p;
+      }).sort((a, b) => {
+        if (a.unit_id !== b.unit_id) return a.unit_id - b.unit_id;
+        return (a.order_index ?? 0) - (b.order_index ?? 0);
+      });
+    });
+
+    try {
+      const res = await fetch('/api/patrols', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'reorder', unit_id: unitId, ordered_ids: orderedIds }),
+      });
+      const data = await res.json();
+      return Boolean(data.success);
+    } catch (e) {
+      console.error('Failed to reorder patrols:', e);
+      return false;
+    }
+  };
+
+  const deletePatrol = async (patrolId: number): Promise<boolean> => {
+    try {
+      const res = await fetch(`/api/patrols?id=${patrolId}`, {
+        method: 'DELETE',
+      });
+      const data = await res.json();
+      if (data.success) {
+        setPatrols((prev) => prev.filter((p) => p.id !== patrolId));
+        setMembers((prev) =>
+          prev.map((m) => (m.patrol_id === patrolId ? { ...m, patrol_id: null } : m))
+        );
+        return true;
+      }
+      return false;
+    } catch (e) {
+      console.error('Failed to delete patrol:', e);
+      return false;
+    }
+  };
+
 
   const scoutProgressionHistory = useMemo(() => {
     if (!currentMemberId) return [];
@@ -1114,6 +1209,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         members,
         patrols,
         assignScoutPatrol,
+        addPatrol,
+        updatePatrol,
+        reorderPatrols,
+        deletePatrol,
         scoutProgressionHistory,
         getScoutAccessibleAlbums,
         getAlbumPhotos,

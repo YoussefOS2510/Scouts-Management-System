@@ -34,9 +34,9 @@ export async function GET() {
         ORDER BY m.created_at DESC
       `),
       query(`
-        SELECT id, unit_id, name_ar, name_en 
+        SELECT id, unit_id, name_ar, name_en, order_index
         FROM patrols 
-        ORDER BY unit_id, id
+        ORDER BY unit_id, order_index ASC, id ASC
       `),
     ]);
 
@@ -53,6 +53,7 @@ export async function GET() {
       unit_id: Number(p.unit_id),
       name_ar: p.name_ar,
       name_en: p.name_en,
+      order_index: Number(p.order_index ?? 0),
     }));
 
     return NextResponse.json({

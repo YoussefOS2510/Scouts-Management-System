@@ -28,6 +28,9 @@ import {
   ShieldCheck,
   RefreshCw,
   Trash2,
+  Edit2,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { INITIAL_ROLES } from '../../lib/data';
 
@@ -47,6 +50,10 @@ export default function MembersDirectoryPage() {
     deleteMember,
     addLeader,
     deleteLeader,
+    addPatrol,
+    updatePatrol,
+    reorderPatrols,
+    deletePatrol,
     allUsers,
     userRoles,
     roles,
@@ -68,6 +75,20 @@ export default function MembersDirectoryPage() {
   const [isDeletingMember, setIsDeletingMember] = useState(false);
   const [leaderToDelete, setLeaderToDelete] = useState<any | null>(null);
   const [isDeletingLeader, setIsDeletingLeader] = useState(false);
+
+  // Patrol Management States & Modals
+  const [isAddPatrolOpen, setIsAddPatrolOpen] = useState(false);
+  const [newPatrolNameAr, setNewPatrolNameAr] = useState('');
+  const [newPatrolNameEn, setNewPatrolNameEn] = useState('');
+  const [isSubmittingPatrol, setIsSubmittingPatrol] = useState(false);
+
+  const [editingPatrol, setEditingPatrol] = useState<any | null>(null);
+  const [editPatrolNameAr, setEditPatrolNameAr] = useState('');
+  const [editPatrolNameEn, setEditPatrolNameEn] = useState('');
+  const [isUpdatingPatrol, setIsUpdatingPatrol] = useState(false);
+
+  const [patrolToDelete, setPatrolToDelete] = useState<any | null>(null);
+  const [isDeletingPatrol, setIsDeletingPatrol] = useState(false);
 
   // Add Member Modal State
   const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
@@ -199,6 +220,91 @@ export default function MembersDirectoryPage() {
       );
       setTimeout(() => setPatrolActionSuccess(null), 3500);
     }
+  };
+
+  // Handle Create Patrol
+  const handleCreatePatrol = async (e: React.FormEvent, unitId: number) => {
+    e.preventDefault();
+    if (!newPatrolNameAr.trim()) return;
+    setIsSubmittingPatrol(true);
+    try {
+      const created = await addPatrol(unitId, newPatrolNameAr.trim(), newPatrolNameEn.trim() || undefined);
+      if (created) {
+        setIsAddPatrolOpen(false);
+        setNewPatrolNameAr('');
+        setNewPatrolNameEn('');
+        setActionSuccessMsg(
+          language === 'ar'
+            ? `تم إنشاء الطليعة (${created.name_ar}) بنجاح!`
+            : `Patrol (${created.name_en || created.name_ar}) created successfully!`
+        );
+        setTimeout(() => setActionSuccessMsg(null), 4000);
+      }
+    } finally {
+      setIsSubmittingPatrol(false);
+    }
+  };
+
+  // Handle Update Patrol Name
+  const handleUpdatePatrol = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingPatrol || !editPatrolNameAr.trim()) return;
+    setIsUpdatingPatrol(true);
+    try {
+      const success = await updatePatrol(editingPatrol.id, editPatrolNameAr.trim(), editPatrolNameEn.trim() || undefined);
+      if (success) {
+        setEditingPatrol(null);
+        setActionSuccessMsg(
+          language === 'ar'
+            ? `تم تحديث اسم الطليعة إلى (${editPatrolNameAr}) بنجاح!`
+            : `Patrol updated to (${editPatrolNameEn || editPatrolNameAr}) successfully!`
+        );
+        setTimeout(() => setActionSuccessMsg(null), 4000);
+      }
+    } finally {
+      setIsUpdatingPatrol(false);
+    }
+  };
+
+  // Handle Delete Patrol
+  const handleConfirmDeletePatrol = async () => {
+    if (!patrolToDelete) return;
+    setIsDeletingPatrol(true);
+    try {
+      const success = await deletePatrol(patrolToDelete.id);
+      if (success) {
+        const deletedName = patrolToDelete.name_ar;
+        setPatrolToDelete(null);
+        setActionSuccessMsg(
+          language === 'ar'
+            ? `تم حذف طليعة (${deletedName}) وتحويل كشافيها لغير مسكنين بنجاح.`
+            : `Patrol (${deletedName}) deleted and members unassigned successfully.`
+        );
+        setTimeout(() => setActionSuccessMsg(null), 4000);
+      }
+    } finally {
+      setIsDeletingPatrol(false);
+    }
+  };
+
+  // Handle Move / Reorder Patrol
+  const handleMovePatrol = async (
+    patrolId: number,
+    direction: 'prev' | 'next',
+    unitPatrols: any[],
+    unitId: number
+  ) => {
+    const currIdx = unitPatrols.findIndex((p) => p.id === patrolId);
+    if (currIdx === -1) return;
+    const targetIdx = direction === 'prev' ? currIdx - 1 : currIdx + 1;
+    if (targetIdx < 0 || targetIdx >= unitPatrols.length) return;
+
+    const reordered = [...unitPatrols];
+    const [moved] = reordered.splice(currIdx, 1);
+    reordered.splice(targetIdx, 0, moved);
+
+    const orderedIds = reordered.map((p) => p.id);
+    await reorderPatrols(unitId, orderedIds);
   };
 
   // Submit Add Member
@@ -855,11 +961,14 @@ export default function MembersDirectoryPage() {
         (() => {
           const boardUnitId = typeof selectedUnitId === 'number' ? selectedUnitId : (accessibleUnits[0]?.id || 5);
           const boardUnit = INITIAL_UNITS.find((u) => u.id === boardUnitId);
-          const unitPatrols = patrols.filter((p) => p.unit_id === boardUnitId);
+          const unitPatrols = patrols
+            .filter((p) => p.unit_id === boardUnitId)
+            .sort((a, b) => (a.order_index ?? 0) - (b.order_index ?? 0));
           const unitMembers = members.filter((m) => m.unit_id === boardUnitId);
           const unassignedMembers = unitMembers.filter(
             (m) => !m.patrol_id || !unitPatrols.some((p) => p.id === m.patrol_id)
           );
+          const canManagePatrols = isSuperAdmin || can('members.create_edit', boardUnitId);
 
           return (
             <div className="space-y-4">
@@ -875,24 +984,38 @@ export default function MembersDirectoryPage() {
                   </div>
                   <div className="text-[11px] text-zinc-500 mt-0.5">
                     {language === 'ar'
-                      ? 'توزيع الكشافين بين الطلائع والسداسيات لتحقيق التوازن العددي في الأنشطة.'
-                      : 'Distribute scouts across patrols to maintain balanced squads for activities.'}
+                      ? 'توزيع الكشافين بين الطلائع، وإنشاء طلائع جديدة وتخصيص أسمائها وترتيب ظهورها.'
+                      : 'Distribute scouts, create new patrols, customize names, and set display order.'}
                   </div>
                 </div>
-                <div className="flex items-center gap-2 text-xs font-mono">
+                <div className="flex flex-wrap items-center gap-2 text-xs font-mono">
                   <span className="px-2 py-0.5 rounded bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300">
                     {unitMembers.length} {language === 'ar' ? 'كشاف بالفريق' : 'Scouts in Unit'}
                   </span>
                   <span className="px-2 py-0.5 rounded bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-amber-700 dark:text-amber-400">
                     {unassignedMembers.length} {language === 'ar' ? 'غير موزعين' : 'Unassigned'}
                   </span>
+                  {canManagePatrols && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNewPatrolNameAr('');
+                        setNewPatrolNameEn('');
+                        setIsAddPatrolOpen(true);
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#0B57D0] hover:bg-[#0842a0] text-white text-xs font-semibold shadow-xs cursor-pointer transition-colors"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>{language === 'ar' ? 'إضافة طليعة جديدة' : 'Add Patrol'}</span>
+                    </button>
+                  )}
                 </div>
               </div>
 
               {/* Patrols Columns Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                 {/* Each Patrol Column */}
-                {unitPatrols.map((patrol) => {
+                {unitPatrols.map((patrol, patrolIdx) => {
                   const pMembers = unitMembers.filter((m) => m.patrol_id === patrol.id);
 
                   return (
@@ -901,18 +1024,82 @@ export default function MembersDirectoryPage() {
                       className="bg-white dark:bg-[#121214] rounded-lg border border-zinc-200 dark:border-zinc-800 overflow-hidden flex flex-col"
                     >
                       {/* Patrol Header */}
-                      <div className="px-3.5 py-2.5 bg-zinc-50 dark:bg-zinc-900/50 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
-                        <div>
-                          <h4 className="font-semibold text-zinc-900 dark:text-zinc-100 text-xs">
-                            {language === 'ar' ? patrol.name_ar : patrol.name_en}
-                          </h4>
-                          <span className="text-[10px] text-zinc-400 font-mono">
-                            {language === 'ar' ? boardUnit?.name_ar : boardUnit?.name_en}
-                          </span>
+                      <div className="px-3.5 py-2.5 bg-zinc-50 dark:bg-zinc-900/50 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between gap-1">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="px-1.5 py-0.2 rounded bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 text-[10px] font-mono font-bold">
+                              #{patrolIdx + 1}
+                            </span>
+                            <h4 className="font-semibold text-zinc-900 dark:text-zinc-100 text-xs truncate">
+                              {language === 'ar' ? patrol.name_ar : patrol.name_en || patrol.name_ar}
+                            </h4>
+                          </div>
+                          {patrol.name_en && (
+                            <span className="text-[10px] text-zinc-400 font-mono block truncate">
+                              {language === 'ar' ? patrol.name_en : patrol.name_ar}
+                            </span>
+                          )}
                         </div>
-                        <span className="px-2 py-0.2 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 font-mono font-medium text-[11px] border border-zinc-200 dark:border-zinc-700">
-                          {pMembers.length}
-                        </span>
+
+                        <div className="flex items-center gap-1">
+                          <span className="px-2 py-0.2 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 font-mono font-medium text-[11px] border border-zinc-200 dark:border-zinc-700">
+                            {pMembers.length}
+                          </span>
+
+                          {canManagePatrols && (
+                            <div className="flex items-center gap-0.5 ml-1">
+                              {/* Reorder: Move earlier/left */}
+                              <button
+                                type="button"
+                                disabled={patrolIdx === 0}
+                                onClick={() => handleMovePatrol(patrol.id, 'prev', unitPatrols, boardUnitId)}
+                                title={language === 'ar' ? 'تقديم في الترتيب (لليمين)' : 'Move Earlier'}
+                                className={`p-1 rounded text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors ${
+                                  patrolIdx === 0 ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer'
+                                }`}
+                              >
+                                {language === 'ar' ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronLeft className="w-3.5 h-3.5" />}
+                              </button>
+
+                              {/* Reorder: Move later/right */}
+                              <button
+                                type="button"
+                                disabled={patrolIdx === unitPatrols.length - 1}
+                                onClick={() => handleMovePatrol(patrol.id, 'next', unitPatrols, boardUnitId)}
+                                title={language === 'ar' ? 'تأخير في الترتيب (لليسار)' : 'Move Later'}
+                                className={`p-1 rounded text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors ${
+                                  patrolIdx === unitPatrols.length - 1 ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer'
+                                }`}
+                              >
+                                {language === 'ar' ? <ChevronLeft className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                              </button>
+
+                              {/* Edit Name */}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingPatrol(patrol);
+                                  setEditPatrolNameAr(patrol.name_ar);
+                                  setEditPatrolNameEn(patrol.name_en || '');
+                                }}
+                                title={language === 'ar' ? 'تعديل اسم الطليعة' : 'Edit Patrol Name'}
+                                className="p-1 rounded text-zinc-500 hover:text-[#0B57D0] hover:bg-blue-50 dark:hover:bg-blue-950/40 transition-colors cursor-pointer"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+
+                              {/* Delete Patrol */}
+                              <button
+                                type="button"
+                                onClick={() => setPatrolToDelete(patrol)}
+                                title={language === 'ar' ? 'حذف الطليعة' : 'Delete Patrol'}
+                                className="p-1 rounded text-zinc-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </div>
 
                       {/* Scouts List */}
@@ -1530,6 +1717,212 @@ export default function MembersDirectoryPage() {
               >
                 {isDeletingLeader && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
                 <span>{language === 'ar' ? 'نعم، حذف نهائي' : 'Yes, Delete Permanently'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Patrol Modal */}
+      {isAddPatrolOpen && (() => {
+        const boardUnitId = typeof selectedUnitId === 'number' ? selectedUnitId : (accessibleUnits[0]?.id || 5);
+        const boardUnit = INITIAL_UNITS.find((u) => u.id === boardUnitId);
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto">
+            <div className="bg-white dark:bg-[#18181b] border border-zinc-200 dark:border-zinc-700 rounded-2xl shadow-2xl max-w-md w-full p-5 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+              <div className="flex items-center justify-between pb-3 border-b border-zinc-100 dark:border-zinc-800">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-950/60 text-[#0B57D0] flex items-center justify-center">
+                    <Plus className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
+                      {language === 'ar' ? 'إضافة طليعة جديدة' : 'Create New Patrol'}
+                    </h3>
+                    <p className="text-[11px] text-zinc-500 font-medium">
+                      {language === 'ar' ? boardUnit?.name_ar : boardUnit?.name_en}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsAddPatrolOpen(false)}
+                  className="p-1 rounded-md text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <form onSubmit={(e) => handleCreatePatrol(e, boardUnitId)} className="space-y-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                    {language === 'ar' ? 'اسم الطليعة / السداسي بالعربية *' : 'Patrol Name (Arabic) *'}
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={newPatrolNameAr}
+                    onChange={(e) => setNewPatrolNameAr(e.target.value)}
+                    placeholder={language === 'ar' ? 'مثال: طليعة النسور / سداسي الفهد' : 'e.g. طليعة النسور'}
+                    className="w-full px-3 py-2 rounded-lg bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B57D0]"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                    {language === 'ar' ? 'اسم الطليعة بالإنجليزية (اختياري)' : 'Patrol Name (English)'}
+                  </label>
+                  <input
+                    type="text"
+                    value={newPatrolNameEn}
+                    onChange={(e) => setNewPatrolNameEn(e.target.value)}
+                    placeholder="e.g. Eagles Patrol"
+                    className="w-full px-3 py-2 rounded-lg bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B57D0]"
+                  />
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-3 border-t border-zinc-100 dark:border-zinc-800">
+                  <button
+                    type="button"
+                    onClick={() => setIsAddPatrolOpen(false)}
+                    className="px-3 py-2 rounded-lg text-xs font-medium text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                  >
+                    {language === 'ar' ? 'إلغاء' : 'Cancel'}
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={!newPatrolNameAr.trim() || isSubmittingPatrol}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#0B57D0] hover:bg-[#0842a0] text-white text-xs font-semibold shadow-xs transition-colors disabled:opacity-50 cursor-pointer"
+                  >
+                    {isSubmittingPatrol ? (
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Plus className="w-3.5 h-3.5" />
+                    )}
+                    <span>{language === 'ar' ? 'إنشاء الطليعة' : 'Create Patrol'}</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Edit Patrol Modal */}
+      {editingPatrol && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-[#18181b] border border-zinc-200 dark:border-zinc-700 rounded-2xl shadow-2xl max-w-md w-full p-5 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-3 border-b border-zinc-100 dark:border-zinc-800">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-950/60 text-[#0B57D0] flex items-center justify-center">
+                  <Edit2 className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
+                    {language === 'ar' ? 'تعديل اسم الطليعة' : 'Edit Patrol Name'}
+                  </h3>
+                  <p className="text-[11px] text-zinc-500 font-medium">
+                    {language === 'ar' ? editingPatrol.name_ar : editingPatrol.name_en || editingPatrol.name_ar}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingPatrol(null)}
+                className="p-1 rounded-md text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdatePatrol} className="space-y-4">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                  {language === 'ar' ? 'اسم الطليعة بالعربية *' : 'Patrol Name (Arabic) *'}
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editPatrolNameAr}
+                  onChange={(e) => setEditPatrolNameAr(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B57D0]"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                  {language === 'ar' ? 'اسم الطليعة بالإنجليزية (اختياري)' : 'Patrol Name (English)'}
+                </label>
+                <input
+                  type="text"
+                  value={editPatrolNameEn}
+                  onChange={(e) => setEditPatrolNameEn(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B57D0]"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-zinc-100 dark:border-zinc-800">
+                <button
+                  type="button"
+                  onClick={() => setEditingPatrol(null)}
+                  className="px-3 py-2 rounded-lg text-xs font-medium text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                >
+                  {language === 'ar' ? 'إلغاء' : 'Cancel'}
+                </button>
+                <button
+                  type="submit"
+                  disabled={!editPatrolNameAr.trim() || isUpdatingPatrol}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#0B57D0] hover:bg-[#0842a0] text-white text-xs font-semibold shadow-xs transition-colors disabled:opacity-50 cursor-pointer"
+                >
+                  {isUpdatingPatrol ? (
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Check className="w-3.5 h-3.5" />
+                  )}
+                  <span>{language === 'ar' ? 'حفظ التعديل' : 'Save Changes'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Patrol Confirmation Modal */}
+      {patrolToDelete && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-white dark:bg-[#121214] rounded-2xl border border-red-200 dark:border-red-900/60 p-6 max-w-md w-full shadow-2xl space-y-4">
+            <div className="w-12 h-12 rounded-2xl bg-red-100 dark:bg-red-950/50 flex items-center justify-center text-red-600 dark:text-red-400">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100">
+                {language === 'ar' ? 'تأكيد حذف الطليعة' : 'Confirm Patrol Deletion'}
+              </h3>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 leading-relaxed">
+                {language === 'ar'
+                  ? `هل أنت متأكد من حذف طليعة (${patrolToDelete.name_ar})؟ لن يتم حذف أي كشاف، وسيتم تحويل كافة أعضاء هذه الطليعة تلقائياً إلى قائمة الكشافين غير المسكنين لإعادة توزيعهم.`
+                  : `Are you sure you want to delete patrol (${patrolToDelete.name_ar})? No scout records will be deleted; all assigned members will be moved to the unassigned list.`}
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setPatrolToDelete(null)}
+                disabled={isDeletingPatrol}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+              >
+                {language === 'ar' ? 'إلغاء' : 'Cancel'}
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeletePatrol}
+                disabled={isDeletingPatrol}
+                className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-semibold shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                {isDeletingPatrol && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                <span>{language === 'ar' ? 'نعم، حذف الطليعة' : 'Yes, Delete Patrol'}</span>
               </button>
             </div>
           </div>
