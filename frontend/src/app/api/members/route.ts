@@ -261,3 +261,98 @@ export async function PUT(req: NextRequest) {
     );
   }
 }
+
+export async function DELETE(req: NextRequest) {
+  try {
+    let memberId: string | null = null;
+
+    // Support both URL search param (?id=...) and JSON body ({ memberId: ... })
+    const { searchParams } = new URL(req.url);
+    const paramId = searchParams.get('id') || searchParams.get('memberId');
+
+    if (paramId) {
+      memberId = paramId;
+    } else {
+      try {
+        const body = await req.json();
+        memberId = body.memberId || body.id;
+      } catch {}
+    }
+
+    if (!memberId) {
+      return NextResponse.json(
+        { success: false, error: 'Missing memberId to delete' },
+        { status: 400 }
+      );
+    }
+
+    // 1. Fetch member details first for audit logging
+    const existing = await query(
+      `SELECT id, member_code, full_name_ar, unit_id FROM members WHERE id = @memberId`,
+      { memberId: { type: sql.UniqueIdentifier, value: memberId } }
+    );
+
+    if (existing.length === 0) {
+      return NextResponse.json(
+        { success: false, error: 'Member not found' },
+        { status: 404 }
+      );
+    }
+
+    const member = existing[0];
+
+    // 2. Cascading deletion of related records
+    // Remove attendance records
+    await query(
+      `DELETE FROM attendance_records WHERE member_id = @memberId`,
+      { memberId: { type: sql.UniqueIdentifier, value: memberId } }
+    );
+
+    // Remove unit progression history
+    await query(
+      `DELETE FROM member_unit_history WHERE member_id = @memberId`,
+      { memberId: { type: sql.UniqueIdentifier, value: memberId } }
+    );
+
+    // Remove member record
+    await query(
+      `DELETE FROM members WHERE id = @memberId`,
+      { memberId: { type: sql.UniqueIdentifier, value: memberId } }
+    );
+
+    // 3. Optional audit log write
+    try {
+      await query(
+        `
+        INSERT INTO audit_logs (user_id, unit_id, action_type, title_ar, title_en, description_ar, description_en)
+        VALUES (
+          (SELECT id FROM users WHERE email = 'admin@scouts.org' LIMIT 1),
+          @unit_id,
+          'member_deleted',
+          'حذف عضو كشفي',
+          'Scout Member Deleted',
+          CONCAT('تم حذف الكشاف ', @name_ar, ' [', @code, '] نهائياً من المنظومة'),
+          CONCAT('Permanently deleted scout ', @name_ar, ' [', @code, '] from system')
+        )
+        `,
+        {
+          unit_id: { type: sql.Int, value: Number(member.unit_id) },
+          name_ar: { type: sql.NVarChar(255), value: member.full_name_ar },
+          code: { type: sql.NVarChar(50), value: member.member_code },
+        }
+      );
+    } catch {}
+
+    return NextResponse.json({
+      success: true,
+      memberId,
+      message: `Member ${member.full_name_ar} successfully deleted`,
+    });
+  } catch (error: any) {
+    console.error('Error deleting member from ScoutsDB:', error);
+    return NextResponse.json(
+      { success: false, error: error.message || 'Database delete error' },
+      { status: 500 }
+    );
+  }
+}

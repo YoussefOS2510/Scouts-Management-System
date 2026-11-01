@@ -257,6 +257,101 @@ export async function POST(req: NextRequest) {
           );
         }
       }
+    } else if (action === 'delete_leader') {
+      const { userId } = body;
+      if (!userId) {
+        return NextResponse.json({ success: false, error: 'Missing userId to delete' }, { status: 400 });
+      }
+
+      // 1. Fetch user to verify they exist and are NOT the root system admin
+      const existing = await query(`SELECT id, email, full_name FROM users WHERE id = @userId`, {
+        userId: { type: sql.UniqueIdentifier, value: userId },
+      });
+
+      if (existing.length === 0) {
+        return NextResponse.json({ success: false, error: 'Leader not found' }, { status: 404 });
+      }
+
+      const targetLeader = existing[0];
+      if (targetLeader.email.toLowerCase() === 'admin@scouts.org') {
+        return NextResponse.json({ success: false, error: 'Cannot delete the root System Administrator' }, { status: 403 });
+      }
+
+      // 2. Fetch root admin ID for safe re-assignment of foreign keys
+      const adminRes = await query(`SELECT id FROM users WHERE email = 'admin@scouts.org' LIMIT 1`);
+      const rootAdminId = adminRes[0]?.id;
+
+      // 3. Clean up related records safely:
+      // a. Delete permission overrides
+      await query(`DELETE FROM user_permission_overrides WHERE user_id = @userId`, {
+        userId: { type: sql.UniqueIdentifier, value: userId },
+      });
+
+      // b. Delete user roles
+      await query(`DELETE FROM user_roles WHERE user_id = @userId`, {
+        userId: { type: sql.UniqueIdentifier, value: userId },
+      });
+
+      // c. Reassign attendance sessions recorded by this leader to root admin
+      if (rootAdminId) {
+        await query(`UPDATE attendance_sessions SET recorded_by = @adminId WHERE recorded_by = @userId`, {
+          adminId: { type: sql.UniqueIdentifier, value: rootAdminId },
+          userId: { type: sql.UniqueIdentifier, value: userId },
+        });
+      }
+
+      // d. Unset bookings approved by this leader
+      await query(`UPDATE bookings SET approved_by = NULL WHERE approved_by = @userId`, {
+        userId: { type: sql.UniqueIdentifier, value: userId },
+      });
+
+      // e. Delete booking items and bookings created by this leader
+      await query(`DELETE FROM booking_items WHERE booking_id IN (SELECT id FROM bookings WHERE user_id = @userId)`, {
+        userId: { type: sql.UniqueIdentifier, value: userId },
+      });
+      await query(`DELETE FROM bookings WHERE user_id = @userId`, {
+        userId: { type: sql.UniqueIdentifier, value: userId },
+      });
+
+      // f. Clean up media upload queue
+      await query(`DELETE FROM media_upload_queue WHERE uploaded_by = @userId`, {
+        userId: { type: sql.UniqueIdentifier, value: userId },
+      });
+
+      // g. Delete audit logs referencing this user
+      await query(`DELETE FROM audit_logs WHERE user_id = @userId`, {
+        userId: { type: sql.UniqueIdentifier, value: userId },
+      });
+
+      // h. Finally delete the user
+      await query(`DELETE FROM users WHERE id = @userId`, {
+        userId: { type: sql.UniqueIdentifier, value: userId },
+      });
+
+      // i. Write audit log
+      if (rootAdminId) {
+        try {
+          await query(
+            `
+            INSERT INTO audit_logs (user_id, unit_id, action_type, title_ar, title_en, description_ar, description_en)
+            VALUES (
+              @adminId,
+              NULL,
+              'leader_deleted',
+              'حذف حساب قائد',
+              'Leader Account Deleted',
+              CONCAT('تم حذف حساب القائد ', @fullName, ' (', @email, ') نهائياً'),
+              CONCAT('Permanently deleted leader account ', @fullName, ' (', @email, ')')
+            )
+            `,
+            {
+              adminId: { type: sql.UniqueIdentifier, value: rootAdminId },
+              fullName: { type: sql.NVarChar(150), value: targetLeader.full_name },
+              email: { type: sql.NVarChar(255), value: targetLeader.email },
+            }
+          );
+        } catch {}
+      }
     } else {
       return NextResponse.json({ success: false, error: 'Unknown action' }, { status: 400 });
     }
@@ -293,6 +388,41 @@ export async function POST(req: NextRequest) {
     console.error('Error modifying permissions in ScoutsDB:', error);
     return NextResponse.json(
       { success: false, error: error.message || 'Database update error' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(req: NextRequest) {
+  try {
+    let userId: string | null = null;
+    const { searchParams } = new URL(req.url);
+    const paramId = searchParams.get('id') || searchParams.get('userId');
+
+    if (paramId) {
+      userId = paramId;
+    } else {
+      try {
+        const body = await req.json();
+        userId = body.userId || body.id;
+      } catch {}
+    }
+
+    if (!userId) {
+      return NextResponse.json({ success: false, error: 'Missing userId to delete' }, { status: 400 });
+    }
+
+    // Reuse POST action logic
+    const postReq = new NextRequest(req.url, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'delete_leader', userId }),
+      headers: { 'Content-Type': 'application/json' },
+    });
+    return POST(postReq);
+  } catch (error: any) {
+    console.error('Error deleting leader in ScoutsDB:', error);
+    return NextResponse.json(
+      { success: false, error: error.message || 'Database delete error' },
       { status: 500 }
     );
   }

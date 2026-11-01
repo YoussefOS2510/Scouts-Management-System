@@ -65,6 +65,7 @@ interface AuthContextType {
   assignLeaderUnit: (userId: string, unitId: number | null | number[], roleId?: number) => boolean;
   assignLeaderUnits: (userId: string, unitIds: number[], roleId?: number) => boolean;
   addMember: (memberData: Omit<Member, 'id'> & { id?: string }) => Member;
+  deleteMember: (memberId: string) => Promise<boolean>;
   addLeader: (leaderData: {
     full_name: string;
     email: string;
@@ -73,6 +74,7 @@ interface AuthContextType {
     unit_id?: number | null;
     unit_ids?: number[];
   }) => User;
+  deleteLeader: (userId: string) => Promise<boolean>;
   members: Member[];
   patrols: Patrol[];
   assignScoutPatrol: (memberId: string, patrolId: number | null) => boolean;
@@ -936,6 +938,86 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return newUser;
   };
 
+  const deleteMember = async (memberId: string): Promise<boolean> => {
+    const targetMember = members.find((m) => m.id === memberId);
+    if (!targetMember) return false;
+
+    // Optimistically update local state
+    setMembers((prev) => prev.filter((m) => m.id !== memberId));
+
+    try {
+      const res = await fetch('/api/members', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ memberId }),
+      });
+      const data = await res.json();
+
+      logAction({
+        action_type: 'member_deleted',
+        title_ar: 'حذف عضو كشفي',
+        title_en: 'Scout Member Deleted',
+        description_ar: `تم حذف الكشاف (${targetMember.full_name_ar}) [${targetMember.member_code}] من المنظومة`,
+        description_en: `Scout member (${targetMember.full_name_ar}) [${targetMember.member_code}] deleted from system`,
+        unit_id: targetMember.unit_id,
+        metadata: { member_id: memberId, member_code: targetMember.member_code },
+      });
+
+      return Boolean(data.success);
+    } catch (e) {
+      console.error('Failed to delete member from DB:', e);
+      return false;
+    }
+  };
+
+  const deleteLeader = async (userId: string): Promise<boolean> => {
+    const targetUser = users.find((u) => u.id === userId);
+    if (!targetUser) return false;
+    if (targetUser.email.toLowerCase() === 'admin@scouts.org') {
+      console.warn('Cannot delete root System Admin');
+      return false;
+    }
+
+    // Optimistically update local state
+    setUsers((prev) => prev.filter((u) => u.id !== userId));
+    setUserRoles((prev) => prev.filter((ur) => ur.user_id !== userId));
+    setOverrides((prev) => prev.filter((ov) => ov.user_id !== userId));
+
+    try {
+      const res = await fetch('/api/permissions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'delete_leader', userId }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        if (data.users) setUsers(data.users);
+        if (data.userRoles) setUserRoles(data.userRoles);
+        if (data.overrides) setOverrides(data.overrides);
+        saveRbacCache({
+          users: data.users || [],
+          userRoles: data.userRoles || [],
+          overrides: data.overrides || [],
+        });
+      }
+
+      logAction({
+        action_type: 'leader_deleted',
+        title_ar: 'حذف حساب قائد',
+        title_en: 'Leader Account Deleted',
+        description_ar: `تم حذف حساب القائد (${targetUser.full_name}) من المنظومة`,
+        description_en: `Leader account (${targetUser.full_name}) deleted from system`,
+        unit_id: null,
+        metadata: { user_id: userId, email: targetUser.email },
+      });
+
+      return Boolean(data.success);
+    } catch (e) {
+      console.error('Failed to delete leader from DB:', e);
+      return false;
+    }
+  };
+
 
   const scoutProgressionHistory = useMemo(() => {
     if (!currentMemberId) return [];
@@ -1026,7 +1108,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         assignLeaderUnit,
         assignLeaderUnits,
         addMember,
+        deleteMember,
         addLeader,
+        deleteLeader,
         members,
         patrols,
         assignScoutPatrol,

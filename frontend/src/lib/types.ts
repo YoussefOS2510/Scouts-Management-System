@@ -212,12 +212,14 @@ export type AuditActionType =
   | 'booking_rejected'
   | 'member_updated'
   | 'member_created'
+  | 'member_deleted'
   | 'permission_overridden'
   | 'media_uploaded'
   | 'user_login'
   | 'leader_team_assigned'
   | 'patrol_assigned'
-  | 'leader_created';
+  | 'leader_created'
+  | 'leader_deleted';
 
 export interface AuditLogEntry {
   id: string;

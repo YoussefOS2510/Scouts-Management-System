@@ -25,7 +25,9 @@ import {
   Check,
   AlertCircle,
   ShieldAlert,
+  ShieldCheck,
   RefreshCw,
+  Trash2,
 } from 'lucide-react';
 import { INITIAL_ROLES } from '../../lib/data';
 
@@ -42,10 +44,16 @@ export default function MembersDirectoryPage() {
     patrols,
     assignScoutPatrol,
     addMember,
+    deleteMember,
     addLeader,
+    deleteLeader,
+    allUsers,
+    userRoles,
+    roles,
     isLoadingPermissions,
   } = useAuth();
 
+  const [activeDirectoryTab, setActiveDirectoryTab] = useState<'scouts' | 'leaders'>('scouts');
   const [searchTerm, setSearchTerm] = useState('');
   const canViewAllUnits = isSuperAdmin || currentRole?.name === 'group_leader';
   const defaultUnitFilter = canViewAllUnits ? 'all' : (accessibleUnits.length > 0 ? accessibleUnits[0].id : 'all');
@@ -54,6 +62,12 @@ export default function MembersDirectoryPage() {
   const [viewMode, setViewMode] = useState<'table' | 'cards' | 'board'>('table');
   const [patrolActionSuccess, setPatrolActionSuccess] = useState<string | null>(null);
   const [actionSuccessMsg, setActionSuccessMsg] = useState<string | null>(null);
+
+  // Deletion States & Modals
+  const [memberToDelete, setMemberToDelete] = useState<any | null>(null);
+  const [isDeletingMember, setIsDeletingMember] = useState(false);
+  const [leaderToDelete, setLeaderToDelete] = useState<any | null>(null);
+  const [isDeletingLeader, setIsDeletingLeader] = useState(false);
 
   // Add Member Modal State
   const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
@@ -114,6 +128,63 @@ export default function MembersDirectoryPage() {
       return matchUnit && matchSearch;
     });
   }, [searchTerm, selectedUnitId, isSuperAdmin, accessibleUnits, canViewAllUnits, members]);
+
+  // Filtered leaders
+  const filteredLeaders = useMemo(() => {
+    return allUsers.filter((u) => {
+      const leaderUserRoles = userRoles.filter((ur) => ur.user_id === u.id);
+      const assignedUnits = leaderUserRoles.map((ur) => ur.unit_id);
+      const matchUnit =
+        selectedUnitId === 'all' ||
+        assignedUnits.includes(null) ||
+        (typeof selectedUnitId === 'number' && assignedUnits.includes(selectedUnitId));
+      const matchSearch =
+        u.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        u.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (u.phone && u.phone.includes(searchTerm));
+      return matchUnit && matchSearch;
+    });
+  }, [allUsers, userRoles, selectedUnitId, searchTerm]);
+
+  // Handle Scout Deletion
+  const handleConfirmDeleteMember = async () => {
+    if (!memberToDelete) return;
+    setIsDeletingMember(true);
+    try {
+      const ok = await deleteMember(memberToDelete.id);
+      if (ok) {
+        setActionSuccessMsg(
+          language === 'ar'
+            ? `تم حذف الكشاف (${memberToDelete.full_name_ar}) نهائياً من المنظومة`
+            : `Scout (${memberToDelete.full_name_ar}) was permanently deleted`
+        );
+        setTimeout(() => setActionSuccessMsg(null), 4000);
+      }
+    } finally {
+      setIsDeletingMember(false);
+      setMemberToDelete(null);
+    }
+  };
+
+  // Handle Leader Deletion
+  const handleConfirmDeleteLeader = async () => {
+    if (!leaderToDelete) return;
+    setIsDeletingLeader(true);
+    try {
+      const ok = await deleteLeader(leaderToDelete.id);
+      if (ok) {
+        setActionSuccessMsg(
+          language === 'ar'
+            ? `تم حذف حساب القائد (${leaderToDelete.full_name}) نهائياً من المنظومة`
+            : `Leader account (${leaderToDelete.full_name}) was permanently deleted`
+        );
+        setTimeout(() => setActionSuccessMsg(null), 4000);
+      }
+    } finally {
+      setIsDeletingLeader(false);
+      setLeaderToDelete(null);
+    }
+  };
 
   // Handle assigning patrol
   const handleAssignPatrol = (memberId: string, patrolId: number | null) => {
@@ -368,6 +439,40 @@ export default function MembersDirectoryPage() {
 
       {/* Search & Scope Filters Bar */}
       <div className="flex flex-col sm:flex-row gap-2.5">
+        {/* Category Switcher Tab */}
+        <div className="inline-flex rounded-lg p-1 bg-[#F0F4F9] dark:bg-[#282A2C] border border-zinc-200/60 dark:border-zinc-800 shrink-0">
+          <button
+            type="button"
+            onClick={() => setActiveDirectoryTab('scouts')}
+            className={`px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
+              activeDirectoryTab === 'scouts'
+                ? 'bg-white dark:bg-[#1F1F1F] text-[#0B57D0] shadow-xs'
+                : 'text-[#444746] dark:text-[#C4C7C5] hover:text-[#1F1F1F]'
+            }`}
+          >
+            <Users className="w-3.5 h-3.5" />
+            <span>{language === 'ar' ? 'الكشافة والأشبال' : 'Scouts'}</span>
+            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 font-mono">
+              {filteredMembers.length}
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveDirectoryTab('leaders')}
+            className={`px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
+              activeDirectoryTab === 'leaders'
+                ? 'bg-white dark:bg-[#1F1F1F] text-purple-600 dark:text-purple-400 shadow-xs'
+                : 'text-[#444746] dark:text-[#C4C7C5] hover:text-[#1F1F1F]'
+            }`}
+          >
+            <ShieldCheck className="w-3.5 h-3.5" />
+            <span>{language === 'ar' ? 'القادة والمساعدين' : 'Leaders'}</span>
+            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 font-mono">
+              {filteredLeaders.length}
+            </span>
+          </button>
+        </div>
+
         <div className="relative flex-1">
           <Search className="w-4 h-4 text-stone-500 absolute start-3 top-2.5" strokeWidth={2} />
           <input
@@ -375,7 +480,11 @@ export default function MembersDirectoryPage() {
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder={
-              language === 'ar'
+              activeDirectoryTab === 'leaders'
+                ? language === 'ar'
+                  ? 'بحث باسم القائد، البريد، أو الهاتف...'
+                  : 'Search by leader name, email, or phone...'
+                : language === 'ar'
                 ? 'بحث باسم الكشاف، كود العضوية (SCT-0001)...'
                 : 'Search by scout name or code...'
             }
@@ -408,7 +517,101 @@ export default function MembersDirectoryPage() {
       </div>
 
       {/* Main Content: Data Table View (Directive 4.A) */}
-      {viewMode === 'table' ? (
+      {activeDirectoryTab === 'leaders' ? (
+        /* Leaders Directory Table View */
+        <div className="bg-white dark:bg-[#121214] rounded-lg border border-zinc-200 dark:border-zinc-800 overflow-hidden shadow-2xs">
+          <div className="overflow-x-auto">
+            <table className="w-full text-start border-collapse">
+              <thead>
+                <tr className="bg-zinc-50 dark:bg-zinc-900/50 text-xs font-medium text-zinc-500 border-b border-zinc-200 dark:border-zinc-800">
+                  <th className="px-4 py-2.5 text-start font-medium">{language === 'ar' ? 'اسم القائد' : 'Leader Name'}</th>
+                  <th className="px-4 py-2.5 text-start font-medium">{language === 'ar' ? 'البريد الإلكتروني' : 'Email Address'}</th>
+                  <th className="px-4 py-2.5 text-start font-medium">{language === 'ar' ? 'رقم الهاتف' : 'Phone'}</th>
+                  <th className="px-4 py-2.5 text-start font-medium">{language === 'ar' ? 'الدور القيادي' : 'Primary Role'}</th>
+                  <th className="px-4 py-2.5 text-start font-medium">{language === 'ar' ? 'الفرق والمراحل' : 'Assigned Units'}</th>
+                  <th className="px-4 py-2.5 text-end font-medium">{language === 'ar' ? 'إجراءات' : 'Actions'}</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/60 text-sm">
+                {filteredLeaders.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-12 text-center text-xs text-zinc-400">
+                      {language === 'ar' ? 'لا يوجد قادة مطابقين للبحث' : 'No leaders matching search'}
+                    </td>
+                  </tr>
+                ) : (
+                  filteredLeaders.map((leader) => {
+                    const leaderUserRoles = userRoles.filter((ur) => ur.user_id === leader.id);
+                    const firstRole = roles.find((r) => r.id === leaderUserRoles[0]?.role_id) || INITIAL_ROLES.find((r) => r.id === leaderUserRoles[0]?.role_id);
+                    const isRoot = leader.email.toLowerCase() === 'admin@scouts.org';
+                    const canDelete = (isSuperAdmin || can('users.manage_roles')) && !isRoot;
+
+                    return (
+                      <tr key={leader.id} className="hover:bg-zinc-50/75 dark:hover:bg-zinc-800/30 transition-colors">
+                        <td className="px-4 py-3">
+                          <div className="font-medium text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+                            <span>{leader.full_name}</span>
+                            {isRoot && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 font-mono">
+                                {language === 'ar' ? 'مدير عام' : 'Root Admin'}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-xs font-mono text-zinc-600 dark:text-zinc-400">
+                          {leader.email}
+                        </td>
+                        <td className="px-4 py-3 text-xs font-mono text-zinc-600 dark:text-zinc-400">
+                          {leader.phone || '—'}
+                        </td>
+                        <td className="px-4 py-3 text-xs">
+                          <span className="px-2 py-0.5 rounded-full bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 font-medium border border-purple-200 dark:border-purple-800/50">
+                            {firstRole?.name || 'Leader'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-xs text-zinc-600 dark:text-zinc-400">
+                          <div className="flex flex-wrap gap-1">
+                            {leaderUserRoles.length === 0 || leaderUserRoles.some((ur) => ur.unit_id === null) ? (
+                              <span className="px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 text-[11px]">
+                                {language === 'ar' ? 'كافة المراحل' : 'All Units'}
+                              </span>
+                            ) : (
+                              leaderUserRoles.map((ur) => {
+                                const uObj = INITIAL_UNITS.find((u) => u.id === ur.unit_id);
+                                return (
+                                  <span key={ur.id} className="px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 text-[11px] border border-blue-200 dark:border-blue-900">
+                                    {language === 'ar' ? uObj?.name_ar : uObj?.name_en}
+                                  </span>
+                                );
+                              })
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-end whitespace-nowrap">
+                          {canDelete ? (
+                            <button
+                              type="button"
+                              onClick={() => setLeaderToDelete(leader)}
+                              title={language === 'ar' ? 'حذف القائد من المنظومة' : 'Delete Leader'}
+                              className="p-1.5 rounded-lg text-zinc-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors cursor-pointer"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          ) : isRoot ? (
+                            <span className="text-[11px] text-zinc-400 italic">
+                              {language === 'ar' ? 'محمي' : 'Protected'}
+                            </span>
+                          ) : null}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : viewMode === 'table' ? (
         <div className="bg-white dark:bg-[#121214] rounded-lg border border-zinc-200 dark:border-zinc-800 overflow-hidden shadow-2xs">
           <div className="overflow-x-auto">
             <table className="w-full text-start border-collapse">
@@ -423,6 +626,7 @@ export default function MembersDirectoryPage() {
                   {showConfidential && (
                     <th className="px-4 py-2.5 text-start font-medium">{language === 'ar' ? 'الرعاية الروحية' : 'Spiritual Care'}</th>
                   )}
+                  <th className="px-4 py-2.5 text-end font-medium">{language === 'ar' ? 'إجراءات' : 'Actions'}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/60 text-sm">
@@ -496,6 +700,21 @@ export default function MembersDirectoryPage() {
                           )}
                         </td>
                       )}
+                      <td className="px-4 py-3 text-end whitespace-nowrap">
+                        {canManageScout && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setMemberToDelete(member);
+                            }}
+                            title={language === 'ar' ? 'حذف الكشاف من المنظومة' : 'Delete Scout'}
+                            className="p-1.5 rounded-lg text-zinc-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors cursor-pointer"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </td>
                     </tr>
                   );
                 })}
@@ -518,14 +737,26 @@ export default function MembersDirectoryPage() {
                 className="bg-white dark:bg-[#121214] rounded-lg border border-zinc-200 dark:border-zinc-800 p-4 space-y-3 flex flex-col justify-between"
               >
                 <div>
-                  {/* Header: Code & Unit */}
+                  {/* Header: Code & Unit & Actions */}
                   <div className="flex items-center justify-between">
                     <span className="font-mono text-[11px] text-zinc-500 bg-zinc-50 dark:bg-zinc-800/60 px-1.5 py-0.2 rounded border border-zinc-200 dark:border-zinc-700">
                       {member.member_code}
                     </span>
-                    <span className="text-[11px] font-mono px-1.5 py-0.2 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700">
-                      {language === 'ar' ? unit?.name_ar : unit?.name_en}
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[11px] font-mono px-1.5 py-0.2 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700">
+                        {language === 'ar' ? unit?.name_ar : unit?.name_en}
+                      </span>
+                      {canManageScout && (
+                        <button
+                          type="button"
+                          onClick={() => setMemberToDelete(member)}
+                          title={language === 'ar' ? 'حذف الكشاف من المنظومة' : 'Delete Scout'}
+                          className="p-1 rounded-md text-zinc-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   {/* Names */}
@@ -1219,6 +1450,88 @@ export default function MembersDirectoryPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Member Confirmation Modal */}
+      {memberToDelete && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-white dark:bg-[#121214] rounded-2xl border border-red-200 dark:border-red-900/60 p-6 max-w-md w-full shadow-2xl space-y-4">
+            <div className="w-12 h-12 rounded-2xl bg-red-100 dark:bg-red-950/50 flex items-center justify-center text-red-600 dark:text-red-400">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100">
+                {language === 'ar' ? 'تأكيد حذف الكشاف من المنظومة' : 'Confirm Scout Deletion'}
+              </h3>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 leading-relaxed">
+                {language === 'ar'
+                  ? `هل أنت متأكد من حذف الكشاف (${memberToDelete.full_name_ar}) بكود [${memberToDelete.member_code}]؟ سيتم حذف بيانات العضوية وسجلات الحضور الخاصة به بشكل نهائي من قاعدة البيانات.`
+                  : `Are you sure you want to delete scout (${memberToDelete.full_name_ar}) [${memberToDelete.member_code}]? Their membership profile and attendance history will be permanently deleted.`}
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setMemberToDelete(null)}
+                disabled={isDeletingMember}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+              >
+                {language === 'ar' ? 'إلغاء' : 'Cancel'}
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteMember}
+                disabled={isDeletingMember}
+                className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-semibold shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                {isDeletingMember && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                <span>{language === 'ar' ? 'نعم، حذف نهائي' : 'Yes, Delete Permanently'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Leader Confirmation Modal */}
+      {leaderToDelete && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-white dark:bg-[#121214] rounded-2xl border border-red-200 dark:border-red-900/60 p-6 max-w-md w-full shadow-2xl space-y-4">
+            <div className="w-12 h-12 rounded-2xl bg-red-100 dark:bg-red-950/50 flex items-center justify-center text-red-600 dark:text-red-400">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100">
+                {language === 'ar' ? 'تأكيد حذف حساب القائد' : 'Confirm Leader Deletion'}
+              </h3>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 leading-relaxed">
+                {language === 'ar'
+                  ? `هل أنت متأكد من حذف حساب القائد (${leaderToDelete.full_name}) [${leaderToDelete.email}]؟ سيتم إلغاء كافة صلاحياته وإزالة أدواره الإدارية نهائياً من قاعدة البيانات.`
+                  : `Are you sure you want to delete leader account (${leaderToDelete.full_name}) [${leaderToDelete.email}]? Their roles, permissions, and account will be permanently deleted.`}
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setLeaderToDelete(null)}
+                disabled={isDeletingLeader}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+              >
+                {language === 'ar' ? 'إلغاء' : 'Cancel'}
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteLeader}
+                disabled={isDeletingLeader}
+                className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-semibold shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                {isDeletingLeader && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                <span>{language === 'ar' ? 'نعم، حذف نهائي' : 'Yes, Delete Permanently'}</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

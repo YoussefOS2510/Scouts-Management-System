@@ -38,6 +38,7 @@ import {
   X,
   Plus,
   RefreshCw,
+  Trash2,
 } from 'lucide-react';
 
 interface CapabilityModule {
@@ -150,6 +151,7 @@ export default function PermissionsMatrixPage() {
     assignLeaderUnits,
     allUsers,
     addLeader,
+    deleteLeader,
     overrides,
     permissions,
     roles,
@@ -179,6 +181,10 @@ export default function PermissionsMatrixPage() {
   const [newLeaderUnitIds, setNewLeaderUnitIds] = useState<number[]>([]);
   const [newLeaderIsGlobal, setNewLeaderIsGlobal] = useState<boolean>(true);
   const [addLeaderSuccessMsg, setAddLeaderSuccessMsg] = useState<string | null>(null);
+
+  // Delete Leader Modal state
+  const [isDeleteLeaderModalOpen, setIsDeleteLeaderModalOpen] = useState(false);
+  const [isDeletingLeader, setIsDeletingLeader] = useState(false);
 
   // Live SQL Server Permission check state
   const [testingPermKey, setTestingPermKey] = useState<string | null>(null);
@@ -303,6 +309,27 @@ export default function PermissionsMatrixPage() {
         : `Leader (${created.full_name}) saved to database and selected successfully!`
     );
     setTimeout(() => setAddLeaderSuccessMsg(null), 3500);
+  };
+
+  const handleConfirmDeleteCurrentLeader = async () => {
+    if (!selectedUser || isSelectedUserAdmin) return;
+    setIsDeletingLeader(true);
+    try {
+      const ok = await deleteLeader(selectedUser.id);
+      if (ok) {
+        setIsDeleteLeaderModalOpen(false);
+        const nextUser = allUsers.find((u) => u.id !== selectedUser.id) || allUsers[0];
+        if (nextUser) setSelectedUserId(nextUser.id);
+        setAddLeaderSuccessMsg(
+          language === 'ar'
+            ? `تم حذف حساب القائد (${selectedUser.full_name}) نهائياً من المنظومة!`
+            : `Leader account (${selectedUser.full_name}) was permanently deleted!`
+        );
+        setTimeout(() => setAddLeaderSuccessMsg(null), 3500);
+      }
+    } finally {
+      setIsDeletingLeader(false);
+    }
   };
 
   // Reset ALL overrides for this user back to Role Defaults in database
@@ -530,6 +557,19 @@ export default function PermissionsMatrixPage() {
             >
               <UserPlus className="w-3.5 h-3.5" />
               <span>{language === 'ar' ? '＋ إضافة قائد جديد' : '+ Add Leader'}</span>
+            </button>
+          )}
+
+          {/* Delete Leader Button */}
+          {(isSuperAdmin || can('users.manage_roles')) && !isSelectedUserAdmin && (
+            <button
+              type="button"
+              onClick={() => setIsDeleteLeaderModalOpen(true)}
+              className="px-3 py-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 dark:bg-red-950/40 dark:hover:bg-red-900/50 dark:text-red-400 border border-red-200 dark:border-red-800/60 font-bold text-xs flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer shrink-0"
+              title={language === 'ar' ? 'حذف القائد المحدد' : 'Delete Selected Leader'}
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>{language === 'ar' ? 'حذف القائد' : 'Delete Leader'}</span>
             </button>
           )}
         </div>
@@ -766,6 +806,47 @@ export default function PermissionsMatrixPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Leader Confirmation Modal */}
+      {isDeleteLeaderModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-white dark:bg-[#121214] rounded-2xl border border-red-200 dark:border-red-900/60 p-6 max-w-md w-full shadow-2xl space-y-4">
+            <div className="w-12 h-12 rounded-2xl bg-red-100 dark:bg-red-950/50 flex items-center justify-center text-red-600 dark:text-red-400">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100">
+                {language === 'ar' ? 'تأكيد حذف حساب القائد' : 'Confirm Leader Deletion'}
+              </h3>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 leading-relaxed">
+                {language === 'ar'
+                  ? `هل أنت متأكد من حذف حساب القائد (${selectedUser.full_name}) [${selectedUser.email}]؟ سيتم إلغاء كافة صلاحياته وإزالة أدواره الإدارية نهائياً من قاعدة البيانات.`
+                  : `Are you sure you want to delete leader account (${selectedUser.full_name}) [${selectedUser.email}]? Their roles, permissions, and account will be permanently deleted.`}
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setIsDeleteLeaderModalOpen(false)}
+                disabled={isDeletingLeader}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+              >
+                {language === 'ar' ? 'إلغاء' : 'Cancel'}
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteCurrentLeader}
+                disabled={isDeletingLeader}
+                className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-semibold shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                {isDeletingLeader && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                <span>{language === 'ar' ? 'نعم، حذف نهائي' : 'Yes, Delete Permanently'}</span>
+              </button>
+            </div>
           </div>
         </div>
       )}
