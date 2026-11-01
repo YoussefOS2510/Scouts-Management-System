@@ -79,8 +79,8 @@ export default function InventoryPage() {
 
   const [purpose, setPurpose] = useState<string>('');
 
-  // Cart of requested items: { [equipmentId]: requestedQuantity }
-  const [cart, setCart] = useState<Record<number, number>>({ 1: 5, 5: 2 });
+  // Cart of requested items: { [equipmentId]: requestedQuantity } (empty by default)
+  const [cart, setCart] = useState<Record<number, number>>({});
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [equipmentList, setEquipmentList] = useState<EquipmentItem[]>([]);
   const [categoriesList, setCategoriesList] = useState<EquipmentCategory[]>([]);
