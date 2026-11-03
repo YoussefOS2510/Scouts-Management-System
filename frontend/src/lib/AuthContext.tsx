@@ -45,7 +45,8 @@ interface AuthContextType {
   userRoles: UserRole[];
   auditLogs: AuditLogEntry[];
   isSuperAdmin: boolean;
-  login: (email: string) => boolean;
+  isAuthReady: boolean;
+  login: (identifier: string, password?: string) => boolean;
   loginAs: (userId: string) => void;
   loginAsScout: (memberCode: string, pin: string) => { success: boolean; error?: string };
   loginAsMember: (memberId: string) => void;
@@ -181,9 +182,11 @@ function saveRbacCache(data: Partial<CachedRbacState>) {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const [isAuthReady, setIsAuthReady] = useState<boolean>(false);
+
   // Synchronously initialize current active identity from localStorage on first tick
   const [currentUserId, setCurrentUserId] = useState<string>(() => {
-    if (typeof window === 'undefined') return 'u0';
+    if (typeof window === 'undefined') return '';
     try {
       const isLoggedOut = localStorage.getItem('scouts_auth_logged_out') === 'true';
       if (isLoggedOut) return '';
@@ -192,7 +195,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const savedUserId = localStorage.getItem('scouts_auth_user_id');
       if (savedUserId) return savedUserId;
     } catch {}
-    return 'u0';
+    return '';
   });
 
   const [currentMemberId, setCurrentMemberId] = useState<string>(() => {
@@ -323,6 +326,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Initialize auth session state from localStorage and fetch live DB on mount
   useEffect(() => {
+    setIsAuthReady(true);
     refreshPermissions();
   }, [refreshPermissions]);
 
@@ -347,7 +351,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return (
       users.find((u) => isSameUser(u.id, currentUserId) || u.email === currentUserId) ||
       INITIAL_USERS.find((u) => isSameUser(u.id, currentUserId) || u.email === currentUserId) ||
-      null
+      (isSameUser(currentUserId, 'u0') || isSameUser(currentUserId, 'eddc77ff-69dc-452b-a5e1-0359ef7a8007')
+        ? {
+            id: 'eddc77ff-69dc-452b-a5e1-0359ef7a8007',
+            email: 'admin@scouts.org',
+            full_name: 'مدير النظام (System Admin)',
+            phone: '01000000000',
+            is_active: true,
+          }
+        : null)
     );
   }, [isScout, currentMember, currentUserId, users]);
 
@@ -389,6 +401,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     return (
       currentUserId === 'u0' ||
+      normId === 'eddc77ff-69dc-452b-a5e1-0359ef7a8007' ||
       normId === '11111111-0000-0000-0000-000000000001' ||
       currentUser?.email?.toLowerCase() === 'admin@scouts.org' ||
       currentRole?.name === 'admin' ||
@@ -495,18 +508,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { success: true };
   };
 
-  const login = (email: string): boolean => {
-    const cleanEmail = email.trim().toLowerCase();
-    if (cleanEmail.startsWith('sct-') || cleanEmail.includes('100') || cleanEmail.includes('200')) {
-      const res = loginAsScout(email, '1234');
-      return res.success;
-    }
+  const login = (identifier: string, pass?: string): boolean => {
+    const cleanId = identifier.trim().toLowerCase();
+    const cleanPass = (pass || '').trim();
 
-    const user = users.find((u) => u.email.toLowerCase() === cleanEmail);
-    if (user) {
-      loginAs(user.id);
+    // 1. Admin login: admin / admin OR admin@scouts.org / admin
+    if (cleanId === 'admin' || cleanId === 'admin@scouts.org') {
+      if (cleanPass !== 'admin') {
+        return false;
+      }
+      const adminUser =
+        users.find((u) => u.email.toLowerCase() === 'admin@scouts.org' || isSameUser(u.id, 'u0')) ||
+        INITIAL_USERS.find((u) => u.email.toLowerCase() === 'admin@scouts.org' || isSameUser(u.id, 'u0')) || {
+          id: 'eddc77ff-69dc-452b-a5e1-0359ef7a8007',
+          email: 'admin@scouts.org',
+          full_name: 'مدير النظام (System Admin)',
+          is_active: true,
+        };
+      loginAs(adminUser.id);
       return true;
     }
+
+    // 2. Any other registered leader
+    const user = users.find((u) => u.email.toLowerCase() === cleanId);
+    if (user) {
+      if (cleanPass === 'admin' || cleanPass.length > 0) {
+        loginAs(user.id);
+        return true;
+      }
+      return false;
+    }
+
     return false;
   };
 
@@ -1191,6 +1223,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         userRoles,
         auditLogs,
         isSuperAdmin,
+        isAuthReady,
         login,
         loginAs,
         loginAsScout,

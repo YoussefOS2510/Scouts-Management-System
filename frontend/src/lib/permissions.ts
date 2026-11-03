@@ -12,7 +12,8 @@ export interface PermissionContext {
 export type PermissionOverrideState = 'inherited' | 'granted' | 'revoked';
 
 export const USER_ID_MAP: Record<string, string> = {
-  'u0': '11111111-0000-0000-0000-000000000001',
+  'u0': 'eddc77ff-69dc-452b-a5e1-0359ef7a8007',
+  '11111111-0000-0000-0000-000000000001': 'eddc77ff-69dc-452b-a5e1-0359ef7a8007',
   'u1': '11111111-0000-0000-0000-000000000002',
   'u2': '11111111-0000-0000-0000-000000000003',
   'u5': '11111111-0000-0000-0000-000000000004',

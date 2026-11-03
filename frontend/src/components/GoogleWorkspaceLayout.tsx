@@ -49,6 +49,7 @@ export function GoogleWorkspaceLayout({ children }: { children: React.ReactNode 
     logout,
     accessibleUnits,
     members,
+    isAuthReady,
   } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
@@ -79,6 +80,13 @@ export function GoogleWorkspaceLayout({ children }: { children: React.ReactNode 
       document.documentElement.classList.add('dark');
     }
   }, []);
+
+  // Protect all routes: if user is not authenticated, redirect to /login
+  useEffect(() => {
+    if (isAuthReady && !currentUser && pathname !== '/login') {
+      router.replace('/login');
+    }
+  }, [isAuthReady, currentUser, pathname, router]);
 
   const searchRef = useRef<HTMLDivElement>(null);
   const newMenuRef = useRef<HTMLDivElement>(null);
@@ -276,6 +284,43 @@ export function GoogleWorkspaceLayout({ children }: { children: React.ReactNode 
     ).slice(0, 3),
     equipment: [] as any[],
   } : null;
+
+  // 1. Loading state while verifying auth session
+  if (!isAuthReady) {
+    return (
+      <div className="min-h-screen bg-[#F8FAFD] dark:bg-[#0B0F17] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-12 h-12 rounded-2xl bg-white p-1.5 shadow-md border border-neutral-200 dark:border-neutral-800">
+            <img src="/smsr-logo.jpg" alt="SMSR Logo" className="w-full h-full object-contain rounded-xl" />
+          </div>
+          <div className="animate-spin rounded-full h-6 w-6 border-2 border-sky-600 border-t-transparent"></div>
+        </div>
+      </div>
+    );
+  }
+
+  // 2. Standalone clean layout for the /login page
+  if (pathname === '/login') {
+    return (
+      <div className="min-h-screen bg-[#F8FAFD] dark:bg-[#0B0F17] flex flex-col justify-center py-8 px-4 sm:px-6 lg:px-8">
+        {children}
+      </div>
+    );
+  }
+
+  // 3. If unauthenticated on a protected page, show loading while redirecting to /login
+  if (!currentUser) {
+    return (
+      <div className="min-h-screen bg-[#F8FAFD] dark:bg-[#0B0F17] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-12 h-12 rounded-2xl bg-white p-1.5 shadow-md border border-neutral-200 dark:border-neutral-800">
+            <img src="/smsr-logo.jpg" alt="SMSR Logo" className="w-full h-full object-contain rounded-xl" />
+          </div>
+          <div className="animate-spin rounded-full h-6 w-6 border-2 border-sky-600 border-t-transparent"></div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-[#F8FAFD] dark:bg-[#0B0F17] text-[#0F172A] dark:text-[#F1F5F9] font-sans antialiased">

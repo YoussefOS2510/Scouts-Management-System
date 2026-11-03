@@ -10,6 +10,7 @@ import {
   AlertCircle,
   LogIn,
   ShieldCheck,
+  User,
 } from 'lucide-react';
 
 export default function LoginPage() {
@@ -18,40 +19,44 @@ export default function LoginPage() {
   const router = useRouter();
 
   // Leader Form State
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   const handleLeaderLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email.trim()) {
-      setError(language === 'ar' ? 'يرجى إدخال البريد الإلكتروني' : 'Please enter your email');
+    if (!identifier.trim()) {
+      setError(language === 'ar' ? 'يرجى إدخال اسم المستخدم أو البريد الإلكتروني' : 'Please enter your username or email');
       return;
     }
-    const success = login(email);
+    if (!password.trim()) {
+      setError(language === 'ar' ? 'يرجى إدخال كلمة المرور' : 'Please enter your password');
+      return;
+    }
+    const success = login(identifier, password);
     if (success) {
       router.push('/');
     } else {
       setError(
         language === 'ar'
-          ? 'البريد الإلكتروني غير مسجل في منظومة SMSR. تأكد من صحة البريد.'
-          : 'Email not registered in the SMSR system. Please check your credentials.'
+          ? 'بيانات الدخول غير صحيحة (اسم المستخدم أو كلمة المرور).'
+          : 'Invalid username or password. Please check your credentials.'
       );
     }
   };
 
   const handleLogoutCurrent = () => {
     logout();
-    setEmail('');
+    setIdentifier('');
     setPassword('');
     setError(null);
   };
 
   return (
-    <div className="max-w-xl mx-auto py-8 sm:py-12 space-y-6 animate-fadeIn">
+    <div className="max-w-md w-full mx-auto py-6 sm:py-8 space-y-6 animate-fadeIn">
       {/* Header */}
       <div className="text-center space-y-3">
-        <div className="inline-flex items-center justify-center w-24 h-24 rounded-2xl bg-white p-1.5 shadow-md border border-neutral-200 dark:border-neutral-800 mx-auto">
+        <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-white p-1.5 shadow-md border border-neutral-200 dark:border-neutral-800 mx-auto">
           <img
             src="/smsr-logo.jpg"
             alt="SMSR Logo"
@@ -59,16 +64,16 @@ export default function LoginPage() {
           />
         </div>
         <div className="space-y-1">
-          <h1 className="text-3xl font-extrabold tracking-tight text-neutral-900 dark:text-neutral-100">
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-neutral-900 dark:text-neutral-100">
             SMSR
           </h1>
-          <p className="text-sm font-semibold text-sky-600 dark:text-sky-400">
+          <p className="text-xs sm:text-sm font-semibold text-sky-600 dark:text-sky-400">
             {language === 'ar'
               ? 'كشافة السيدة العذراء بالرحاب (St. Mary Scouts Rehab)'
               : 'St. Mary Scouts Rehab — Sea Scout Group'}
           </p>
         </div>
-        <p className="text-xs text-neutral-500 dark:text-neutral-400 max-w-md mx-auto">
+        <p className="text-xs text-neutral-500 dark:text-neutral-400 max-w-sm mx-auto">
           {language === 'ar'
             ? 'بوابة القادة لمتابعة الفعاليات، الحضور، العهدة، وأرشيف الوسائط.'
             : 'Leader portal: events, attendance, inventory, and Google Drive archive.'}
@@ -84,13 +89,13 @@ export default function LoginPage() {
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
-                <span className="font-bold text-zinc-900 dark:text-zinc-100 text-sm">{currentUser.full_name}</span>
-                <span className="px-2 py-0.2 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800/60 text-[10px] font-medium font-mono">
-                  {language === 'ar' ? 'قائد مسجل' : 'Signed In Leader'}
+                <span className="font-bold text-zinc-900 dark:text-zinc-100 text-sm truncate">{currentUser.full_name}</span>
+                <span className="px-2 py-0.2 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800/60 text-[10px] font-medium font-mono shrink-0">
+                  {language === 'ar' ? 'قائد مسجل' : 'Signed In'}
                 </span>
               </div>
-              <div className="text-xs text-zinc-500 dark:text-zinc-400 font-mono mt-0.5">{currentUser.email}</div>
-              <div className="text-xs text-zinc-600 dark:text-zinc-300 mt-0.5">
+              <div className="text-xs text-zinc-500 dark:text-zinc-400 font-mono mt-0.5 truncate">{currentUser.email}</div>
+              <div className="text-xs text-zinc-600 dark:text-zinc-300 mt-0.5 truncate">
                 {currentRole?.description ? currentRole.description.split(' - ')[0] : 'Leader'} &bull;{' '}
                 {currentUnit ? (language === 'ar' ? currentUnit.name_ar : currentUnit.name_en) : (language === 'ar' ? 'قيادة الفوج (عام)' : 'Global')}
               </div>
@@ -120,15 +125,15 @@ export default function LoginPage() {
         <div className="bg-white dark:bg-[#121214] rounded-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden shadow-sm">
           {/* Card Header */}
           <div className="p-4 sm:p-5 bg-zinc-50 dark:bg-zinc-900/60 border-b border-zinc-200 dark:border-zinc-800 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
               <ShieldCheck className="w-5 h-5" />
             </div>
             <div>
               <h2 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
-                {language === 'ar' ? 'تسجيل دخول القادة (Leader Portal)' : 'Leader Portal Sign In'}
+                {language === 'ar' ? 'تسجيل دخول القادة' : 'Leader Portal Sign In'}
               </h2>
               <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                {language === 'ar' ? 'أدخل البريد الإلكتروني وكلمة المرور للمتابعة' : 'Enter your leader email and password to continue'}
+                {language === 'ar' ? 'أدخل اسم المستخدم وكلمة المرور للمتابعة' : 'Enter your credentials to continue'}
               </p>
             </div>
           </div>
@@ -144,32 +149,42 @@ export default function LoginPage() {
             <form onSubmit={handleLeaderLogin} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1.5">
-                  {language === 'ar' ? 'البريد الإلكتروني للقائد' : 'Leader Email Address'}
+                  {language === 'ar' ? 'اسم المستخدم أو البريد الإلكتروني' : 'Username or Email'}
                 </label>
-                <input
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => {
-                    setEmail(e.target.value);
-                    setError(null);
-                  }}
-                  placeholder="leader@scouts.org"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900 text-xs text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus:ring-2 focus:ring-emerald-600 focus:outline-none"
-                />
+                <div className="relative">
+                  <input
+                    type="text"
+                    required
+                    value={identifier}
+                    onChange={(e) => {
+                      setIdentifier(e.target.value);
+                      setError(null);
+                    }}
+                    placeholder={language === 'ar' ? 'اسم المستخدم (مثال: admin)' : 'Username (e.g. admin)'}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900 text-xs text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus:ring-2 focus:ring-emerald-600 focus:outline-none"
+                  />
+                  <User className="w-4 h-4 text-zinc-400 absolute right-3 rtl:right-auto rtl:left-3 top-3 pointer-events-none" />
+                </div>
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1.5">
                   {language === 'ar' ? 'كلمة المرور' : 'Password'}
                 </label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900 text-xs text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus:ring-2 focus:ring-emerald-600 focus:outline-none"
-                />
+                <div className="relative">
+                  <input
+                    type="password"
+                    required
+                    value={password}
+                    onChange={(e) => {
+                      setPassword(e.target.value);
+                      setError(null);
+                    }}
+                    placeholder="••••••••"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900 text-xs text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus:ring-2 focus:ring-emerald-600 focus:outline-none"
+                  />
+                  <Lock className="w-4 h-4 text-zinc-400 absolute right-3 rtl:right-auto rtl:left-3 top-3 pointer-events-none" />
+                </div>
               </div>
 
               <button
@@ -177,7 +192,7 @@ export default function LoginPage() {
                 className="w-full py-2.5 rounded-xl bg-emerald-800 hover:bg-emerald-900 text-white font-bold text-xs transition-colors flex items-center justify-center gap-2 shadow-xs cursor-pointer"
               >
                 <LogIn className="w-4 h-4" />
-                <span>{language === 'ar' ? 'تسجيل دخول القائد' : 'Leader Sign In'}</span>
+                <span>{language === 'ar' ? 'تسجيل دخول' : 'Sign In'}</span>
               </button>
             </form>
           </div>
