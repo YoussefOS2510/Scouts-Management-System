@@ -167,8 +167,8 @@ export function GoogleWorkspaceLayout({ children }: { children: React.ReactNode 
         ...(canAccessAttendance
           ? [
               {
-                href: '/attendance',
-                label: language === 'ar' ? 'سجل الحضور' : 'Attendance',
+                href: '/events',
+                label: language === 'ar' ? 'الفعاليات والحضور' : 'Events & Attendance',
                 icon: CalendarCheck,
               },
             ]
@@ -242,8 +242,8 @@ export function GoogleWorkspaceLayout({ children }: { children: React.ReactNode 
         ...(canAccessAttendance
           ? [
               {
-                href: '/attendance',
-                label: language === 'ar' ? 'الحضور' : 'Attendance',
+                href: '/events',
+                label: language === 'ar' ? 'الفعاليات' : 'Events',
                 icon: CalendarCheck,
               },
             ]
@@ -881,7 +881,7 @@ export function GoogleWorkspaceLayout({ children }: { children: React.ReactNode 
           <nav className="flex-1 space-y-1 overflow-y-auto">
             {navItems.map((item) => {
               const Icon = item.icon;
-              const isActive = pathname === item.href;
+              const isActive = pathname === item.href || (item.href === '/events' && pathname.startsWith('/attendance'));
 
               return (
                 <Link
@@ -1061,7 +1061,7 @@ export function GoogleWorkspaceLayout({ children }: { children: React.ReactNode 
               <nav className="mt-3 flex-1 space-y-1">
                 {navItems.map((item) => {
                   const Icon = item.icon;
-                  const isActive = pathname === item.href;
+                  const isActive = pathname === item.href || (item.href === '/events' && pathname.startsWith('/attendance'));
                   return (
                     <Link
                       key={item.href}
@@ -1147,7 +1147,7 @@ export function GoogleWorkspaceLayout({ children }: { children: React.ReactNode 
       <nav className="md:hidden fixed bottom-0 inset-x-0 bg-white/95 dark:bg-[#111827]/95 backdrop-blur-md border-t border-neutral-200/80 dark:border-neutral-800/80 z-40 px-2 py-1.5 pb-safe flex items-center justify-around select-none">
         {bottomBarItems.map((item) => {
           const Icon = item.icon;
-          const isActive = pathname === item.href;
+          const isActive = pathname === item.href || (item.href === '/events' && pathname.startsWith('/attendance'));
           return (
             <Link
               key={item.href}

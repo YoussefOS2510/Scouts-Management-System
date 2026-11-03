@@ -104,7 +104,7 @@ function EventsPageContent() {
   const [newEventType, setNewEventType] = useState<string>('meeting');
   const [newEventLocation, setNewEventLocation] = useState<string>('');
   const [newEventNotes, setNewEventNotes] = useState<string>('');
-  const [directToAttendance, setDirectToAttendance] = useState<boolean>(true);
+  const [directToAttendance, setDirectToAttendance] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   // Form Fields for Edit
@@ -1028,3 +1028,4 @@ export default function EventsPage() {
     </Suspense>
   );
 }
+

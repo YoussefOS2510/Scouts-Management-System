@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo, useEffect, Suspense } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { useLanguage } from '../../lib/LanguageContext';
 import { useAuth } from '../../lib/AuthContext';
 import { INITIAL_UNITS } from '../../lib/data';
@@ -52,6 +52,7 @@ const EVENT_PRESETS = [
 
 function AttendancePageContent() {
   const { language, t } = useLanguage();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const querySessionId = searchParams.get('sessionId');
   const queryUnitId = searchParams.get('unitId');
@@ -93,6 +94,13 @@ function AttendancePageContent() {
   const [selectedUnitId, setSelectedUnitId] = useState<number>(defaultUnit);
 
   const canTakeAttendance = isSuperAdmin || can('attendance.take', selectedUnitId);
+
+  // If visiting /attendance without a specific sessionId, seamlessly route to /events
+  useEffect(() => {
+    if (!querySessionId && !isLoadingPermissions) {
+      router.replace(selectedUnitId ? `/events?unitId=${selectedUnitId}` : '/events');
+    }
+  }, [querySessionId, selectedUnitId, isLoadingPermissions, router]);
 
   // Sync unit when accessibleUnits switch
   useEffect(() => {
@@ -145,12 +153,13 @@ function AttendancePageContent() {
           const sessionsList: AttendanceSession[] = data.sessions || [];
           setEvents(sessionsList);
 
-          const activeId = targetSessionId || data.activeSessionId || (sessionsList.length > 0 ? sessionsList[0].id : null);
+          // Only activate session if targetSessionId was explicitly provided
+          const activeId = targetSessionId || null;
           setSelectedSessionId(activeId);
 
           // Populate records for active session
           const map: Record<string, { status?: AttendanceStatus; notes: string }> = {};
-          if (Array.isArray(data.records)) {
+          if (Array.isArray(data.records) && activeId) {
             data.records.forEach((rec: any) => {
               map[rec.member_id] = {
                 status: rec.status,
