@@ -157,7 +157,6 @@ export default function PermissionsMatrixPage() {
     roles,
     rolePermissions,
     isDbConnected,
-    loginAs,
     updatePermissionOverride,
     resetPermissionOverrides,
     refreshPermissions,
@@ -463,18 +462,17 @@ export default function PermissionsMatrixPage() {
         </h2>
         <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">
           {language === 'ar'
-            ? 'تعديل الصلاحيات وتعيين أدوار القادة متاح فقط لحساب مدير النظام (System Admin). إذا كنت تختبر حساب قائد آخر، اضغط أدناه للرجوع لحساب المدير وتعديل الصلاحيات.'
-            : 'Leader permission assignments are restricted to the System Administrator. If you are currently testing another leader account, click below to switch back to Admin.'}
+            ? 'تعديل الصلاحيات وتعيين أدوار القادة متاح فقط لحساب مدير النظام (System Admin).'
+            : 'Leader permission assignments are restricted to the System Administrator.'}
         </p>
         <div className="flex items-center justify-center gap-2 pt-2">
-          <button
-            type="button"
-            onClick={() => loginAs('u0')}
+          <Link
+            href="/login"
             className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
           >
             <ShieldCheck className="w-4 h-4" />
-            <span>{language === 'ar' ? 'التبديل لحساب مدير النظام' : 'Switch to System Admin Account'}</span>
-          </button>
+            <span>{language === 'ar' ? 'تسجيل الدخول كمدير' : 'Sign In as Admin'}</span>
+          </Link>
           <Link
             href="/"
             className="px-4 py-2 rounded-xl bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 font-semibold text-xs transition-colors"

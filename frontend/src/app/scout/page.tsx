@@ -31,7 +31,6 @@ import {
   ExternalLink,
   BookOpen,
   ArrowRight,
-  UserCheck,
 } from 'lucide-react';
 
 export default function ScoutPortalPage() {
@@ -45,8 +44,6 @@ export default function ScoutPortalPage() {
     getAlbumPhotos,
     getScoutAttendanceStats,
     getScoutSessionRecords,
-    loginAsMember,
-    loginAs,
     members,
   } = useAuth();
 
@@ -145,41 +142,6 @@ export default function ScoutPortalPage() {
                 <Star className="w-3 h-3 fill-amber-500 text-amber-500 dark:fill-amber-400 dark:text-amber-400" />
                 <span>{language === 'ar' ? 'وسام المواظبة' : 'Honor Badge'}</span>
               </span>
-            </div>
-
-            {/* Integrated Persona Switcher Dropdown */}
-            <div className="flex items-center gap-2 shrink-0">
-              <div className="flex items-center gap-1.5 text-xs text-neutral-500 dark:text-neutral-400">
-                <UserCheck className="w-3.5 h-3.5 text-sky-600 dark:text-sky-400" />
-                <span className="font-medium hidden sm:inline">
-                  {language === 'ar' ? 'تبديل الكشاف:' : 'Switch Scout:'}
-                </span>
-              </div>
-              <div className="relative">
-                <select
-                  value={activeScout.id}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    if (val === 'leader') {
-                      loginAs('u0');
-                    } else {
-                      loginAsMember(val);
-                    }
-                  }}
-                  className="bg-neutral-50 dark:bg-[#1E293B] border border-neutral-200 dark:border-neutral-700/80 text-neutral-900 dark:text-neutral-100 text-xs font-medium rounded-lg ps-3 pe-8 py-1.5 focus:outline-none focus:ring-1 focus:ring-sky-500 cursor-pointer appearance-none transition-colors"
-                  aria-label={language === 'ar' ? 'تبديل الكشاف أو العودة للقائد' : 'Switch scout or return to leader'}
-                >
-                  <option value="m1">مينا سمير — كشافة (Mina Samir)</option>
-                  <option value="m101">فادي ماجد — أشبال (Fady Maged)</option>
-                  <option value="m301">مريم شريف — مرشدات (Maryam Sherif)</option>
-                  <option value="leader">↩ {language === 'ar' ? 'العودة كقائد (Leader Console)' : 'Return to Leader Console'}</option>
-                </select>
-                <div className="pointer-events-none absolute inset-y-0 end-0 flex items-center px-2 text-neutral-400">
-                  <svg className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
-                  </svg>
-                </div>
-              </div>
             </div>
           </div>
 

@@ -6,7 +6,6 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useLanguage } from '../lib/LanguageContext';
 import { useAuth } from '../lib/AuthContext';
 import { INITIAL_UNITS } from '../lib/data';
-import { isSameUser } from '../lib/permissions';
 import {
   Search,
   Plus,
@@ -49,11 +48,6 @@ export function GoogleWorkspaceLayout({ children }: { children: React.ReactNode 
     can,
     logout,
     accessibleUnits,
-    loginAs,
-    loginAsMember,
-    allUsers,
-    userRoles,
-    roles,
     members,
   } = useAuth();
   const pathname = usePathname();
@@ -502,19 +496,6 @@ export function GoogleWorkspaceLayout({ children }: { children: React.ReactNode 
                 <Search className="w-4 h-4" />
               </button>
 
-              {/* Active Testing Persona Quick Return Button (Desktop) */}
-              {!isSuperAdmin && (
-                <button
-                  onClick={() => loginAs('u0')}
-                  className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/30 text-xs font-semibold hover:bg-amber-500/20 transition-colors cursor-pointer"
-                  title={language === 'ar' ? 'الرجوع لحساب مدير النظام لتعديل الصلاحيات' : 'Switch back to System Admin to edit permissions'}
-                >
-                  <ShieldCheck className="w-3.5 h-3.5 text-amber-500" />
-                  <span>{language === 'ar' ? 'اختبار كـ:' : 'Testing as:'} {currentUser?.full_name?.split(' (')[0]?.split(' ')[0]}</span>
-                  <span className="text-[10px] underline font-bold ms-1">{language === 'ar' ? '(رجوع للأدمن)' : '(Switch to Admin)'}</span>
-                </button>
-              )}
-
               {/* Language Switch */}
               <button
                 onClick={toggleLanguage}
@@ -612,159 +593,6 @@ export function GoogleWorkspaceLayout({ children }: { children: React.ReactNode 
                         </Link>
                       </div>
                     )}
-
-                {/* ROLE & PERSONA SWITCHER (Moved here from primary navigation) */}
-                <div className="space-y-1">
-                  <div className="text-[10px] uppercase tracking-wider font-semibold text-neutral-400 dark:text-neutral-400 px-2 py-1 flex items-center justify-between">
-                    <span>{language === 'ar' ? 'تبديل الدور / الشخصية' : 'Switch Role / Persona'}</span>
-                    <Sparkles className="w-3 h-3 text-sky-500" />
-                  </div>
-
-                  {/* Leader Mode Switch */}
-                  <button
-                    onClick={() => {
-                      loginAs('u0');
-                      setIsUserMenuOpen(false);
-                      if (pathname === '/scout') router.push('/');
-                    }}
-                    className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-                      !isScout && currentUser?.id === 'u0'
-                        ? 'bg-sky-500/10 text-sky-700 dark:bg-sky-400/15 dark:text-sky-300 border border-sky-500/30'
-                        : 'text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-[#1E293B]'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <ShieldCheck className="w-3.5 h-3.5 text-sky-500" />
-                      <span>{language === 'ar' ? 'لوحة قيادة القائد العام' : 'Leader Console (Admin)'}</span>
-                    </div>
-                    {!isScout && (currentUser?.id === 'u0' || currentUser?.email === 'admin@scouts.org') && <CheckCircle2 className="w-3.5 h-3.5 text-sky-500" />}
-                  </button>
-
-                  {/* Leader Persona: Andrew Nabil (Assistant Leader - Kashafa A) */}
-                  <button
-                    onClick={() => {
-                      loginAs('u4');
-                      setIsUserMenuOpen(false);
-                      if (pathname === '/scout') router.push('/');
-                    }}
-                    className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-                      !isScout && (currentUser?.id === 'u4' || currentUser?.email === 'andrew.nabil@scouts.org')
-                        ? 'bg-amber-500/10 text-amber-700 dark:bg-amber-400/15 dark:text-amber-300 border border-amber-500/30 font-semibold'
-                        : 'text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-[#1E293B]'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <ShieldCheck className="w-3.5 h-3.5 text-amber-500" />
-                      <span dir="auto">{language === 'ar' ? 'أندرو نبيل (مساعد: كشافة A)' : 'Andrew Nabil (Scouts A)'}</span>
-                    </div>
-                    {!isScout && (currentUser?.id === 'u4' || currentUser?.email === 'andrew.nabil@scouts.org') && <CheckCircle2 className="w-3.5 h-3.5 text-amber-500" />}
-                  </button>
-
-                  {/* Leader Persona: Christine Nabil (Media - Morshdat A & B) */}
-                  <button
-                    onClick={() => {
-                      loginAs('u18');
-                      setIsUserMenuOpen(false);
-                      router.push('/media');
-                    }}
-                    className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-                      !isScout && (currentUser?.id === 'u18' || currentUser?.email === 'christine.nabil@scouts.org')
-                        ? 'bg-purple-500/10 text-purple-700 dark:bg-purple-400/15 dark:text-purple-300 border border-purple-500/30 font-semibold'
-                        : 'text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-[#1E293B]'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <UploadCloud className="w-3.5 h-3.5 text-purple-500" />
-                      <span dir="auto">{language === 'ar' ? 'كريستين نبيل (إعلام: مرشدات A و B)' : 'Christine Nabil (Media - Morshdat A & B)'}</span>
-                    </div>
-                    {!isScout && (currentUser?.id === 'u18' || currentUser?.email === 'christine.nabil@scouts.org') && <CheckCircle2 className="w-3.5 h-3.5 text-purple-500" />}
-                  </button>
-
-                  {/* Quick Select Any Leader from Database */}
-                  <div className="px-2 pt-1 pb-1">
-                    <label className="text-[10px] font-bold text-neutral-400 block mb-1">
-                      {language === 'ar' ? 'تبديل لأي قائد بقاعدة البيانات:' : 'Quick Select Any Leader:'}
-                    </label>
-                    <select
-                      value={allUsers.find(u => isSameUser(u.id, currentUser?.id))?.id || currentUser?.id || ''}
-                      onChange={(e) => {
-                        if (e.target.value) {
-                          loginAs(e.target.value);
-                          setIsUserMenuOpen(false);
-                        }
-                      }}
-                      className="w-full bg-neutral-100 dark:bg-[#1E293B] border border-neutral-300 dark:border-neutral-700 rounded-lg px-2 py-1 text-xs font-medium text-neutral-800 dark:text-neutral-200 focus:outline-none focus:ring-1 focus:ring-purple-500 cursor-pointer"
-                    >
-                      {allUsers.map((u) => {
-                        return (
-                          <option key={u.id} value={u.id}>
-                            {u.full_name}
-                          </option>
-                        );
-                      })}
-                    </select>
-                  </div>
-
-                  {/* Scout Persona 1: Mina Samir */}
-                  <button
-                    onClick={() => {
-                      loginAsMember('m1');
-                      setIsUserMenuOpen(false);
-                      router.push('/scout');
-                    }}
-                    className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-                      isScout && currentMember?.id === 'm1'
-                        ? 'bg-emerald-500/10 text-emerald-700 dark:bg-emerald-400/15 dark:text-emerald-300 border border-emerald-500/30'
-                        : 'text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-[#1E293B]'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <Compass className="w-3.5 h-3.5 text-emerald-500" />
-                      <span dir="auto">{language === 'ar' ? 'مينا سمير (متقدم A)' : 'Mina Samir (Scout)'}</span>
-                    </div>
-                    {isScout && currentMember?.id === 'm1' && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />}
-                  </button>
-
-                  {/* Scout Persona 2: Fady Maged */}
-                  <button
-                    onClick={() => {
-                      loginAsMember('m101');
-                      setIsUserMenuOpen(false);
-                      router.push('/scout');
-                    }}
-                    className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-                      isScout && currentMember?.id === 'm101'
-                        ? 'bg-amber-500/10 text-amber-700 dark:bg-amber-400/15 dark:text-amber-300 border border-amber-500/30'
-                        : 'text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-[#1E293B]'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <Compass className="w-3.5 h-3.5 text-amber-500" />
-                      <span dir="auto">{language === 'ar' ? 'فادي ماجد (شبل A)' : 'Fady Maged (Cubs)'}</span>
-                    </div>
-                    {isScout && currentMember?.id === 'm101' && <CheckCircle2 className="w-3.5 h-3.5 text-amber-500" />}
-                  </button>
-
-                  {/* Scout Persona 3: Maryam Sherif */}
-                  <button
-                    onClick={() => {
-                      loginAsMember('m301');
-                      setIsUserMenuOpen(false);
-                      router.push('/scout');
-                    }}
-                    className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-                      isScout && currentMember?.id === 'm301'
-                        ? 'bg-teal-500/10 text-teal-700 dark:bg-teal-400/15 dark:text-teal-300 border border-teal-500/30'
-                        : 'text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-[#1E293B]'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <Compass className="w-3.5 h-3.5 text-teal-500" />
-                      <span dir="auto">{language === 'ar' ? 'مريم شريف (مرشدات)' : 'Maryam Sherif (Guides)'}</span>
-                    </div>
-                    {isScout && currentMember?.id === 'm301' && <CheckCircle2 className="w-3.5 h-3.5 text-teal-500" />}
-                  </button>
-                </div>
 
                 <div className="border-t border-neutral-200/80 dark:border-neutral-800/80 pt-2 space-y-1">
                   <Link
