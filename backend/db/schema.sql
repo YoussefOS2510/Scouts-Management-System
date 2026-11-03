@@ -130,15 +130,18 @@ CREATE TABLE IF NOT EXISTS user_permission_overrides (
 CREATE UNIQUE INDEX IF NOT EXISTS uidx_upo_scoped ON user_permission_overrides(user_id, permission_id, unit_id) WHERE unit_id IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS uidx_upo_global ON user_permission_overrides(user_id, permission_id) WHERE unit_id IS NULL;
 
--- 7. Attendance Module
+-- 7. Attendance Module (Event-based Attendance)
 CREATE TABLE IF NOT EXISTS attendance_sessions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     unit_id INT NOT NULL REFERENCES units(id),
     session_date DATE NOT NULL,
-    session_title VARCHAR(150),
+    session_title VARCHAR(150) NOT NULL,
+    event_type VARCHAR(50) DEFAULT 'meeting',
+    location VARCHAR(150),
+    notes TEXT,
     recorded_by UUID NOT NULL REFERENCES users(id),
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT uq_attendance_unit_date UNIQUE(unit_id, session_date)
+    CONSTRAINT uq_attendance_unit_event UNIQUE(unit_id, session_date, session_title)
 );
 
 CREATE TABLE IF NOT EXISTS attendance_records (

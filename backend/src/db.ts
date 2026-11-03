@@ -7,12 +7,22 @@ const defaultConnectionString =
   process.env.POSTGRES_CONNECTION_STRING ||
   'postgresql://postgres:postgrespassword@localhost:5432/scouts_db';
 
+const isCloud =
+  defaultConnectionString.includes('sslmode=require') ||
+  defaultConnectionString.includes('neon.tech') ||
+  defaultConnectionString.includes('supabase.co') ||
+  defaultConnectionString.includes('render.com') ||
+  process.env.NODE_ENV === 'production';
+
 export const poolConfig: pg.PoolConfig = {
   connectionString: defaultConnectionString,
-  max: 50,
-  min: 5,
+  max: 30,
+  min: 2,
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 5000,
+  connectionTimeoutMillis: 15000,
+  ssl: isCloud && !defaultConnectionString.includes('localhost') && !defaultConnectionString.includes('127.0.0.1')
+    ? { rejectUnauthorized: false }
+    : undefined,
 };
 
 let poolInstance: pg.Pool | null = null;

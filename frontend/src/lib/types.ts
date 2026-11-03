@@ -143,8 +143,19 @@ export interface AttendanceSession {
   unit_id: number;
   session_date: string;
   session_title: string;
+  event_type?: string;
+  location?: string;
+  notes?: string;
   recorded_by: string;
+  recorded_by_name?: string;
+  unit_name_ar?: string;
+  unit_name_en?: string;
   created_at: string;
+  total_records?: number;
+  present_count?: number;
+  absent_count?: number;
+  excused_count?: number;
+  late_count?: number;
 }
 
 export interface EquipmentCategory {
