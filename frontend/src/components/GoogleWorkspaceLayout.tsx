@@ -829,12 +829,12 @@ export function GoogleWorkspaceLayout({ children }: { children: React.ReactNode 
                 <div className="absolute top-12 start-0 w-60 bg-white dark:bg-[#111827] rounded-xl shadow-2xl border border-neutral-200 dark:border-neutral-800/90 py-1.5 z-50 animate-fadeIn">
                   {canNewAttendance && (
                     <Link
-                      href="/attendance"
+                      href="/events"
                       onClick={() => setIsNewMenuOpen(false)}
                       className="flex items-center gap-3 px-3.5 py-2 text-xs font-medium text-neutral-800 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-[#1E293B] transition-colors"
                     >
                       <CalendarCheck className="w-4 h-4 text-emerald-500" />
-                      <span>{language === 'ar' ? 'تسجيل كشف حضور جديد' : 'New Attendance Roster'}</span>
+                      <span>{language === 'ar' ? 'الفعاليات وكشوف الحضور' : 'Events & Attendance'}</span>
                     </Link>
                   )}
                   {canNewMemberOrLeader && (
@@ -1002,7 +1002,7 @@ export function GoogleWorkspaceLayout({ children }: { children: React.ReactNode 
                     <div className="mt-1.5 p-1 rounded-xl bg-neutral-100 dark:bg-[#0B0F17] border border-neutral-200 dark:border-neutral-800 space-y-0.5 animate-fadeIn">
                       {canNewAttendance && (
                         <Link
-                          href="/attendance"
+                          href="/events"
                           onClick={() => {
                             setIsMobileNewMenuOpen(false);
                             setIsMobileSidebarOpen(false);
@@ -1010,7 +1010,7 @@ export function GoogleWorkspaceLayout({ children }: { children: React.ReactNode 
                           className="flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-neutral-800 dark:text-neutral-200 hover:bg-neutral-200/60 dark:hover:bg-[#1E293B] rounded-lg transition-colors"
                         >
                           <CalendarCheck className="w-3.5 h-3.5 text-emerald-500" />
-                          <span>{language === 'ar' ? 'تسجيل كشف حضور جديد' : 'New Attendance Roster'}</span>
+                          <span>{language === 'ar' ? 'الفعاليات وكشوف الحضور' : 'Events & Attendance'}</span>
                         </Link>
                       )}
                       {canNewMemberOrLeader && (

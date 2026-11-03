@@ -473,7 +473,7 @@ export default function DashboardPage() {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <Link
-            href="/attendance?unit=5"
+            href="/events?unitId=5"
             className="p-3 bg-white dark:bg-[#111827] hover:bg-neutral-50 dark:hover:bg-[#161F30] rounded-xl border border-neutral-200 dark:border-neutral-800/80 hover:border-neutral-300 dark:hover:border-neutral-700/80 flex items-center gap-3 transition-colors cursor-pointer group"
           >
             <div className="w-8 h-8 rounded-lg bg-neutral-100 dark:bg-[#1E293B] border border-neutral-200/60 dark:border-neutral-700/50 flex items-center justify-center shrink-0">

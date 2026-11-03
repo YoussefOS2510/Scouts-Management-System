@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, Suspense } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { useLanguage } from '../../lib/LanguageContext';
 import { useAuth } from '../../lib/AuthContext';
 import { INITIAL_UNITS } from '../../lib/data';
@@ -35,6 +36,8 @@ import {
   X,
   Sparkles,
   Info,
+  ArrowRight,
+  ArrowLeft,
 } from 'lucide-react';
 import { TeamAttendanceAnalytics } from '../../components/TeamAttendanceAnalytics';
 
@@ -47,8 +50,12 @@ const EVENT_PRESETS = [
   { ar: 'حفل قبول ووعد كشفي', en: 'Promise & Investiture Ceremony', type: 'celebration' },
 ];
 
-export default function AttendancePage() {
+function AttendancePageContent() {
   const { language, t } = useLanguage();
+  const searchParams = useSearchParams();
+  const querySessionId = searchParams.get('sessionId');
+  const queryUnitId = searchParams.get('unitId');
+
   const {
     currentUser,
     currentRole,
@@ -77,8 +84,12 @@ export default function AttendancePage() {
   // Roster layout: 'list' (Drive Table Rows) vs 'grid' (Tactile Patrol Cards)
   const [rosterViewMode, setRosterViewMode] = useState<'list' | 'grid'>('list');
 
-  // Unit scoping: default to first accessible unit
-  const defaultUnit = accessibleUnits.length > 0 ? accessibleUnits[0].id : 5;
+  // Unit scoping: prioritize queryUnitId if provided and accessible
+  const defaultUnit = queryUnitId
+    ? Number(queryUnitId)
+    : accessibleUnits.length > 0
+    ? accessibleUnits[0].id
+    : 5;
   const [selectedUnitId, setSelectedUnitId] = useState<number>(defaultUnit);
 
   const canTakeAttendance = isSuperAdmin || can('attendance.take', selectedUnitId);
@@ -92,7 +103,7 @@ export default function AttendancePage() {
 
   // Events & Active Session State
   const [events, setEvents] = useState<AttendanceSession[]>([]);
-  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(querySessionId || null);
   const [isLoadingEvents, setIsLoadingEvents] = useState<boolean>(true);
 
   // Attendance records state: { [memberId]: { status?: AttendanceStatus, notes: string } }
@@ -155,8 +166,8 @@ export default function AttendancePage() {
   };
 
   useEffect(() => {
-    loadUnitEvents(selectedUnitId);
-  }, [selectedUnitId]);
+    loadUnitEvents(selectedUnitId, querySessionId || undefined);
+  }, [selectedUnitId, querySessionId]);
 
   // Load records when switching active event session
   const handleSelectEvent = (sessionId: string) => {
@@ -587,26 +598,49 @@ export default function AttendancePage() {
     <div className="space-y-5 animate-fadeIn pb-12">
       {/* 1. BREADCRUMBS & TOP CONTROLS */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-neutral-200/80 dark:border-neutral-800/60">
-        {/* Breadcrumbs */}
-        <div className="flex items-center gap-1.5 text-xs sm:text-sm text-neutral-500 dark:text-neutral-400">
-          <Link href="/" className="hover:text-sky-500 transition-colors font-bold">
-            SMSR
+        {/* Breadcrumbs & Back to Events */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          <Link
+            href={selectedUnitId ? `/events?unitId=${selectedUnitId}` : '/events'}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-neutral-100 hover:bg-neutral-200/80 dark:bg-[#1E293B] dark:hover:bg-neutral-700/80 text-neutral-800 dark:text-neutral-200 text-xs font-semibold border border-neutral-200/80 dark:border-neutral-700 transition-colors shadow-2xs"
+          >
+            {language === 'ar' ? (
+              <>
+                <ArrowRight className="w-3.5 h-3.5" />
+                <span>{t('back_to_events')}</span>
+              </>
+            ) : (
+              <>
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>{t('back_to_events')}</span>
+              </>
+            )}
           </Link>
-          <ChevronRight className="w-3.5 h-3.5 text-neutral-400 rtl:rotate-180" />
-          <span className="text-neutral-900 dark:text-neutral-100 font-semibold">
-            {language === 'ar' ? 'سجل الحضور والفعاليات' : 'Attendance & Events'}
-          </span>
-          {currentUnitObj && (
-            <>
-              <ChevronRight className="w-3.5 h-3.5 text-neutral-400 rtl:rotate-180" />
-              <span
-                className="text-xs px-2.5 py-0.5 rounded-md bg-sky-500/10 text-sky-700 dark:bg-sky-400/15 dark:text-sky-300 font-medium border border-sky-500/20"
-                dir="auto"
-              >
-                {language === 'ar' ? currentUnitObj.name_ar : currentUnitObj.name_en}
-              </span>
-            </>
-          )}
+
+          <div className="flex items-center gap-1.5 text-xs sm:text-sm text-neutral-500 dark:text-neutral-400">
+            <Link href="/" className="hover:text-sky-500 transition-colors font-bold">
+              SMSR
+            </Link>
+            <ChevronRight className="w-3.5 h-3.5 text-neutral-400 rtl:rotate-180" />
+            <Link href={selectedUnitId ? `/events?unitId=${selectedUnitId}` : '/events'} className="hover:text-sky-500 transition-colors font-medium">
+              {language === 'ar' ? 'الفعاليات' : 'Events'}
+            </Link>
+            <ChevronRight className="w-3.5 h-3.5 text-neutral-400 rtl:rotate-180" />
+            <span className="text-neutral-900 dark:text-neutral-100 font-semibold">
+              {language === 'ar' ? 'كشف الحضور' : 'Attendance Roll-Call'}
+            </span>
+            {currentUnitObj && (
+              <>
+                <ChevronRight className="w-3.5 h-3.5 text-neutral-400 rtl:rotate-180" />
+                <span
+                  className="text-xs px-2.5 py-0.5 rounded-md bg-sky-500/10 text-sky-700 dark:bg-sky-400/15 dark:text-sky-300 font-medium border border-sky-500/20"
+                  dir="auto"
+                >
+                  {language === 'ar' ? currentUnitObj.name_ar : currentUnitObj.name_en}
+                </span>
+              </>
+            )}
+          </div>
         </div>
 
         {/* Tab & View Mode Controls */}
@@ -884,8 +918,15 @@ export default function AttendancePage() {
                   {t('no_events_found')}
                 </p>
               </div>
-              {canTakeAttendance && (
-                <div className="pt-2">
+              <div className="pt-2 flex flex-wrap items-center justify-center gap-2">
+                <Link
+                  href={selectedUnitId ? `/events?unitId=${selectedUnitId}` : '/events'}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-neutral-100 hover:bg-neutral-200/80 dark:bg-[#1E293B] dark:hover:bg-neutral-700/80 text-neutral-800 dark:text-neutral-200 font-semibold text-xs transition-colors shadow-2xs border border-neutral-300 dark:border-neutral-700"
+                >
+                  <Calendar className="w-4 h-4 text-sky-500" />
+                  <span>{t('back_to_events')}</span>
+                </Link>
+                {canTakeAttendance && (
                   <button
                     onClick={() => setIsNewEventModalOpen(true)}
                     className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-semibold text-xs transition-colors shadow-xs cursor-pointer"
@@ -893,8 +934,8 @@ export default function AttendancePage() {
                     <Plus className="w-4 h-4" />
                     <span>{t('set_event_now')}</span>
                   </button>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           )}
 
@@ -1497,5 +1538,19 @@ export default function AttendancePage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function AttendancePage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="py-24 text-center">
+          <RefreshCw className="w-6 h-6 animate-spin text-sky-500 mx-auto" />
+        </div>
+      }
+    >
+      <AttendancePageContent />
+    </Suspense>
   );
 }

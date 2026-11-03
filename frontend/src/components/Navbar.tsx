@@ -31,7 +31,7 @@ export function Navbar() {
 
   const navLinks = [
     { href: '/', label: t('nav_dashboard'), icon: LayoutDashboard },
-    { href: '/attendance', label: t('nav_attendance'), icon: CalendarCheck },
+    { href: '/events', label: t('nav_events'), icon: CalendarCheck },
     { href: '/members', label: t('nav_members'), icon: Users },
     { href: '/inventory', label: t('nav_inventory'), icon: Package },
     { href: '/media', label: t('nav_media'), icon: UploadCloud },
@@ -79,7 +79,7 @@ export function Navbar() {
           <nav className="hidden lg:flex items-center gap-1">
             {navLinks.map((link) => {
               const Icon = link.icon;
-              const isActive = pathname === link.href;
+              const isActive = pathname === link.href || (link.href === '/events' && pathname.startsWith('/attendance'));
               return (
                 <Link
                   key={link.href}
@@ -181,7 +181,7 @@ export function Navbar() {
       <div className="lg:hidden flex overflow-x-auto px-4 py-2 border-t border-[#E2DED6] dark:border-[#27342F] gap-1.5 bg-[#F8F7F4] dark:bg-[#0F1412]">
         {navLinks.map((link) => {
           const Icon = link.icon;
-          const isActive = pathname === link.href;
+          const isActive = pathname === link.href || (link.href === '/events' && pathname.startsWith('/attendance'));
           return (
             <Link
               key={link.href}
