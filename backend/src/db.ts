@@ -103,6 +103,9 @@ export async function query<T = any>(
   // Compatibility: Handle T-SQL CONVERT(NVARCHAR(n), expr, 127) -> ISO timestamp string
   pgSql = pgSql.replace(/CONVERT\s*\(\s*N?VARCHAR\s*\(\s*\d+\s*\)\s*,\s*([^,]+?)\s*,\s*127\s*\)/gi, 'TO_CHAR($1, \'YYYY-MM-DD"T"HH24:MI:SS"Z"\')');
 
+  // Compatibility: Handle T-SQL SYSUTCDATETIME() / GETDATE() -> NOW()
+  pgSql = pgSql.replace(/\b(SYSUTCDATETIME|GETDATE)\s*\(\s*\)/gi, 'NOW()');
+
   // Remove dbo. prefix
   pgSql = pgSql.replace(/\bdbo\./gi, '');
 

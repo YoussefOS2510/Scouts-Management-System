@@ -238,26 +238,33 @@ export async function PUT(req: NextRequest) {
     const body = await req.json();
     const { action, memberId, patrolId } = body;
 
-    if (action === 'assign_patrol') {
-      if (!memberId) {
-        return NextResponse.json({ success: false, error: 'Missing memberId' }, { status: 400 });
+    if (action === 'assign_patrol' || action === 'batch_assign_patrol') {
+      const cleanPatrolId = patrolId !== null && patrolId !== undefined && patrolId !== 'none' ? Number(patrolId) : null;
+      const ids: string[] = Array.isArray(body.memberIds)
+        ? body.memberIds
+        : memberId
+        ? [memberId]
+        : [];
+
+      if (ids.length === 0) {
+        return NextResponse.json({ success: false, error: 'Missing memberId or memberIds' }, { status: 400 });
       }
 
-      const cleanPatrolId = patrolId !== null && patrolId !== undefined && patrolId !== 'none' ? Number(patrolId) : null;
+      for (const id of ids) {
+        await query(
+          `
+          UPDATE members
+          SET patrol_id = @patrolId, updated_at = NOW()
+          WHERE id = @memberId;
+          `,
+          {
+            memberId: { type: sql.UniqueIdentifier, value: id },
+            patrolId: { type: sql.Int, value: cleanPatrolId },
+          }
+        );
+      }
 
-      await query(
-        `
-        UPDATE dbo.members
-        SET patrol_id = @patrolId, updated_at = SYSUTCDATETIME()
-        WHERE id = @memberId;
-        `,
-        {
-          memberId: { type: sql.UniqueIdentifier, value: memberId },
-          patrolId: { type: sql.Int, value: cleanPatrolId },
-        }
-      );
-
-      return NextResponse.json({ success: true, memberId, patrolId: cleanPatrolId });
+      return NextResponse.json({ success: true, memberIds: ids, patrolId: cleanPatrolId });
     }
 
     return NextResponse.json({ success: false, error: 'Unknown action' }, { status: 400 });

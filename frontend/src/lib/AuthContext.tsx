@@ -79,6 +79,7 @@ interface AuthContextType {
   members: Member[];
   patrols: Patrol[];
   assignScoutPatrol: (memberId: string, patrolId: number | null) => boolean;
+  batchAssignScoutPatrol: (memberIds: string[], patrolId: number | null) => Promise<boolean>;
   addPatrol: (unitId: number, nameAr: string, nameEn?: string) => Promise<Patrol | null>;
   updatePatrol: (patrolId: number, nameAr: string, nameEn?: string) => Promise<boolean>;
   reorderPatrols: (unitId: number, orderedIds: number[]) => Promise<boolean>;
@@ -115,6 +116,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 // LocalStorage Cache Keys for Instant Leader Permissions (Zero-flicker loading)
 const CACHE_KEY_RBAC = 'scouts_cached_rbac_v2';
 const CACHE_KEY_MEMBERS = 'scouts_cached_members_v2';
+const CACHE_KEY_PATROLS = 'scouts_cached_patrols_v2';
 
 interface CachedRbacState {
   users: User[];
@@ -245,7 +247,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch {}
     return [];
   });
-  const [patrols, setPatrols] = useState<Patrol[]>([]);
+  const [patrols, setPatrols] = useState<Patrol[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const raw = localStorage.getItem(CACHE_KEY_PATROLS);
+      if (raw) return JSON.parse(raw);
+    } catch {}
+    return [];
+  });
 
   const [isDbConnected, setIsDbConnected] = useState<boolean>(false);
   const [isLoadingPermissions, setIsLoadingPermissions] = useState<boolean>(() => {
@@ -305,7 +314,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               localStorage.setItem(CACHE_KEY_MEMBERS, JSON.stringify(memData.members));
             } catch {}
           }
-          if (Array.isArray(memData.patrols)) setPatrols(memData.patrols);
+          if (Array.isArray(memData.patrols)) {
+            setPatrols(memData.patrols);
+            try {
+              localStorage.setItem(CACHE_KEY_PATROLS, JSON.stringify(memData.patrols));
+            } catch {}
+          }
         }
       }
 
@@ -820,12 +834,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return false;
     }
 
-    // Optimistically update local state
-    setMembers((prev) =>
-      prev.map((m) => (m.id === memberId ? { ...m, patrol_id: patrolId } : m))
-    );
+    // Optimistically update local state & cache
+    setMembers((prev) => {
+      const updated = prev.map((m) => (m.id === memberId ? { ...m, patrol_id: patrolId } : m));
+      try {
+        localStorage.setItem(CACHE_KEY_MEMBERS, JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
 
-    // Persist to Microsoft SQL Server
+    // Persist to Neon Postgres DB
     fetch('/api/members', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -851,6 +869,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     return true;
+  };
+
+  const batchAssignScoutPatrol = async (memberIds: string[], patrolId: number | null): Promise<boolean> => {
+    if (!memberIds || memberIds.length === 0) return false;
+    const idSet = new Set(memberIds);
+
+    // Optimistically update local state & cache
+    setMembers((prev) => {
+      const updated = prev.map((m) => (idSet.has(m.id) ? { ...m, patrol_id: patrolId } : m));
+      try {
+        localStorage.setItem(CACHE_KEY_MEMBERS, JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
+    try {
+      const res = await fetch('/api/members', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'batch_assign_patrol',
+          memberIds,
+          patrolId,
+        }),
+      });
+      const data = await res.json();
+      return Boolean(data.success);
+    } catch (e) {
+      console.error('Failed to batch assign scout patrol in DB:', e);
+      return false;
+    }
   };
 
   const addMember = (memberData: Omit<Member, 'id'> & { id?: string }): Member => {
@@ -1063,7 +1112,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
       const data = await res.json();
       if (data.success && data.patrol) {
-        setPatrols((prev) => [...prev, data.patrol]);
+        setPatrols((prev) => {
+          const updated = [...prev, data.patrol];
+          try {
+            localStorage.setItem(CACHE_KEY_PATROLS, JSON.stringify(updated));
+          } catch {}
+          return updated;
+        });
         return data.patrol;
       }
       return null;
@@ -1082,9 +1137,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
       const data = await res.json();
       if (data.success && data.patrol) {
-        setPatrols((prev) =>
-          prev.map((p) => (p.id === patrolId ? { ...p, name_ar: nameAr, name_en: nameEn || '' } : p))
-        );
+        setPatrols((prev) => {
+          const updated = prev.map((p) => (p.id === patrolId ? { ...p, name_ar: nameAr, name_en: nameEn || '' } : p));
+          try {
+            localStorage.setItem(CACHE_KEY_PATROLS, JSON.stringify(updated));
+          } catch {}
+          return updated;
+        });
         return true;
       }
       return false;
@@ -1097,7 +1156,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const reorderPatrols = async (unitId: number, orderedIds: number[]): Promise<boolean> => {
     // Optimistically update order_index in state
     setPatrols((prev) => {
-      return prev.map((p) => {
+      const updated = prev.map((p) => {
         if (p.unit_id === unitId) {
           const newIdx = orderedIds.indexOf(p.id);
           if (newIdx !== -1) {
@@ -1109,6 +1168,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (a.unit_id !== b.unit_id) return a.unit_id - b.unit_id;
         return (a.order_index ?? 0) - (b.order_index ?? 0);
       });
+      try {
+        localStorage.setItem(CACHE_KEY_PATROLS, JSON.stringify(updated));
+      } catch {}
+      return updated;
     });
 
     try {
@@ -1132,10 +1195,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
       const data = await res.json();
       if (data.success) {
-        setPatrols((prev) => prev.filter((p) => p.id !== patrolId));
-        setMembers((prev) =>
-          prev.map((m) => (m.patrol_id === patrolId ? { ...m, patrol_id: null } : m))
-        );
+        setPatrols((prev) => {
+          const updated = prev.filter((p) => p.id !== patrolId);
+          try {
+            localStorage.setItem(CACHE_KEY_PATROLS, JSON.stringify(updated));
+          } catch {}
+          return updated;
+        });
+        setMembers((prev) => {
+          const updated = prev.map((m) => (m.patrol_id === patrolId ? { ...m, patrol_id: null } : m));
+          try {
+            localStorage.setItem(CACHE_KEY_MEMBERS, JSON.stringify(updated));
+          } catch {}
+          return updated;
+        });
         return true;
       }
       return false;
@@ -1242,6 +1315,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         members,
         patrols,
         assignScoutPatrol,
+        batchAssignScoutPatrol,
         addPatrol,
         updatePatrol,
         reorderPatrols,

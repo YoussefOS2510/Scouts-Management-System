@@ -78,6 +78,7 @@ function UnitHubContent() {
     updatePatrol,
     deletePatrol,
     assignScoutPatrol,
+    batchAssignScoutPatrol,
   } = useAuth();
 
   const canViewAllUnits = isSuperAdmin || currentRole?.name === 'group_leader';
@@ -396,9 +397,7 @@ function UnitHubContent() {
       if (created) {
         // Assign selected unassigned scouts to this new patrol
         if (selectedScoutIds.length > 0) {
-          for (const sId of selectedScoutIds) {
-            assignScoutPatrol(sId, created.id);
-          }
+          await batchAssignScoutPatrol(selectedScoutIds, created.id);
         }
 
         setIsAddPatrolOpen(false);
