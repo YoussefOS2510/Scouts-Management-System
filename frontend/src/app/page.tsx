@@ -14,26 +14,15 @@ import {
   ChevronRight,
   ChevronLeft,
   CalendarCheck,
-  Package,
   Users,
-  HardDrive,
-  CheckCircle2,
   FileSpreadsheet,
-  ArrowRight,
-  ExternalLink,
   Filter,
-  Sparkles,
-  Info,
-  Clock,
-  Download,
-  Eye,
-  SlidersHorizontal,
   UploadCloud,
 } from 'lucide-react';
 
 export default function DashboardPage() {
   const { language, t } = useLanguage();
-  const { currentUser, currentRole, currentUnit, isSuperAdmin, accessibleUnits, can } = useAuth();
+  const { currentUser, currentRole, currentUnit, isSuperAdmin, accessibleUnits, can, members } = useAuth();
   const router = useRouter();
 
   const canTakeAttendance = isSuperAdmin || can('attendance.take');
@@ -56,42 +45,16 @@ export default function DashboardPage() {
   // Selected folder for context menu
   const [activeMenuUnitId, setActiveMenuUnitId] = useState<number | null>(null);
 
-  // Live Database stats
-  const [stats, setStats] = useState<{
-    totalMembers: number;
-    totalUsers: number;
-    totalRegistered: number;
-    totalEquipment: number;
-    totalSessions: number;
-    totalUnits: number;
-    unitMemberCounts: Record<number, number>;
-  }>({
-    totalMembers: 0,
-    totalUsers: 0,
-    totalRegistered: 0,
-    totalEquipment: 0,
-    totalSessions: 0,
-    totalUnits: 12,
-    unitMemberCounts: {},
-  });
-
-  React.useEffect(() => {
-    fetch('/api/dashboard/stats')
-      .then((r) => r.json())
-      .then((data) => {
-        if (data.success && data.stats) {
-          setStats(data.stats);
-        }
-      })
-      .catch((err) => console.error('Failed to fetch dashboard stats:', err));
-  }, []);
-
-  const totalMembers = stats.totalMembers;
-  const totalUsers = stats.totalUsers;
-  const totalRegistered = stats.totalRegistered || (stats.totalMembers + stats.totalUsers);
-  const totalEquipment = stats.totalEquipment;
-  const totalUnits = stats.totalUnits || 12;
-  const unitMemberCounts = stats.unitMemberCounts || {};
+  // Live Unit Member Counts directly from AuthContext
+  const unitMemberCounts = useMemo(() => {
+    const counts: Record<number, number> = {};
+    for (const m of members) {
+      if (m.unit_id) {
+        counts[m.unit_id] = (counts[m.unit_id] || 0) + 1;
+      }
+    }
+    return counts;
+  }, [members]);
 
   // M3 Section color tokens for Google Drive Folder Icons
   const getStageColor = (code: string) => {
@@ -177,16 +140,6 @@ export default function DashboardPage() {
 
   // Only leaders with more than 1 assigned team can filter
   const hasMultipleTeams = accessibleUnits.length > 1;
-
-  // Filtered youth scouts count (strictly members, excluding adult leaders)
-  const filteredScoutsCount = useMemo(() => {
-    return displayUnits.reduce((acc, unit) => {
-      if (unit.is_leadership) return acc;
-      return acc + (unitMemberCounts[unit.id] ?? 0);
-    }, 0);
-  }, [displayUnits, unitMemberCounts]);
-
-  const filteredUnitsCount = displayUnits.length;
 
   return (
     <div className="space-y-6 animate-fadeIn pb-12">
@@ -415,134 +368,15 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* 3. METRIC CARDS */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3.5">
-        {/* Metric 1: Units */}
-        <div className="bg-white dark:bg-[#111827] rounded-xl p-3 sm:p-4 border border-neutral-200 dark:border-neutral-800/80 shadow-none hover:border-neutral-300 dark:hover:border-neutral-700/80 transition-colors">
-          <div className="text-xl sm:text-2xl lg:text-3xl font-bold text-neutral-900 dark:text-neutral-100 font-mono tabular-nums">
-            {filteredUnitsCount}
-          </div>
-          <div className="text-[11px] sm:text-xs font-medium text-neutral-500 dark:text-neutral-400 mt-0.5 sm:mt-1 truncate">
-            {language === 'ar' ? 'وحدة كشفية نشطة' : 'Active Scout Units'}
-          </div>
-        </div>
-
-        {/* Metric 2: Registered Scouts */}
-        <div className="bg-white dark:bg-[#111827] rounded-xl p-3 sm:p-4 border border-neutral-200 dark:border-neutral-800/80 shadow-none hover:border-neutral-300 dark:hover:border-neutral-700/80 transition-colors">
-          <div className="text-xl sm:text-2xl lg:text-3xl font-bold text-neutral-900 dark:text-neutral-100 font-mono tabular-nums">
-            {filteredScoutsCount}
-          </div>
-          <div className="text-[11px] sm:text-xs font-medium text-neutral-500 dark:text-neutral-400 mt-0.5 sm:mt-1 truncate">
-            {language === 'ar' ? 'كشاف مسجل' : 'Registered Scouts'}
-          </div>
-        </div>
-
-        {/* Metric 3: Equipment Items */}
-        <div className="bg-white dark:bg-[#111827] rounded-xl p-3 sm:p-4 border border-neutral-200 dark:border-neutral-800/80 shadow-none hover:border-neutral-300 dark:hover:border-neutral-700/80 transition-colors">
-          <div className="text-xl sm:text-2xl lg:text-3xl font-bold text-neutral-900 dark:text-neutral-100 font-mono tabular-nums">
-            {totalEquipment}
-          </div>
-          <div className="text-[11px] sm:text-xs font-medium text-neutral-500 dark:text-neutral-400 mt-0.5 sm:mt-1 truncate">
-            {language === 'ar' ? 'قطعة عهدة ومهمات' : 'Equipment & Gear'}
-          </div>
-        </div>
-
-        {/* Metric 4: Cloud Storage */}
-        <div className="bg-white dark:bg-[#111827] rounded-xl p-3 sm:p-4 border border-neutral-200 dark:border-neutral-800/80 shadow-none hover:border-neutral-300 dark:hover:border-neutral-700/80 transition-colors">
-          <div className="text-xl sm:text-2xl lg:text-3xl font-bold text-neutral-900 dark:text-neutral-100 font-mono tabular-nums">
-            15 GB
-          </div>
-          <div className="text-[11px] sm:text-xs font-medium text-neutral-500 dark:text-neutral-400 mt-0.5 sm:mt-1 truncate">
-            {language === 'ar' ? 'تخزين سحابي مستخدم' : 'Drive Storage'}
-          </div>
-        </div>
-      </div>
-
-      {/* 4. SUGGESTED WORKSPACE FILES (Restrained modern SaaS cards) */}
-      <div className="space-y-2.5">
-        <div className="text-xs font-medium text-neutral-500 dark:text-neutral-400 flex items-center justify-between">
-          <span>{language === 'ar' ? 'الإجراءات والسجلات السريعة' : 'Quick Access & Common Actions'}</span>
-          <span className="text-[11px] text-neutral-400 font-mono">{language === 'ar' ? 'اليوم' : 'Today'}</span>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          <Link
-            href="/events?unitId=5"
-            className="p-3 bg-white dark:bg-[#111827] hover:bg-neutral-50 dark:hover:bg-[#161F30] rounded-xl border border-neutral-200 dark:border-neutral-800/80 hover:border-neutral-300 dark:hover:border-neutral-700/80 flex items-center gap-3 transition-colors cursor-pointer group"
-          >
-            <div className="w-8 h-8 rounded-lg bg-neutral-100 dark:bg-[#1E293B] border border-neutral-200/60 dark:border-neutral-700/50 flex items-center justify-center shrink-0">
-              <CalendarCheck className="w-4 h-4 text-emerald-500" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="text-xs font-semibold text-neutral-900 dark:text-neutral-100 truncate group-hover:text-sky-500 transition-colors">
-                {language === 'ar' ? 'كشف حضور كشافة A' : 'Attendance: Scouts A'}
-              </div>
-              <div className="text-[11px] text-neutral-500 dark:text-neutral-400 truncate">
-                {language === 'ar' ? 'جاهز للرصد الأسبوعي' : 'Weekly Roster Ready'}
-              </div>
-            </div>
-          </Link>
-
-          <Link
-            href="/inventory"
-            className="p-3 bg-white dark:bg-[#111827] hover:bg-neutral-50 dark:hover:bg-[#161F30] rounded-xl border border-neutral-200 dark:border-neutral-800/80 hover:border-neutral-300 dark:hover:border-neutral-700/80 flex items-center gap-3 transition-colors cursor-pointer group"
-          >
-            <div className="w-8 h-8 rounded-lg bg-neutral-100 dark:bg-[#1E293B] border border-neutral-200/60 dark:border-neutral-700/50 flex items-center justify-center shrink-0">
-              <Package className="w-4 h-4 text-amber-500" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="text-xs font-semibold text-neutral-900 dark:text-neutral-100 truncate group-hover:text-sky-500 transition-colors">
-                {language === 'ar' ? 'حجز مهمات ومستودع' : 'Camp Gear Booking'}
-              </div>
-              <div className="text-[11px] text-neutral-500 dark:text-neutral-400 truncate">
-                {language === 'ar' ? 'مستودع الفوج • متاح' : 'Troop Depot Available'}
-              </div>
-            </div>
-          </Link>
-
-          <Link
-            href="/admin/analytics"
-            className="p-3 bg-white dark:bg-[#111827] hover:bg-neutral-50 dark:hover:bg-[#161F30] rounded-xl border border-neutral-200 dark:border-neutral-800/80 hover:border-neutral-300 dark:hover:border-neutral-700/80 flex items-center gap-3 transition-colors cursor-pointer group"
-          >
-            <div className="w-8 h-8 rounded-lg bg-neutral-100 dark:bg-[#1E293B] border border-neutral-200/60 dark:border-neutral-700/50 flex items-center justify-center shrink-0">
-              <FileSpreadsheet className="w-4 h-4 text-sky-500" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="text-xs font-semibold text-neutral-900 dark:text-neutral-100 truncate group-hover:text-sky-500 transition-colors">
-                {language === 'ar' ? 'تحليلات الحضور الفصلية' : 'Attendance Analytics'}
-              </div>
-              <div className="text-[11px] text-neutral-500 dark:text-neutral-400 truncate">
-                {language === 'ar' ? 'معدل الالتزام 91.4%' : '91.4% Overall Rate'}
-              </div>
-            </div>
-          </Link>
-
-          <Link
-            href="/media"
-            className="p-3 bg-white dark:bg-[#111827] hover:bg-neutral-50 dark:hover:bg-[#161F30] rounded-xl border border-neutral-200 dark:border-neutral-800/80 hover:border-neutral-300 dark:hover:border-neutral-700/80 flex items-center gap-3 transition-colors cursor-pointer group"
-          >
-            <div className="w-8 h-8 rounded-lg bg-neutral-100 dark:bg-[#1E293B] border border-neutral-200/60 dark:border-neutral-700/50 flex items-center justify-center shrink-0">
-              <HardDrive className="w-4 h-4 text-purple-500" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="text-xs font-semibold text-neutral-900 dark:text-neutral-100 truncate group-hover:text-sky-500 transition-colors">
-                {language === 'ar' ? 'الأرشيف السحابي درايف' : 'Drive Media Root'}
-              </div>
-              <div className="text-[11px] text-neutral-500 dark:text-neutral-400 truncate">
-                {language === 'ar' ? 'المجلد الكشفي السحابي' : 'Cloud Sync Active'}
-              </div>
-            </div>
-          </Link>
-        </div>
-      </div>
-
-      {/* 5. UNITS DIRECTORY (Entire card clickable with smooth hover elevate effect) */}
-      <div className="space-y-3">
+      {/* 3. UNITS DIRECTORY */}
+      <div className="space-y-3 pt-1">
         <div className="flex items-center justify-between">
           <div className="text-sm font-semibold text-neutral-900 dark:text-neutral-100 flex items-center gap-2">
             <Folder className="w-4 h-4 text-sky-500" />
             <span>{language === 'ar' ? 'الوحدات الكشفية والمراحل' : 'Scout Unit Directory'}</span>
-            <span className="text-xs text-neutral-400 font-normal">({displayUnits.length})</span>
+            <span className="text-xs px-2 py-0.5 rounded-full bg-neutral-100 dark:bg-[#1E293B] text-neutral-500 dark:text-neutral-400 font-mono font-medium border border-neutral-200/60 dark:border-neutral-800">
+              {displayUnits.length}
+            </span>
           </div>
         </div>
 
