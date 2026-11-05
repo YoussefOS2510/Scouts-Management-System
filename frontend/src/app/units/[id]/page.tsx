@@ -245,7 +245,25 @@ function UnitHubContent() {
   const [editingPatrol, setEditingPatrol] = useState<Patrol | null>(null);
   const [editPatrolNameAr, setEditPatrolNameAr] = useState('');
   const [editPatrolNameEn, setEditPatrolNameEn] = useState('');
+  const [editPatrolScoutSearch, setEditPatrolScoutSearch] = useState('');
+  const [editSelectedScoutIds, setEditSelectedScoutIds] = useState<string[]>([]);
   const [isUpdatingPatrol, setIsUpdatingPatrol] = useState(false);
+
+  const filteredUnassignedForEditModal = useMemo(() => {
+    if (!editPatrolScoutSearch.trim()) return unassignedMembers;
+    const q = editPatrolScoutSearch.toLowerCase().trim();
+    return unassignedMembers.filter(
+      (m) =>
+        m.full_name_ar.toLowerCase().includes(q) ||
+        (m.full_name_en && m.full_name_en.toLowerCase().includes(q)) ||
+        (m.member_code && m.member_code.toLowerCase().includes(q))
+    );
+  }, [unassignedMembers, editPatrolScoutSearch]);
+
+  const currentMembersInEditingPatrol = useMemo(() => {
+    if (!editingPatrol) return [];
+    return unitMembers.filter((m) => m.patrol_id === editingPatrol.id);
+  }, [unitMembers, editingPatrol]);
 
   const [patrolToDelete, setPatrolToDelete] = useState<Patrol | null>(null);
   const [isDeletingPatrol, setIsDeletingPatrol] = useState(false);
@@ -432,16 +450,37 @@ function UnitHubContent() {
 
     setIsUpdatingPatrol(true);
     try {
-      const success = await updatePatrol(editingPatrol.id, editPatrolNameAr.trim(), editPatrolNameEn.trim() || undefined);
-      if (success) {
-        setEditingPatrol(null);
-        setNotification(
-          language === 'ar'
-            ? `تم تحديث اسم ${subdivisionTerms.singularAr} بنجاح!`
-            : `Updated successfully!`
-        );
-        setTimeout(() => setNotification(null), 4000);
+      const nameChanged =
+        editPatrolNameAr.trim() !== editingPatrol.name_ar ||
+        (editPatrolNameEn.trim() || undefined) !== editingPatrol.name_en;
+
+      if (nameChanged) {
+        await updatePatrol(editingPatrol.id, editPatrolNameAr.trim(), editPatrolNameEn.trim() || undefined);
       }
+
+      if (editSelectedScoutIds.length > 0) {
+        await batchAssignScoutPatrol(editSelectedScoutIds, editingPatrol.id);
+      }
+
+      const assignedCount = editSelectedScoutIds.length;
+      const patrolName = editPatrolNameAr.trim();
+
+      setEditingPatrol(null);
+      setEditPatrolNameAr('');
+      setEditPatrolNameEn('');
+      setEditPatrolScoutSearch('');
+      setEditSelectedScoutIds([]);
+
+      const countMsg = assignedCount > 0
+        ? (language === 'ar' ? ` وتم تسكين ${assignedCount} كشاف فيها` : ` with ${assignedCount} scouts assigned`)
+        : '';
+
+      setNotification(
+        language === 'ar'
+          ? `تم تحديث ${subdivisionTerms.singularAr} "${patrolName}" بنجاح${countMsg}!`
+          : `Updated "${patrolName}" successfully${countMsg}!`
+      );
+      setTimeout(() => setNotification(null), 4000);
     } catch (err: any) {
       alert('Error updating: ' + err.message);
     } finally {
@@ -1329,6 +1368,8 @@ function UnitHubContent() {
                                   setEditingPatrol(patrol);
                                   setEditPatrolNameAr(patrol.name_ar);
                                   setEditPatrolNameEn(patrol.name_en || '');
+                                  setEditPatrolScoutSearch('');
+                                  setEditSelectedScoutIds([]);
                                 }}
                                 title={language === 'ar' ? subdivisionTerms.editTitleAr : subdivisionTerms.editTitleEn}
                                 className="p-1 rounded-lg text-neutral-400 hover:text-sky-600 hover:bg-sky-50 dark:hover:bg-sky-950/40 transition-colors cursor-pointer"
@@ -2104,8 +2145,8 @@ function UnitHubContent() {
       {/* 10. EDIT PATROL MODAL */}
       {editingPatrol && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-[#111827] w-full max-w-md rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-2xl overflow-hidden animate-scaleUp">
-            <div className="px-5 py-4 border-b border-neutral-200/80 dark:border-neutral-800 flex items-center justify-between bg-neutral-50/60 dark:bg-[#161F30]/60">
+          <div className="bg-white dark:bg-[#111827] w-full max-w-lg rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-2xl overflow-hidden animate-scaleUp flex flex-col max-h-[90vh]">
+            <div className="px-5 py-4 border-b border-neutral-200/80 dark:border-neutral-800 flex items-center justify-between bg-neutral-50/60 dark:bg-[#161F30]/60 shrink-0">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-xl bg-sky-500/10 text-sky-600 dark:text-sky-400 flex items-center justify-center border border-sky-500/20">
                   <Pencil className="w-4 h-4" />
@@ -2115,65 +2156,252 @@ function UnitHubContent() {
                     {language === 'ar' ? subdivisionTerms.editTitleAr : subdivisionTerms.editTitleEn}
                   </h3>
                   <p className="text-[11px] text-neutral-500 dark:text-neutral-400">
-                    {language === 'ar' ? `تعديل اسم ${editingPatrol.name_ar}` : `Edit ${editingPatrol.name_ar}`}
+                    {language === 'ar' ? `تعديل وإدارة أعضاء ${editingPatrol.name_ar}` : `Edit & manage scouts of ${editingPatrol.name_ar}`}
                   </p>
                 </div>
               </div>
               <button
-                onClick={() => setEditingPatrol(null)}
+                type="button"
+                onClick={() => {
+                  setEditingPatrol(null);
+                  setEditPatrolScoutSearch('');
+                  setEditSelectedScoutIds([]);
+                }}
                 className="p-1 rounded-lg text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 transition-colors cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <form onSubmit={handleUpdatePatrolSubmit} className="p-5 space-y-4">
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-neutral-700 dark:text-neutral-300">
-                  {language === 'ar' ? 'الاسم بالكامل (بالعربية)' : 'Name (Arabic)'} <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={editPatrolNameAr}
-                  onChange={(e) => setEditPatrolNameAr(e.target.value)}
-                  className="w-full bg-neutral-100 dark:bg-[#0B0F17] border border-neutral-200 dark:border-neutral-800 rounded-xl px-3 py-2 text-xs text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-sky-500"
-                  dir="rtl"
-                />
+            <form onSubmit={handleUpdatePatrolSubmit} className="flex flex-col flex-1 min-h-0">
+              <div className="p-5 space-y-4 overflow-y-auto flex-1">
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-neutral-700 dark:text-neutral-300">
+                    {language === 'ar' ? `اسم الـ${subdivisionTerms.singularAr} (بالعربية)` : 'Name (Arabic)'} <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editPatrolNameAr}
+                    onChange={(e) => setEditPatrolNameAr(e.target.value)}
+                    className="w-full bg-neutral-100 dark:bg-[#0B0F17] border border-neutral-200 dark:border-neutral-800 rounded-xl px-3 py-2 text-xs text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                    dir="rtl"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-neutral-700 dark:text-neutral-300">
+                    {language === 'ar' ? `اسم الـ${subdivisionTerms.singularAr} (بالإنجليزية)` : 'Name (English)'}{' '}
+                    <span className="text-neutral-400 text-[10px]">({language === 'ar' ? 'اختياري' : 'Optional'})</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={editPatrolNameEn}
+                    onChange={(e) => setEditPatrolNameEn(e.target.value)}
+                    className="w-full bg-neutral-100 dark:bg-[#0B0F17] border border-neutral-200 dark:border-neutral-800 rounded-xl px-3 py-2 text-xs text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                    dir="ltr"
+                  />
+                </div>
+
+                {/* Current Scouts in this Patrol */}
+                <div className="pt-2 border-t border-neutral-200/80 dark:border-neutral-800 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-neutral-700 dark:text-neutral-300 flex items-center gap-1.5">
+                      <Users className="w-3.5 h-3.5 text-sky-500" />
+                      <span>{language === 'ar' ? 'الكشافون الحاليون في التشكيل' : 'Current Formation Members'}</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-sky-500/10 text-sky-600 dark:text-sky-400 font-mono font-medium">
+                        {currentMembersInEditingPatrol.length}
+                      </span>
+                    </label>
+                  </div>
+
+                  {currentMembersInEditingPatrol.length === 0 ? (
+                    <div className="p-2.5 rounded-xl bg-neutral-50 dark:bg-[#0B0F17]/50 text-center text-xs text-neutral-400 border border-neutral-200/60 dark:border-neutral-800">
+                      {language === 'ar' ? 'لا يوجد كشافون مسكنون في هذا التشكيل حالياً.' : 'No scouts currently assigned to this formation.'}
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto p-2 rounded-xl bg-neutral-50/70 dark:bg-[#0B0F17]/50 border border-neutral-200/70 dark:border-neutral-800">
+                      {currentMembersInEditingPatrol.map((m) => (
+                        <div
+                          key={m.id}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white dark:bg-[#161F30] border border-neutral-200 dark:border-neutral-700 text-xs text-neutral-800 dark:text-neutral-200 shadow-2xs"
+                        >
+                          <span className="font-medium truncate max-w-[130px]" dir="auto">
+                            {language === 'ar' ? m.full_name_ar : (m.full_name_en || m.full_name_ar)}
+                          </span>
+                          <span className="text-[10px] text-neutral-400 font-mono">({m.member_code})</span>
+                          <button
+                            type="button"
+                            onClick={() => assignScoutPatrol(m.id, null)}
+                            title={language === 'ar' ? 'إلغاء التسكين من التشكيل' : 'Unassign from formation'}
+                            className="p-0.5 rounded text-neutral-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Add Unassigned Scouts Section */}
+                <div className="pt-2 border-t border-neutral-200/80 dark:border-neutral-800 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-neutral-700 dark:text-neutral-300 flex items-center gap-1.5">
+                      <UserPlus className="w-3.5 h-3.5 text-amber-500" />
+                      <span>{language === 'ar' ? 'تسكين كشافين غير معينين في هذا التشكيل' : 'Add Unassigned Scouts'}</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 font-mono font-medium">
+                        {editSelectedScoutIds.length} / {unassignedMembers.length}
+                      </span>
+                    </label>
+
+                    {filteredUnassignedForEditModal.length > 0 && (
+                      <div className="flex items-center gap-2 text-[11px]">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const allIds = Array.from(new Set([...editSelectedScoutIds, ...filteredUnassignedForEditModal.map(m => m.id)]));
+                            setEditSelectedScoutIds(allIds);
+                          }}
+                          className="text-amber-600 hover:text-amber-700 dark:text-amber-400 hover:underline cursor-pointer"
+                        >
+                          {language === 'ar' ? 'تحديد الكل' : 'Select All'}
+                        </button>
+                        {editSelectedScoutIds.length > 0 && (
+                          <>
+                            <span className="text-neutral-300 dark:text-neutral-700">|</span>
+                            <button
+                              type="button"
+                              onClick={() => setEditSelectedScoutIds([])}
+                              className="text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 hover:underline cursor-pointer"
+                            >
+                              {language === 'ar' ? 'إلغاء التحديد' : 'Deselect All'}
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {unassignedMembers.length > 0 ? (
+                    <div className="space-y-2">
+                      <div className="relative">
+                        <Search className="w-3.5 h-3.5 absolute top-1/2 -translate-y-1/2 start-3 text-neutral-400 pointer-events-none" />
+                        <input
+                          type="text"
+                          value={editPatrolScoutSearch}
+                          onChange={(e) => setEditPatrolScoutSearch(e.target.value)}
+                          placeholder={
+                            language === 'ar'
+                              ? 'بحث بالاسم أو الكود لتسكين الكشاف...'
+                              : 'Search unassigned scout by name or code...'
+                          }
+                          className="w-full bg-neutral-100 dark:bg-[#0B0F17] border border-neutral-200 dark:border-neutral-800 rounded-xl ps-8 pe-8 py-1.5 text-xs text-neutral-900 dark:text-neutral-100 placeholder:text-neutral-400 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                        />
+                        {editPatrolScoutSearch && (
+                          <button
+                            type="button"
+                            onClick={() => setEditPatrolScoutSearch('')}
+                            className="absolute top-1/2 -translate-y-1/2 end-2.5 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="max-h-48 overflow-y-auto space-y-1 p-1 rounded-xl border border-neutral-200 dark:border-neutral-800 bg-neutral-50/50 dark:bg-[#0B0F17]/40">
+                        {filteredUnassignedForEditModal.length === 0 ? (
+                          <div className="py-6 text-center text-xs text-neutral-400">
+                            {language === 'ar' ? 'لا يوجد كشافين مطابقين للبحث' : 'No matching unassigned scouts'}
+                          </div>
+                        ) : (
+                          filteredUnassignedForEditModal.map((member) => {
+                            const isSelected = editSelectedScoutIds.includes(member.id);
+                            return (
+                              <div
+                                key={member.id}
+                                onClick={() => {
+                                  setEditSelectedScoutIds((prev) =>
+                                    isSelected ? prev.filter((id) => id !== member.id) : [...prev, member.id]
+                                  );
+                                }}
+                                className={`flex items-center justify-between p-2 rounded-lg cursor-pointer transition-colors text-xs ${
+                                  isSelected
+                                    ? 'bg-sky-500/10 border border-sky-500/30 text-sky-900 dark:text-sky-200'
+                                    : 'hover:bg-neutral-100 dark:hover:bg-[#1E293B] text-neutral-800 dark:text-neutral-200'
+                                }`}
+                              >
+                                <div className="flex items-center gap-2.5 min-w-0">
+                                  <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    onChange={() => {}}
+                                    className="w-3.5 h-3.5 rounded text-sky-600 border-neutral-300 focus:ring-sky-500 cursor-pointer pointer-events-none"
+                                  />
+                                  <div className="min-w-0 truncate">
+                                    <div className="font-medium truncate">
+                                      {language === 'ar' ? member.full_name_ar : (member.full_name_en || member.full_name_ar)}
+                                    </div>
+                                    <div className="text-[10px] text-neutral-400 truncate flex items-center gap-1.5">
+                                      <span className="font-mono">{member.member_code}</span>
+                                      {member.academic_year && (
+                                        <>
+                                          <span>•</span>
+                                          <span>{member.academic_year}</span>
+                                        </>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                                {isSelected && (
+                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-600 dark:text-sky-400 font-medium shrink-0">
+                                    {language === 'ar' ? 'سيتم ضمه' : 'To Add'}
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-3 rounded-xl bg-neutral-100 dark:bg-[#161F30] text-center text-xs text-neutral-500">
+                      {language === 'ar'
+                        ? 'جميع كشافي هذه الوحدة مسكنون بالفعل في تشكيلاتهم.'
+                        : 'All scouts in this unit are already assigned to patrols.'}
+                    </div>
+                  )}
+                </div>
               </div>
 
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-neutral-700 dark:text-neutral-300">
-                  {language === 'ar' ? 'الاسم بالإنجليزية' : 'Name (English)'}{' '}
-                  <span className="text-neutral-400 text-[10px]">({language === 'ar' ? 'اختياري' : 'Optional'})</span>
-                </label>
-                <input
-                  type="text"
-                  value={editPatrolNameEn}
-                  onChange={(e) => setEditPatrolNameEn(e.target.value)}
-                  className="w-full bg-neutral-100 dark:bg-[#0B0F17] border border-neutral-200 dark:border-neutral-800 rounded-xl px-3 py-2 text-xs text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-sky-500"
-                  dir="ltr"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-neutral-200/80 dark:border-neutral-800">
+              <div className="flex items-center justify-end gap-2.5 p-4 border-t border-neutral-200/80 dark:border-neutral-800 bg-neutral-50/50 dark:bg-[#161F30]/40 shrink-0">
                 <button
                   type="button"
-                  onClick={() => setEditingPatrol(null)}
+                  onClick={() => {
+                    setEditingPatrol(null);
+                    setEditPatrolScoutSearch('');
+                    setEditSelectedScoutIds([]);
+                  }}
                   className="px-3.5 py-2 rounded-xl text-xs font-medium text-neutral-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-[#1E293B] transition-colors cursor-pointer"
                 >
                   {language === 'ar' ? 'إلغاء' : 'Cancel'}
                 </button>
                 <button
                   type="submit"
-                  disabled={isUpdatingPatrol}
+                  disabled={isUpdatingPatrol || !editPatrolNameAr.trim()}
                   className="px-4 py-2 rounded-xl text-xs font-semibold bg-sky-600 hover:bg-sky-500 text-white flex items-center gap-1.5 transition-all shadow-xs cursor-pointer disabled:opacity-50"
                 >
                   <Check className="w-4 h-4" />
                   <span>
                     {isUpdatingPatrol
                       ? language === 'ar' ? 'جاري الحفظ...' : 'Saving...'
-                      : language === 'ar' ? 'حفظ التعديلات' : 'Save Changes'}
+                      : editSelectedScoutIds.length > 0
+                        ? language === 'ar'
+                          ? `حفظ التعديلات وتسكين ${editSelectedScoutIds.length} كشاف`
+                          : `Save & Assign ${editSelectedScoutIds.length} Scouts`
+                        : language === 'ar'
+                          ? 'حفظ التعديلات'
+                          : 'Save Changes'}
                   </span>
                 </button>
               </div>
