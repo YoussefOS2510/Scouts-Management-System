@@ -42,13 +42,7 @@ export default function DashboardPage() {
   const canUploadMedia = isSuperAdmin || can('media.upload');
 
   const handleUnitClick = (unitId: number) => {
-    if (canTakeAttendance) {
-      router.push(`/events?unitId=${unitId}`);
-    } else if (canUploadMedia) {
-      router.push(`/media`);
-    } else if (canViewMembers) {
-      router.push(`/members`);
-    }
+    router.push(`/units/${unitId}`);
   };
 
   // View toggle: 'grid' (Drive Folder Tiles) vs 'list' (Drive Table Rows)
@@ -618,6 +612,14 @@ export default function DashboardPage() {
                           onClick={(e) => e.stopPropagation()}
                           className="absolute end-0 top-8 w-48 bg-white dark:bg-[#111827] rounded-xl shadow-2xl border border-neutral-200 dark:border-neutral-800/90 py-1.5 z-50 animate-fadeIn"
                         >
+                          <Link
+                            href={`/units/${unit.id}`}
+                            onClick={() => setActiveMenuUnitId(null)}
+                            className="flex items-center gap-2.5 px-3.5 py-2 text-xs font-medium text-neutral-800 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-[#1E293B]"
+                          >
+                            <Folder className="w-4 h-4 text-sky-500" />
+                            <span>{language === 'ar' ? 'صفحة الوحدة والأنشطة' : 'Unit Hub & Roster'}</span>
+                          </Link>
                           {canTakeAttendance && (
                             <Link
                               href={`/events?unitId=${unit.id}`}
@@ -731,28 +733,12 @@ export default function DashboardPage() {
                     </div>
 
                     <div className="ms-auto flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                      {canTakeAttendance ? (
-                        <Link
-                          href={`/events?unitId=${unit.id}`}
-                          className="px-3 py-1 rounded-lg text-xs font-medium bg-neutral-100 hover:bg-neutral-200/70 dark:bg-[#1E293B] dark:hover:bg-neutral-700/80 text-neutral-800 dark:text-neutral-200 transition-colors border border-neutral-200/80 dark:border-neutral-700/50"
-                        >
-                          {language === 'ar' ? 'الفعاليات والحضور' : 'Events'}
-                        </Link>
-                      ) : canUploadMedia ? (
-                        <Link
-                          href="/media"
-                          className="px-3 py-1 rounded-lg text-xs font-medium bg-neutral-100 hover:bg-neutral-200/70 dark:bg-[#1E293B] dark:hover:bg-neutral-700/80 text-neutral-800 dark:text-neutral-200 transition-colors border border-neutral-200/80 dark:border-neutral-700/50"
-                        >
-                          {language === 'ar' ? 'الوسائط' : 'Media'}
-                        </Link>
-                      ) : canViewMembers ? (
-                        <Link
-                          href="/members"
-                          className="px-3 py-1 rounded-lg text-xs font-medium bg-neutral-100 hover:bg-neutral-200/70 dark:bg-[#1E293B] dark:hover:bg-neutral-700/80 text-neutral-800 dark:text-neutral-200 transition-colors border border-neutral-200/80 dark:border-neutral-700/50"
-                        >
-                          {language === 'ar' ? 'الأعضاء' : 'Members'}
-                        </Link>
-                      ) : null}
+                      <Link
+                        href={`/units/${unit.id}`}
+                        className="px-3 py-1 rounded-lg text-xs font-semibold bg-neutral-100 hover:bg-neutral-200/70 dark:bg-[#1E293B] dark:hover:bg-neutral-700/80 text-neutral-800 dark:text-neutral-200 transition-colors border border-neutral-200/80 dark:border-neutral-700/50"
+                      >
+                        {language === 'ar' ? 'عرض الوحدة' : 'View Unit'}
+                      </Link>
                     </div>
                   </div>
                 );

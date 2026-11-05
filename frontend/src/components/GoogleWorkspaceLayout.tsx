@@ -438,7 +438,7 @@ export function GoogleWorkspaceLayout({ children }: { children: React.ReactNode 
                       {searchResults.units.map((u) => (
                         <Link
                           key={u.id}
-                          href={`/events?unitId=${u.id}`}
+                          href={`/units/${u.id}`}
                           onClick={() => {
                             setIsSearchFocused(false);
                             setSearchQuery('');
@@ -490,7 +490,7 @@ export function GoogleWorkspaceLayout({ children }: { children: React.ReactNode 
                     {searchResults.units.map((u) => (
                       <Link
                         key={u.id}
-                        href={`/events?unitId=${u.id}`}
+                        href={`/units/${u.id}`}
                         onClick={() => {
                           setIsMobileSearchOpen(false);
                           setSearchQuery('');

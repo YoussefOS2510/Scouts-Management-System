@@ -404,9 +404,13 @@ function EventsPageContent() {
             {currentUnitObj && (
               <>
                 <ChevronRight className="w-3.5 h-3.5 text-neutral-400 rtl:rotate-180" />
-                <span className="text-xs px-2.5 py-0.5 rounded-md bg-sky-500/10 text-sky-700 dark:bg-sky-400/15 dark:text-sky-300 font-medium border border-sky-500/20">
+                <Link
+                  href={`/units/${selectedUnitId}`}
+                  className="text-xs px-2.5 py-0.5 rounded-md bg-sky-500/10 text-sky-700 dark:bg-sky-400/15 dark:text-sky-300 font-medium border border-sky-500/20 hover:bg-sky-500/20 transition-colors"
+                  title={language === 'ar' ? 'عرض صفحة الوحدة' : 'View Unit Page'}
+                >
                   {language === 'ar' ? currentUnitObj.name_ar : currentUnitObj.name_en}
-                </span>
+                </Link>
               </>
             )}
           </div>
