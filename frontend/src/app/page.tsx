@@ -43,7 +43,7 @@ export default function DashboardPage() {
 
   const handleUnitClick = (unitId: number) => {
     if (canTakeAttendance) {
-      router.push(`/attendance?unit=${unitId}`);
+      router.push(`/events?unitId=${unitId}`);
     } else if (canUploadMedia) {
       router.push(`/media`);
     } else if (canViewMembers) {
@@ -620,12 +620,12 @@ export default function DashboardPage() {
                         >
                           {canTakeAttendance && (
                             <Link
-                              href={`/attendance?unit=${unit.id}`}
+                              href={`/events?unitId=${unit.id}`}
                               onClick={() => setActiveMenuUnitId(null)}
                               className="flex items-center gap-2.5 px-3.5 py-2 text-xs font-medium text-neutral-800 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-[#1E293B]"
                             >
                               <CalendarCheck className="w-4 h-4 text-emerald-500" />
-                              <span>{language === 'ar' ? 'تسجيل الحضور' : 'Take Attendance'}</span>
+                              <span>{language === 'ar' ? 'الفعاليات وسجل الحضور' : 'Events & Attendance'}</span>
                             </Link>
                           )}
                           {canViewAnalytics && (
@@ -733,10 +733,10 @@ export default function DashboardPage() {
                     <div className="ms-auto flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                       {canTakeAttendance ? (
                         <Link
-                          href={`/attendance?unit=${unit.id}`}
+                          href={`/events?unitId=${unit.id}`}
                           className="px-3 py-1 rounded-lg text-xs font-medium bg-neutral-100 hover:bg-neutral-200/70 dark:bg-[#1E293B] dark:hover:bg-neutral-700/80 text-neutral-800 dark:text-neutral-200 transition-colors border border-neutral-200/80 dark:border-neutral-700/50"
                         >
-                          {language === 'ar' ? 'كشف الحضور' : 'Roster'}
+                          {language === 'ar' ? 'الفعاليات والحضور' : 'Events'}
                         </Link>
                       ) : canUploadMedia ? (
                         <Link

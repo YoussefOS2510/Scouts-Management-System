@@ -56,7 +56,7 @@ function AttendancePageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const querySessionId = searchParams.get('sessionId');
-  const queryUnitId = searchParams.get('unitId');
+  const queryUnitId = searchParams.get('unitId') || searchParams.get('unit');
 
   const {
     currentUser,
@@ -96,12 +96,23 @@ function AttendancePageContent() {
 
   const canTakeAttendance = isSuperAdmin || can('attendance.take', selectedUnitId);
 
+  // Sync unit when queryUnitId changes
+  useEffect(() => {
+    if (queryUnitId) {
+      const parsed = Number(queryUnitId);
+      if (!isNaN(parsed) && parsed !== selectedUnitId) {
+        setSelectedUnitId(parsed);
+      }
+    }
+  }, [queryUnitId, selectedUnitId]);
+
   // If visiting /attendance without a specific sessionId, seamlessly route to /events
   useEffect(() => {
     if (!querySessionId && !isLoadingPermissions) {
-      router.replace(selectedUnitId ? `/events?unitId=${selectedUnitId}` : '/events');
+      const targetUnit = queryUnitId ? Number(queryUnitId) : selectedUnitId;
+      router.replace(targetUnit ? `/events?unitId=${targetUnit}` : '/events');
     }
-  }, [querySessionId, selectedUnitId, isLoadingPermissions, router]);
+  }, [querySessionId, queryUnitId, selectedUnitId, isLoadingPermissions, router]);
 
   // Sync unit when accessibleUnits switch
   useEffect(() => {

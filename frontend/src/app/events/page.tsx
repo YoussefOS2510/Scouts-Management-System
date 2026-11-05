@@ -64,15 +64,25 @@ function EventsPageContent() {
   const canViewAllUnits = isSuperAdmin || currentRole?.name === 'group_leader';
 
   // Unit scoping: get from query param or accessible units
-  const initialUnitIdParam = searchParams.get('unitId');
-  const defaultUnit = initialUnitIdParam
-    ? Number(initialUnitIdParam)
+  const queryUnitParam = searchParams.get('unitId') || searchParams.get('unit');
+  const defaultUnit = queryUnitParam
+    ? Number(queryUnitParam)
     : accessibleUnits.length > 0
     ? accessibleUnits[0].id
     : 5;
 
   const [selectedUnitId, setSelectedUnitId] = useState<number>(defaultUnit);
   const canManageEvents = isSuperAdmin || can('attendance.take', selectedUnitId);
+
+  // Sync unit when queryUnitParam in URL changes
+  useEffect(() => {
+    if (queryUnitParam) {
+      const parsed = Number(queryUnitParam);
+      if (!isNaN(parsed) && parsed !== selectedUnitId) {
+        setSelectedUnitId(parsed);
+      }
+    }
+  }, [queryUnitParam, selectedUnitId]);
 
   // Sync unit with accessibleUnits
   useEffect(() => {
@@ -415,7 +425,11 @@ function EventsPageContent() {
             <Folder className="w-4 h-4 text-sky-500 shrink-0" />
             <select
               value={selectedUnitId}
-              onChange={(e) => setSelectedUnitId(Number(e.target.value))}
+              onChange={(e) => {
+                const val = Number(e.target.value);
+                setSelectedUnitId(val);
+                router.replace(`/events?unitId=${val}`);
+              }}
               disabled={!canViewAllUnits && accessibleUnits.length <= 1}
               className="bg-transparent border-none text-xs font-semibold text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-0 cursor-pointer"
             >
