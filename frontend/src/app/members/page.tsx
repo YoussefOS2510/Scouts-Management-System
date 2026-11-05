@@ -7,6 +7,7 @@ import { useAuth } from '../../lib/AuthContext';
 import { INITIAL_UNITS } from '../../lib/data';
 import {
   Users,
+  Folder,
   Search,
   Phone,
   Church,
@@ -1112,18 +1113,13 @@ export default function MembersDirectoryPage() {
                   </Link>
 
                   {canManagePatrols && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setNewPatrolNameAr('');
-                        setNewPatrolNameEn('');
-                        setIsAddPatrolOpen(true);
-                      }}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#0B57D0] hover:bg-[#0842a0] text-white text-xs font-semibold shadow-xs cursor-pointer transition-colors"
+                    <Link
+                      href={`/units/${boardUnitId}`}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold shadow-xs cursor-pointer transition-colors"
                     >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>{language === 'ar' ? terms.addNewAr : terms.addNewEn}</span>
-                    </button>
+                      <Folder className="w-3.5 h-3.5" />
+                      <span>{language === 'ar' ? `إدارة وتعديل الـ${terms.pluralAr} من صفحة الوحدة` : `Manage ${terms.pluralEn} in Unit Page`}</span>
+                    </Link>
                   )}
                 </div>
               </div>
@@ -1199,30 +1195,6 @@ export default function MembersDirectoryPage() {
                                 }`}
                               >
                                 {language === 'ar' ? <ChevronLeft className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
-                              </button>
-
-                              {/* Edit Name */}
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setEditingPatrol(patrol);
-                                  setEditPatrolNameAr(patrol.name_ar);
-                                  setEditPatrolNameEn(patrol.name_en || '');
-                                }}
-                                title={language === 'ar' ? terms.editTitleAr : terms.editTitleEn}
-                                className="p-1 rounded text-zinc-500 hover:text-[#0B57D0] hover:bg-blue-50 dark:hover:bg-blue-950/40 transition-colors cursor-pointer"
-                              >
-                                <Edit2 className="w-3.5 h-3.5" />
-                              </button>
-
-                              {/* Delete Patrol */}
-                              <button
-                                type="button"
-                                onClick={() => setPatrolToDelete(patrol)}
-                                title={language === 'ar' ? terms.deleteTitleAr : terms.deleteTitleEn}
-                                className="p-1 rounded text-zinc-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
                               </button>
                             </div>
                           )}
