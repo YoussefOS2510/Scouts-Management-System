@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/lib/AuthContext';
 import { INITIAL_UNITS } from '@/lib/data';
+import { getSubdivisionTerms } from '@/lib/scout-terms';
 import TamamSheet from '@/components/TamamSheet';
 import { Printer, ArrowRight, Calendar, Users, FileDown } from 'lucide-react';
 
@@ -89,22 +90,27 @@ function TamamPrintContent() {
           {/* Controls: Patrol Filter, Day, Date, Print Button */}
           <div className="flex flex-wrap items-center gap-2 text-xs">
             
-            {/* Patrol Selector */}
-            <div className="flex items-center gap-1 bg-zinc-50 dark:bg-zinc-800/80 px-2.5 py-1 rounded-lg border border-zinc-200 dark:border-zinc-700">
-              <Users className="w-3.5 h-3.5 text-zinc-400" />
-              <select
-                value={selectedPatrolId}
-                onChange={(e) => setSelectedPatrolId(e.target.value === 'all' ? 'all' : Number(e.target.value))}
-                className="bg-transparent text-xs font-medium focus:outline-none cursor-pointer"
-              >
-                <option value="all">جميع طلائع المرحلة ({unitPatrols.length})</option>
-                {unitPatrols.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name_ar} ({p.name_en || 'Patrol'})
-                  </option>
-                ))}
-              </select>
-            </div>
+            {/* Patrol / Six Selector */}
+            {(() => {
+              const uTerms = getSubdivisionTerms(targetUnitId);
+              return (
+                <div className="flex items-center gap-1 bg-zinc-50 dark:bg-zinc-800/80 px-2.5 py-1 rounded-lg border border-zinc-200 dark:border-zinc-700">
+                  <Users className="w-3.5 h-3.5 text-zinc-400" />
+                  <select
+                    value={selectedPatrolId}
+                    onChange={(e) => setSelectedPatrolId(e.target.value === 'all' ? 'all' : Number(e.target.value))}
+                    className="bg-transparent text-xs font-medium focus:outline-none cursor-pointer"
+                  >
+                    <option value="all">جميع {uTerms.pluralAr} المرحلة ({unitPatrols.length})</option>
+                    {unitPatrols.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name_ar} ({p.name_en || uTerms.singularEn})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              );
+            })()}
 
             {/* Day Selector */}
             <select

@@ -39,6 +39,7 @@ import TamamSheet from '@/components/TamamSheet';
 import { INITIAL_ROLES } from '../../lib/data';
 import ExcelImportModal from '@/components/ExcelImportModal';
 import { FileSpreadsheet, AlertTriangle } from 'lucide-react';
+import { getSubdivisionTerms } from '@/lib/scout-terms';
 
 export default function MembersDirectoryPage() {
   const { language, t } = useLanguage();
@@ -794,6 +795,7 @@ export default function MembersDirectoryPage() {
                   const patrol = patrols.find((p) => p.id === member.patrol_id);
                   const unitPatrols = patrols.filter((p) => p.unit_id === member.unit_id);
                   const canManageScout = isSuperAdmin || can('members.create_edit', member.unit_id);
+                  const mTerms = getSubdivisionTerms(member.unit_id);
 
                   return (
                     <tr
@@ -842,7 +844,7 @@ export default function MembersDirectoryPage() {
                             }}
                             className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded px-2 py-1 text-xs text-zinc-800 dark:text-zinc-200 focus:outline-none focus:ring-1 focus:ring-zinc-900 cursor-pointer"
                           >
-                            <option value="">{language === 'ar' ? '⚠️ غير مسجل بطليعة' : '⚠️ Unassigned'}</option>
+                            <option value="">{language === 'ar' ? `⚠️ ${mTerms.unassignedAr}` : `⚠️ ${mTerms.unassignedEn}`}</option>
                             {unitPatrols.map((p) => (
                               <option key={p.id} value={p.id}>
                                 {language === 'ar' ? p.name_ar : p.name_en}
@@ -955,35 +957,40 @@ export default function MembersDirectoryPage() {
                     )}
                   </div>
 
-                  {/* Interactive Patrol Selector / Tag */}
-                  <div className="mt-2.5 pt-2 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between gap-2">
-                    <span className="text-[11px] font-mono text-zinc-500 flex items-center gap-1">
-                      <Compass className="w-3 h-3 text-zinc-400" strokeWidth={1.5} />
-                      <span>{language === 'ar' ? 'الطليعة:' : 'Patrol:'}</span>
-                    </span>
+                  {/* Interactive Patrol / Six Selector / Tag */}
+                  {(() => {
+                    const mTerms = getSubdivisionTerms(member.unit_id);
+                    return (
+                      <div className="mt-2.5 pt-2 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between gap-2">
+                        <span className="text-[11px] font-mono text-zinc-500 flex items-center gap-1">
+                          <Compass className="w-3 h-3 text-zinc-400" strokeWidth={1.5} />
+                          <span>{language === 'ar' ? `${mTerms.singularAr}:` : `${mTerms.singularEn}:`}</span>
+                        </span>
 
-                    {canManageScout ? (
-                      <select
-                        value={member.patrol_id || ''}
-                        onChange={(e) => {
-                          const pId = e.target.value === '' ? null : Number(e.target.value);
-                          handleAssignPatrol(member.id, pId);
-                        }}
-                        className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded px-2 py-0.5 text-xs text-zinc-800 dark:text-zinc-200 focus:outline-none focus:ring-1 focus:ring-zinc-900 transition-colors cursor-pointer"
-                      >
-                        <option value="">{language === 'ar' ? '⚠️ غير مسجل بطليعة' : '⚠️ Unassigned'}</option>
-                        {unitPatrols.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {language === 'ar' ? p.name_ar : p.name_en}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <span className="text-xs text-zinc-700 dark:text-zinc-300">
-                        {patrol ? (language === 'ar' ? patrol.name_ar : patrol.name_en) : '—'}
-                      </span>
-                    )}
-                  </div>
+                        {canManageScout ? (
+                          <select
+                            value={member.patrol_id || ''}
+                            onChange={(e) => {
+                              const pId = e.target.value === '' ? null : Number(e.target.value);
+                              handleAssignPatrol(member.id, pId);
+                            }}
+                            className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded px-2 py-0.5 text-xs text-zinc-800 dark:text-zinc-200 focus:outline-none focus:ring-1 focus:ring-zinc-900 transition-colors cursor-pointer"
+                          >
+                            <option value="">{language === 'ar' ? `⚠️ ${mTerms.unassignedAr}` : `⚠️ ${mTerms.unassignedEn}`}</option>
+                            {unitPatrols.map((p) => (
+                              <option key={p.id} value={p.id}>
+                                {language === 'ar' ? p.name_ar : p.name_en}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <span className="text-xs text-zinc-700 dark:text-zinc-300">
+                            {patrol ? (language === 'ar' ? patrol.name_ar : patrol.name_en) : '—'}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   {/* Emergency Contacts */}
                   <div className="mt-2.5 pt-2 border-t border-zinc-100 dark:border-zinc-800 space-y-1 text-xs text-zinc-600 dark:text-zinc-400">
@@ -1026,10 +1033,11 @@ export default function MembersDirectoryPage() {
           })}
         </div>
       ) : (
-        /* Patrol Formation Board View */
+        /* Patrol / Six Formation Board View */
         (() => {
-          const boardUnitId = typeof selectedUnitId === 'number' ? selectedUnitId : (accessibleUnits[0]?.id || 5);
+          const boardUnitId = typeof selectedUnitId === 'number' ? selectedUnitId : (accessibleUnits.find(u => u.id !== 12)?.id || 5);
           const boardUnit = INITIAL_UNITS.find((u) => u.id === boardUnitId);
+          const terms = getSubdivisionTerms(boardUnitId);
           const unitPatrols = patrols
             .filter((p) => p.unit_id === boardUnitId)
             .sort((a, b) => (a.order_index ?? 0) - (b.order_index ?? 0));
@@ -1041,39 +1049,66 @@ export default function MembersDirectoryPage() {
 
           return (
             <div className="space-y-4">
+              {/* Unit / Team Quick-Switcher Bar for Board View */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+                {accessibleUnits.filter(u => u.id !== 12).map((u) => {
+                  const isSelected = boardUnitId === u.id;
+                  const uScoutsCount = members.filter(m => m.unit_id === u.id).length;
+                  return (
+                    <button
+                      key={u.id}
+                      type="button"
+                      onClick={() => setSelectedUnitId(u.id)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${
+                        isSelected
+                          ? 'bg-[#0B57D0] text-white shadow-xs'
+                          : 'bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-700/60'
+                      }`}
+                    >
+                      <span>{language === 'ar' ? u.name_ar : u.name_en}</span>
+                      <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                        isSelected ? 'bg-white/20 text-white' : 'bg-zinc-100 dark:bg-zinc-900 text-zinc-500'
+                      }`}>
+                        {uScoutsCount}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
               {/* Board Header Banner */}
               <div className="p-3.5 rounded-lg bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
                 <div>
                   <div className="text-xs font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-1.5">
                     <Compass className="w-3.5 h-3.5 text-zinc-500" strokeWidth={1.5} />
                     <span>
-                      {language === 'ar' ? 'لوحة توزيع طلائع مرحلة:' : 'Patrol Distribution Board:'}{' '}
+                      {language === 'ar' ? terms.boardTitleAr : terms.boardTitleEn}{' '}
                       {language === 'ar' ? boardUnit?.name_ar : boardUnit?.name_en}
                     </span>
                   </div>
                   <div className="text-[11px] text-zinc-500 mt-0.5">
                     {language === 'ar'
-                      ? 'توزيع الكشافين بين الطلائع، وإنشاء طلائع جديدة وتخصيص أسمائها وترتيب ظهورها.'
-                      : 'Distribute scouts, create new patrols, customize names, and set display order.'}
+                      ? `توزيع الكشافين بين الـ ${terms.pluralAr}، وإنشاء ${terms.pluralAr} جديدة وتخصيص أسمائها وترتيب ظهورها.`
+                      : `Distribute scouts into ${terms.pluralEn.toLowerCase()}, create new ${terms.pluralEn.toLowerCase()}, and customize their order.`}
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2 text-xs font-mono">
                   <span className="px-2 py-0.5 rounded bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300">
-                    {unitMembers.length} {language === 'ar' ? 'كشاف بالفريق' : 'Scouts in Unit'}
+                    {unitMembers.length} {language === 'ar' ? 'عضو بالفريق' : 'Scouts in Unit'}
                   </span>
                   <span className="px-2 py-0.5 rounded bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-amber-700 dark:text-amber-400">
-                    {unassignedMembers.length} {language === 'ar' ? 'غير موزعين' : 'Unassigned'}
+                    {unassignedMembers.length} {language === 'ar' ? `غير مسكنين بـ${terms.singularAr}` : `Unassigned to ${terms.singularEn}`}
                   </span>
                   
-                  {/* Print All Patrols Tamam Button */}
+                  {/* Print All Patrols / Sixes Tamam Button */}
                   <Link
                     href={`/members/tamam?unitId=${boardUnitId}`}
                     target="_blank"
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold shadow-xs cursor-pointer transition-colors"
-                    title={language === 'ar' ? 'طباعة كشوف تمام جميع طلائع المرحلة' : 'Print All Patrols Tamam'}
+                    title={language === 'ar' ? `طباعة كشوف تمام جميع ${terms.pluralAr} المرحلة` : `Print All ${terms.pluralEn} Tamam`}
                   >
                     <Printer className="w-3.5 h-3.5" />
-                    <span>{language === 'ar' ? 'كشوف تمام المرحلة (PDF)' : 'Unit Tamam Sheets (PDF)'}</span>
+                    <span>{language === 'ar' ? `كشوف تمام الـ${terms.pluralAr} (PDF)` : `Tamam Sheets (PDF)`}</span>
                   </Link>
 
                   {canManagePatrols && (
@@ -1087,7 +1122,7 @@ export default function MembersDirectoryPage() {
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#0B57D0] hover:bg-[#0842a0] text-white text-xs font-semibold shadow-xs cursor-pointer transition-colors"
                     >
                       <Plus className="w-3.5 h-3.5" />
-                      <span>{language === 'ar' ? 'إضافة طليعة جديدة' : 'Add Patrol'}</span>
+                      <span>{language === 'ar' ? terms.addNewAr : terms.addNewEn}</span>
                     </button>
                   )}
                 </div>
@@ -1174,7 +1209,7 @@ export default function MembersDirectoryPage() {
                                   setEditPatrolNameAr(patrol.name_ar);
                                   setEditPatrolNameEn(patrol.name_en || '');
                                 }}
-                                title={language === 'ar' ? 'تعديل اسم الطليعة' : 'Edit Patrol Name'}
+                                title={language === 'ar' ? terms.editTitleAr : terms.editTitleEn}
                                 className="p-1 rounded text-zinc-500 hover:text-[#0B57D0] hover:bg-blue-50 dark:hover:bg-blue-950/40 transition-colors cursor-pointer"
                               >
                                 <Edit2 className="w-3.5 h-3.5" />
@@ -1184,7 +1219,7 @@ export default function MembersDirectoryPage() {
                               <button
                                 type="button"
                                 onClick={() => setPatrolToDelete(patrol)}
-                                title={language === 'ar' ? 'حذف الطليعة' : 'Delete Patrol'}
+                                title={language === 'ar' ? terms.deleteTitleAr : terms.deleteTitleEn}
                                 className="p-1 rounded text-zinc-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
@@ -1198,7 +1233,7 @@ export default function MembersDirectoryPage() {
                       <div className="p-2.5 space-y-1.5 flex-1 max-h-96 overflow-y-auto">
                         {pMembers.length === 0 ? (
                           <div className="text-center py-6 text-xs text-zinc-400">
-                            {language === 'ar' ? 'لا يوجد كشافين بهذه الطليعة' : 'No scouts assigned'}
+                            {language === 'ar' ? `لا يوجد أعضاء بهذا الـ${terms.singularAr}` : `No scouts assigned`}
                           </div>
                         ) : (
                           pMembers.map((scout) => (
@@ -1243,10 +1278,10 @@ export default function MembersDirectoryPage() {
                   <div className="px-3.5 py-2.5 bg-zinc-100/60 dark:bg-zinc-800/40 border-b border-zinc-200 dark:border-zinc-700 flex items-center justify-between">
                     <div>
                       <h4 className="font-semibold text-zinc-700 dark:text-zinc-300 text-xs">
-                        {language === 'ar' ? '⚠️ غير مسجلين بطلائع' : '⚠️ Unassigned Scouts'}
+                        {language === 'ar' ? `⚠️ غير مسكنين بـ${terms.pluralAr}` : `⚠️ ${terms.unassignedEn}`}
                       </h4>
                       <span className="text-[10px] text-zinc-400 font-mono">
-                        {language === 'ar' ? 'يحتاجون تسكين' : 'Needs Patrol Assignment'}
+                        {language === 'ar' ? `يحتاجون تسكين بـ${terms.singularAr}` : `Needs ${terms.singularEn} Assignment`}
                       </span>
                     </div>
                     <span className="px-2 py-0.2 rounded bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-400 font-mono text-[11px] border border-amber-200 dark:border-amber-800">
@@ -1257,7 +1292,7 @@ export default function MembersDirectoryPage() {
                   <div className="p-2.5 space-y-1.5 flex-1 max-h-96 overflow-y-auto">
                     {unassignedMembers.length === 0 ? (
                       <div className="text-center py-6 text-xs text-zinc-400">
-                        {language === 'ar' ? 'جميع الكشافين موزعون بطلائع' : 'All scouts assigned!'}
+                        {language === 'ar' ? `جميع الكشافين موزعون بـ${terms.pluralAr}` : `All scouts assigned!`}
                       </div>
                     ) : (
                       unassignedMembers.map((scout) => (
@@ -1282,7 +1317,7 @@ export default function MembersDirectoryPage() {
                             }}
                             className="text-[11px] bg-emerald-800 text-white border-0 rounded px-2 py-1 focus:outline-none cursor-pointer"
                           >
-                            <option value="">{language === 'ar' ? '+ تسكين بطليعة' : '+ Assign Patrol'}</option>
+                            <option value="">{language === 'ar' ? `+ تسكين بـ${terms.singularAr}` : `+ Assign ${terms.singularEn}`}</option>
                             {unitPatrols.map((p) => (
                               <option key={p.id} value={p.id}>
                                 {language === 'ar' ? p.name_ar : p.name_en}
@@ -1385,14 +1420,23 @@ export default function MembersDirectoryPage() {
 
                 <div>
                   <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
-                    {language === 'ar' ? 'الطليعة / السداسي' : 'Patrol'}
+                    {(() => {
+                      const mTerms = getSubdivisionTerms(mUnitId);
+                      return language === 'ar' ? mTerms.singularAr : mTerms.singularEn;
+                    })()}
                   </label>
                   <select
                     value={mPatrolId}
+                    disabled={mUnitId === 12}
                     onChange={(e) => setMPatrolId(e.target.value === 'none' ? 'none' : Number(e.target.value))}
-                    className="w-full text-xs rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2.5 py-2 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full text-xs rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2.5 py-2 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    <option value="none">{language === 'ar' ? 'بدون طليعة (حاليًا)' : 'Unassigned'}</option>
+                    <option value="none">
+                      {(() => {
+                        const mTerms = getSubdivisionTerms(mUnitId);
+                        return language === 'ar' ? `بدون ${mTerms.singularAr} (حاليًا)` : `Unassigned`;
+                      })()}
+                    </option>
                     {modalUnitPatrols.map((p) => (
                       <option key={p.id} value={p.id}>
                         {language === 'ar' ? p.name_ar : p.name_en}
@@ -1815,10 +1859,11 @@ export default function MembersDirectoryPage() {
         </div>
       )}
 
-      {/* Add Patrol Modal */}
+      {/* Add Patrol / Six Modal */}
       {isAddPatrolOpen && (() => {
-        const boardUnitId = typeof selectedUnitId === 'number' ? selectedUnitId : (accessibleUnits[0]?.id || 5);
+        const boardUnitId = typeof selectedUnitId === 'number' ? selectedUnitId : (accessibleUnits.find(u => u.id !== 12)?.id || 5);
         const boardUnit = INITIAL_UNITS.find((u) => u.id === boardUnitId);
+        const terms = getSubdivisionTerms(boardUnitId);
 
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto">
@@ -1830,7 +1875,7 @@ export default function MembersDirectoryPage() {
                   </div>
                   <div>
                     <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
-                      {language === 'ar' ? 'إضافة طليعة جديدة' : 'Create New Patrol'}
+                      {language === 'ar' ? terms.addNewAr : terms.addNewEn}
                     </h3>
                     <p className="text-[11px] text-zinc-500 font-medium">
                       {language === 'ar' ? boardUnit?.name_ar : boardUnit?.name_en}
@@ -1849,27 +1894,27 @@ export default function MembersDirectoryPage() {
               <form onSubmit={(e) => handleCreatePatrol(e, boardUnitId)} className="space-y-4">
                 <div className="space-y-1">
                   <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
-                    {language === 'ar' ? 'اسم الطليعة / السداسي بالعربية *' : 'Patrol Name (Arabic) *'}
+                    {language === 'ar' ? `اسم الـ${terms.singularAr} بالعربية *` : `${terms.singularEn} Name (Arabic) *`}
                   </label>
                   <input
                     type="text"
                     required
                     value={newPatrolNameAr}
                     onChange={(e) => setNewPatrolNameAr(e.target.value)}
-                    placeholder={language === 'ar' ? 'مثال: طليعة النسور / سداسي الفهد' : 'e.g. طليعة النسور'}
+                    placeholder={language === 'ar' ? terms.placeholderAr : terms.placeholderEn}
                     className="w-full px-3 py-2 rounded-lg bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B57D0]"
                   />
                 </div>
 
                 <div className="space-y-1">
                   <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
-                    {language === 'ar' ? 'اسم الطليعة بالإنجليزية (اختياري)' : 'Patrol Name (English)'}
+                    {language === 'ar' ? `اسم الـ${terms.singularAr} بالإنجليزية (اختياري)` : `${terms.singularEn} Name (English)`}
                   </label>
                   <input
                     type="text"
                     value={newPatrolNameEn}
                     onChange={(e) => setNewPatrolNameEn(e.target.value)}
-                    placeholder="e.g. Eagles Patrol"
+                    placeholder={terms.placeholderEn}
                     className="w-full px-3 py-2 rounded-lg bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B57D0]"
                   />
                 </div>
@@ -1892,7 +1937,7 @@ export default function MembersDirectoryPage() {
                     ) : (
                       <Plus className="w-3.5 h-3.5" />
                     )}
-                    <span>{language === 'ar' ? 'إنشاء الطليعة' : 'Create Patrol'}</span>
+                    <span>{language === 'ar' ? terms.addNewAr : terms.addNewEn}</span>
                   </button>
                 </div>
               </form>
@@ -1901,125 +1946,131 @@ export default function MembersDirectoryPage() {
         );
       })()}
 
-      {/* Edit Patrol Modal */}
-      {editingPatrol && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-[#18181b] border border-zinc-200 dark:border-zinc-700 rounded-2xl shadow-2xl max-w-md w-full p-5 space-y-4 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between pb-3 border-b border-zinc-100 dark:border-zinc-800">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-950/60 text-[#0B57D0] flex items-center justify-center">
-                  <Edit2 className="w-4 h-4" />
+      {/* Edit Patrol / Six Modal */}
+      {editingPatrol && (() => {
+        const editTerms = getSubdivisionTerms(editingPatrol.unit_id);
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto">
+            <div className="bg-white dark:bg-[#18181b] border border-zinc-200 dark:border-zinc-700 rounded-2xl shadow-2xl max-w-md w-full p-5 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+              <div className="flex items-center justify-between pb-3 border-b border-zinc-100 dark:border-zinc-800">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-950/60 text-[#0B57D0] flex items-center justify-center">
+                    <Edit2 className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
+                      {language === 'ar' ? editTerms.editTitleAr : editTerms.editTitleEn}
+                    </h3>
+                    <p className="text-[11px] text-zinc-500 font-medium">
+                      {language === 'ar' ? editingPatrol.name_ar : editingPatrol.name_en || editingPatrol.name_ar}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
-                    {language === 'ar' ? 'تعديل اسم الطليعة' : 'Edit Patrol Name'}
-                  </h3>
-                  <p className="text-[11px] text-zinc-500 font-medium">
-                    {language === 'ar' ? editingPatrol.name_ar : editingPatrol.name_en || editingPatrol.name_ar}
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setEditingPatrol(null)}
-                className="p-1 rounded-md text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <form onSubmit={handleUpdatePatrol} className="space-y-4">
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
-                  {language === 'ar' ? 'اسم الطليعة بالعربية *' : 'Patrol Name (Arabic) *'}
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={editPatrolNameAr}
-                  onChange={(e) => setEditPatrolNameAr(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B57D0]"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
-                  {language === 'ar' ? 'اسم الطليعة بالإنجليزية (اختياري)' : 'Patrol Name (English)'}
-                </label>
-                <input
-                  type="text"
-                  value={editPatrolNameEn}
-                  onChange={(e) => setEditPatrolNameEn(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B57D0]"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-zinc-100 dark:border-zinc-800">
                 <button
                   type="button"
                   onClick={() => setEditingPatrol(null)}
-                  className="px-3 py-2 rounded-lg text-xs font-medium text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                  className="p-1 rounded-md text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <form onSubmit={handleUpdatePatrol} className="space-y-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                    {language === 'ar' ? `اسم الـ${editTerms.singularAr} بالعربية *` : `${editTerms.singularEn} Name (Arabic) *`}
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editPatrolNameAr}
+                    onChange={(e) => setEditPatrolNameAr(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B57D0]"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                    {language === 'ar' ? `اسم الـ${editTerms.singularAr} بالإنجليزية (اختياري)` : `${editTerms.singularEn} Name (English)`}
+                  </label>
+                  <input
+                    type="text"
+                    value={editPatrolNameEn}
+                    onChange={(e) => setEditPatrolNameEn(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B57D0]"
+                  />
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-3 border-t border-zinc-100 dark:border-zinc-800">
+                  <button
+                    type="button"
+                    onClick={() => setEditingPatrol(null)}
+                    className="px-3 py-2 rounded-lg text-xs font-medium text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                  >
+                    {language === 'ar' ? 'إلغاء' : 'Cancel'}
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={!editPatrolNameAr.trim() || isUpdatingPatrol}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#0B57D0] hover:bg-[#0842a0] text-white text-xs font-semibold shadow-xs transition-colors disabled:opacity-50 cursor-pointer"
+                  >
+                    {isUpdatingPatrol ? (
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Check className="w-3.5 h-3.5" />
+                    )}
+                    <span>{language === 'ar' ? 'حفظ التعديل' : 'Save Changes'}</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Delete Patrol / Six Confirmation Modal */}
+      {patrolToDelete && (() => {
+        const delTerms = getSubdivisionTerms(patrolToDelete.unit_id);
+        return (
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn">
+            <div className="bg-white dark:bg-[#121214] rounded-2xl border border-red-200 dark:border-red-900/60 p-6 max-w-md w-full shadow-2xl space-y-4">
+              <div className="w-12 h-12 rounded-2xl bg-red-100 dark:bg-red-950/50 flex items-center justify-center text-red-600 dark:text-red-400">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100">
+                  {language === 'ar' ? delTerms.deleteTitleAr : delTerms.deleteTitleEn}
+                </h3>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 leading-relaxed">
+                  {language === 'ar'
+                    ? `هل أنت متأكد من حذف ${delTerms.singularAr} (${patrolToDelete.name_ar})؟ لن يتم حذف أي كشاف، وسيتم تحويل كافة أعضاء هذا الـ${delTerms.singularAr} تلقائياً إلى قائمة الأعضاء غير المسكنين لإعادة توزيعهم.`
+                    : `Are you sure you want to delete ${delTerms.singularEn.toLowerCase()} (${patrolToDelete.name_ar})? No scout records will be deleted; all assigned members will be moved to the unassigned list.`}
+                </p>
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setPatrolToDelete(null)}
+                  disabled={isDeletingPatrol}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
                 >
                   {language === 'ar' ? 'إلغاء' : 'Cancel'}
                 </button>
                 <button
-                  type="submit"
-                  disabled={!editPatrolNameAr.trim() || isUpdatingPatrol}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#0B57D0] hover:bg-[#0842a0] text-white text-xs font-semibold shadow-xs transition-colors disabled:opacity-50 cursor-pointer"
+                  type="button"
+                  onClick={handleConfirmDeletePatrol}
+                  disabled={isDeletingPatrol}
+                  className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-semibold shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                 >
-                  {isUpdatingPatrol ? (
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <Check className="w-3.5 h-3.5" />
-                  )}
-                  <span>{language === 'ar' ? 'حفظ التعديل' : 'Save Changes'}</span>
+                  {isDeletingPatrol && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                  <span>{language === 'ar' ? `نعم، حذف ${delTerms.singularAr}` : `Yes, Delete ${delTerms.singularEn}`}</span>
                 </button>
               </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Delete Patrol Confirmation Modal */}
-      {patrolToDelete && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn">
-          <div className="bg-white dark:bg-[#121214] rounded-2xl border border-red-200 dark:border-red-900/60 p-6 max-w-md w-full shadow-2xl space-y-4">
-            <div className="w-12 h-12 rounded-2xl bg-red-100 dark:bg-red-950/50 flex items-center justify-center text-red-600 dark:text-red-400">
-              <Trash2 className="w-6 h-6" />
-            </div>
-            <div>
-              <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100">
-                {language === 'ar' ? 'تأكيد حذف الطليعة' : 'Confirm Patrol Deletion'}
-              </h3>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 leading-relaxed">
-                {language === 'ar'
-                  ? `هل أنت متأكد من حذف طليعة (${patrolToDelete.name_ar})؟ لن يتم حذف أي كشاف، وسيتم تحويل كافة أعضاء هذه الطليعة تلقائياً إلى قائمة الكشافين غير المسكنين لإعادة توزيعهم.`
-                  : `Are you sure you want to delete patrol (${patrolToDelete.name_ar})? No scout records will be deleted; all assigned members will be moved to the unassigned list.`}
-              </p>
-            </div>
-
-            <div className="flex items-center justify-end gap-2.5 pt-2">
-              <button
-                type="button"
-                onClick={() => setPatrolToDelete(null)}
-                disabled={isDeletingPatrol}
-                className="px-4 py-2 rounded-xl text-xs font-semibold text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
-              >
-                {language === 'ar' ? 'إلغاء' : 'Cancel'}
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmDeletePatrol}
-                disabled={isDeletingPatrol}
-                className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-semibold shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-              >
-                {isDeletingPatrol && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
-                <span>{language === 'ar' ? 'نعم، حذف الطليعة' : 'Yes, Delete Patrol'}</span>
-              </button>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Tamam Sheet Preview & Print Modal */}
       {tamamPreviewPatrol && (() => {

@@ -6,6 +6,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { useLanguage } from '../../lib/LanguageContext';
 import { useAuth } from '../../lib/AuthContext';
 import { INITIAL_UNITS } from '../../lib/data';
+import { getSubdivisionTerms } from '@/lib/scout-terms';
 import { AttendanceStatus, AttendanceSession } from '../../lib/types';
 import {
   CalendarCheck,
@@ -213,9 +214,10 @@ function AttendancePageContent() {
     return patrols.filter((p) => p.unit_id === selectedUnitId);
   }, [patrols, selectedUnitId]);
 
-  // Group scouts by patrol
+  // Group scouts by patrol / six / clan
   const groupedScouts = useMemo(() => {
     const groups: { patrolName: string; members: typeof activeMembers }[] = [];
+    const unitTerms = getSubdivisionTerms(selectedUnitId);
 
     activePatrols.forEach((patrol) => {
       const pMembers = activeMembers.filter((m) => m.patrol_id === patrol.id);
@@ -232,13 +234,13 @@ function AttendancePageContent() {
     );
     if (unassigned.length > 0) {
       groups.push({
-        patrolName: language === 'ar' ? 'بدون طليعة محددة' : 'Unassigned to Patrol',
+        patrolName: language === 'ar' ? unitTerms.unassignedAr : unitTerms.unassignedEn,
         members: unassigned,
       });
     }
 
     return groups;
-  }, [activeMembers, activePatrols, language]);
+  }, [activeMembers, activePatrols, selectedUnitId, language]);
 
   // Mark all present
   const handleMarkAllPresent = () => {
