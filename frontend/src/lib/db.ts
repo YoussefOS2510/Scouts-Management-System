@@ -41,7 +41,7 @@ export type QueryParam = { name?: string; type?: any; value: any };
 
 export async function query<T = any>(
   queryText: string,
-  params?: Record<string, QueryParam> | QueryParam[] | any[]
+  params?: Record<string, any> | QueryParam[] | any[]
 ): Promise<T[]> {
   const pool = getDbPool();
 

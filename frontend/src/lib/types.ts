@@ -36,8 +36,13 @@ export interface Member {
   school_or_college?: string;
   academic_year: string;
   sunday_school_class?: string;
+  sunday_school_class_en?: string;
   father_of_confession?: string;
   notes?: string;
+  school_or_college_en?: string;
+  academic_year_en?: string;
+  has_missing_data?: boolean;
+  missing_fields?: string;
   is_active: boolean;
 }
 

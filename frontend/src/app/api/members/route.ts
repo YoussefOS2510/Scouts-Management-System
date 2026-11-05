@@ -23,6 +23,11 @@ export async function GET() {
           m.sunday_school_class,
           m.father_of_confession,
           m.notes,
+          m.has_missing_data,
+          m.missing_fields,
+          m.school_or_college_en,
+          m.sunday_school_class_en,
+          m.academic_year_en,
           m.is_active,
           u.name_ar AS unit_name_ar,
           u.name_en AS unit_name_en,
@@ -46,6 +51,8 @@ export async function GET() {
       unit_id: Number(m.unit_id),
       patrol_id: m.patrol_id !== null && m.patrol_id !== undefined ? Number(m.patrol_id) : null,
       is_active: Boolean(m.is_active),
+      has_missing_data: Boolean(m.has_missing_data),
+      missing_fields: m.missing_fields || '',
     }));
 
     const formattedPatrols = patrols.map((p: any) => ({

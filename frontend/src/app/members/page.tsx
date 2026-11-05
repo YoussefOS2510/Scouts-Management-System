@@ -37,6 +37,8 @@ import {
 } from 'lucide-react';
 import TamamSheet from '@/components/TamamSheet';
 import { INITIAL_ROLES } from '../../lib/data';
+import ExcelImportModal from '@/components/ExcelImportModal';
+import { FileSpreadsheet, AlertTriangle } from 'lucide-react';
 
 export default function MembersDirectoryPage() {
   const { language, t } = useLanguage();
@@ -62,6 +64,7 @@ export default function MembersDirectoryPage() {
     userRoles,
     roles,
     isLoadingPermissions,
+    refreshPermissions,
   } = useAuth();
 
   const [activeDirectoryTab, setActiveDirectoryTab] = useState<'scouts' | 'leaders'>('scouts');
@@ -73,6 +76,8 @@ export default function MembersDirectoryPage() {
   const [viewMode, setViewMode] = useState<'table' | 'cards' | 'board'>('table');
   const [patrolActionSuccess, setPatrolActionSuccess] = useState<string | null>(null);
   const [actionSuccessMsg, setActionSuccessMsg] = useState<string | null>(null);
+  const [isExcelImportOpen, setIsExcelImportOpen] = useState(false);
+  const [filterMissingOnly, setFilterMissingOnly] = useState(false);
 
   // Deletion States & Modals
   const [memberToDelete, setMemberToDelete] = useState<any | null>(null);
@@ -149,6 +154,10 @@ export default function MembersDirectoryPage() {
   const canAccessMembers = isSuperAdmin || can('members.view') || can('members.create_edit');
 
   // Filtered members
+  const incompleteMembersCount = useMemo(() => {
+    return members.filter((m) => m.has_missing_data).length;
+  }, [members]);
+
   const filteredMembers = useMemo(() => {
     return members.filter((m) => {
       // If scoped leader, strictly force only their team(s)
@@ -161,9 +170,10 @@ export default function MembersDirectoryPage() {
         m.full_name_ar.includes(searchTerm) ||
         (m.full_name_en && m.full_name_en.toLowerCase().includes(searchTerm.toLowerCase())) ||
         m.member_code.toLowerCase().includes(searchTerm.toLowerCase());
-      return matchUnit && matchSearch;
+      const matchMissing = !filterMissingOnly || Boolean(m.has_missing_data);
+      return matchUnit && matchSearch && matchMissing;
     });
-  }, [searchTerm, selectedUnitId, isSuperAdmin, accessibleUnits, canViewAllUnits, members]);
+  }, [searchTerm, selectedUnitId, isSuperAdmin, accessibleUnits, canViewAllUnits, members, filterMissingOnly]);
 
   // Filtered leaders
   const filteredLeaders = useMemo(() => {
@@ -461,13 +471,22 @@ export default function MembersDirectoryPage() {
         <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
           {/* Add Member Button */}
           {canAddMember && (
-            <button
-              onClick={() => setIsAddMemberOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#0B57D0] hover:bg-[#0842A0] text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer"
-            >
-              <UserPlus className="w-3.5 h-3.5" />
-              <span>{language === 'ar' ? '＋ إضافة كشاف / عضو' : '+ Add Member'}</span>
-            </button>
+            <>
+              <button
+                onClick={() => setIsAddMemberOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#0B57D0] hover:bg-[#0842A0] text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+              >
+                <UserPlus className="w-3.5 h-3.5" />
+                <span>{language === 'ar' ? '＋ إضافة كشاف / عضو' : '+ Add Member'}</span>
+              </button>
+              <button
+                onClick={() => setIsExcelImportOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5" />
+                <span>{language === 'ar' ? 'استيراد من إكسيل' : 'Excel Import'}</span>
+              </button>
+            </>
           )}
 
           {/* Add Leader Button */}
@@ -614,6 +633,25 @@ export default function MembersDirectoryPage() {
         </div>
 
         {/* Unit Selector Filter */}
+        {incompleteMembersCount > 0 && activeDirectoryTab === 'scouts' && (
+          <button
+            type="button"
+            onClick={() => setFilterMissingOnly(!filterMissingOnly)}
+            className={`px-3 py-2 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+              filterMissingOnly
+                ? 'bg-amber-600 text-white shadow-xs'
+                : 'bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/40'
+            }`}
+          >
+            <AlertTriangle className="w-3.5 h-3.5" />
+            <span>
+              {language === 'ar'
+                ? `بيانات ناقصة (${incompleteMembersCount})`
+                : `Incomplete (${incompleteMembersCount})`}
+            </span>
+          </button>
+        )}
+
         <select
           value={selectedUnitId}
           onChange={(e) => setSelectedUnitId(e.target.value === 'all' ? 'all' : Number(e.target.value))}
@@ -766,11 +804,27 @@ export default function MembersDirectoryPage() {
                         {member.member_code}
                       </td>
                       <td className="px-4 py-3">
-                        <div className="font-medium text-zinc-900 dark:text-zinc-100 leading-tight">
-                          {member.full_name_ar}
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-zinc-900 dark:text-zinc-100 leading-tight">
+                            {member.full_name_ar}
+                          </span>
+                          {member.has_missing_data && (
+                            <span
+                              className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 text-[10px] font-semibold shrink-0 cursor-help"
+                              title={member.missing_fields ? `${language === 'ar' ? 'ينقص:' : 'Missing:'} ${member.missing_fields}` : undefined}
+                            >
+                              <AlertTriangle className="w-2.5 h-2.5 text-amber-500" />
+                              <span>{language === 'ar' ? 'بيانات ناقصة' : 'Incomplete'}</span>
+                            </span>
+                          )}
                         </div>
                         {member.full_name_en && (
                           <div className="text-xs text-zinc-400 mt-0.5">{member.full_name_en}</div>
+                        )}
+                        {member.has_missing_data && member.missing_fields && (
+                          <div className="text-[10px] text-amber-600/90 dark:text-amber-400/90 font-mono mt-0.5">
+                            {language === 'ar' ? 'ينقص: ' : 'Missing: '}{member.missing_fields}
+                          </div>
                         )}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
@@ -2065,6 +2119,21 @@ export default function MembersDirectoryPage() {
           </div>
         );
       })()}
+
+      {/* 5. EXCEL IMPORT MODAL */}
+      <ExcelImportModal
+        isOpen={isExcelImportOpen}
+        onClose={() => setIsExcelImportOpen(false)}
+        onSuccess={() => {
+          refreshPermissions();
+          setActionSuccessMsg(
+            language === 'ar'
+              ? 'تم استيراد بيانات الكشافة من ملف الإكسيل بنجاح!'
+              : 'Scouts data imported from Excel successfully!'
+          );
+          setTimeout(() => setActionSuccessMsg(null), 4000);
+        }}
+      />
 
       {/* Print Styles for Modal Print */}
       <style jsx global>{`
