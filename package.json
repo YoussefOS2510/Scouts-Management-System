@@ -14,6 +14,7 @@
     "verify": "npm run verify --workspace=backend",
     "verify:mssql": "npm run verify:mssql --workspace=backend",
     "verify:postgres": "npm run verify:postgres --workspace=backend",
+    "test:system": "npx tsx --env-file=frontend/.env.local backend/scripts/system-test-suite.ts",
     "migrate:cloud": "npx tsx backend/scripts/migrate-cloud.ts",
     "worker": "npm run worker --workspace=backend"
   },
