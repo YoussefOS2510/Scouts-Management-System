@@ -107,14 +107,6 @@ function AttendancePageContent() {
     }
   }, [queryUnitId, selectedUnitId]);
 
-  // If visiting /attendance without a specific sessionId, seamlessly route to /events
-  useEffect(() => {
-    if (!querySessionId && !isLoadingPermissions) {
-      const targetUnit = queryUnitId ? Number(queryUnitId) : selectedUnitId;
-      router.replace(targetUnit ? `/events?unitId=${targetUnit}` : '/events');
-    }
-  }, [querySessionId, queryUnitId, selectedUnitId, isLoadingPermissions, router]);
-
   // Sync unit when accessibleUnits switch
   useEffect(() => {
     if (accessibleUnits.length > 0 && !accessibleUnits.some((u) => u.id === selectedUnitId)) {
@@ -166,21 +158,54 @@ function AttendancePageContent() {
           const sessionsList: AttendanceSession[] = data.sessions || [];
           setEvents(sessionsList);
 
-          // Only activate session if targetSessionId was explicitly provided
-          const activeId = targetSessionId || null;
+          // Find active event: prefer targetSessionId if in list, else activeSessionId from response, else newest event
+          const activeId =
+            (targetSessionId && sessionsList.some((s) => s.id === targetSessionId) ? targetSessionId : null) ||
+            data.activeSessionId ||
+            sessionsList[0]?.id ||
+            null;
+
           setSelectedSessionId(activeId);
+
+          // If server resolved a specific unitId for this session, sync selectedUnitId
+          if (data.unitId && data.unitId !== selectedUnitId) {
+            setSelectedUnitId(data.unitId);
+          }
 
           // Populate records for active session
           const map: Record<string, { status?: AttendanceStatus; notes: string }> = {};
           if (Array.isArray(data.records) && activeId) {
             data.records.forEach((rec: any) => {
-              map[rec.member_id] = {
-                status: rec.status,
-                notes: rec.notes || '',
-              };
+              if (rec.session_id === activeId || !rec.session_id) {
+                map[rec.member_id] = {
+                  status: rec.status,
+                  notes: rec.notes || '',
+                };
+              }
             });
           }
+
+          // Check if there is an unsaved draft in localStorage for this session
+          try {
+            if (activeId && typeof window !== 'undefined') {
+              const draftStr = localStorage.getItem(`scouts_att_draft_${activeId}`);
+              if (draftStr) {
+                const draft = JSON.parse(draftStr);
+                if (typeof draft === 'object' && draft !== null) {
+                  Object.assign(map, draft);
+                }
+              }
+            }
+          } catch {}
+
           setRecords(map);
+
+          // Sync browser URL so F5 refresh preserves this exact session and unit
+          if (activeId && typeof window !== 'undefined') {
+            const currentUnit = data.unitId || unitId;
+            const newUrl = `/attendance?sessionId=${activeId}&unitId=${currentUnit}`;
+            window.history.replaceState(null, '', newUrl);
+          }
         }
       })
       .catch((err) => console.error('Failed to fetch events:', err))
@@ -194,6 +219,10 @@ function AttendancePageContent() {
   // Load records when switching active event session
   const handleSelectEvent = (sessionId: string) => {
     setSelectedSessionId(sessionId);
+    if (typeof window !== 'undefined') {
+      window.history.replaceState(null, '', `/attendance?sessionId=${sessionId}&unitId=${selectedUnitId}`);
+    }
+
     fetch(`/api/attendance?unitId=${selectedUnitId}&sessionId=${sessionId}`)
       .then((r) => r.json())
       .then((data) => {
@@ -205,6 +234,20 @@ function AttendancePageContent() {
               notes: rec.notes || '',
             };
           });
+
+          // Check draft in localStorage
+          try {
+            if (typeof window !== 'undefined') {
+              const draftStr = localStorage.getItem(`scouts_att_draft_${sessionId}`);
+              if (draftStr) {
+                const draft = JSON.parse(draftStr);
+                if (typeof draft === 'object' && draft !== null) {
+                  Object.assign(map, draft);
+                }
+              }
+            }
+          } catch {}
+
           setRecords(map);
         }
       })
@@ -303,12 +346,22 @@ function AttendancePageContent() {
         notes: records[m.id]?.notes || '',
       };
     });
+    try {
+      if (typeof window !== 'undefined' && selectedSessionId) {
+        localStorage.setItem(`scouts_att_draft_${selectedSessionId}`, JSON.stringify(updated));
+      }
+    } catch {}
     setRecords(updated);
   };
 
   // Reset to no selection
   const handleClearAll = () => {
     if (!canTakeAttendance || !selectedSessionId) return;
+    try {
+      if (typeof window !== 'undefined' && selectedSessionId) {
+        localStorage.removeItem(`scouts_att_draft_${selectedSessionId}`);
+      }
+    } catch {}
     setRecords({});
   };
 
@@ -317,31 +370,46 @@ function AttendancePageContent() {
     if (!canTakeAttendance || !selectedSessionId) return;
     setRecords((prev) => {
       const isCurrentlySelected = prev[memberId]?.status === status;
+      let nextState: Record<string, { status?: AttendanceStatus; notes: string }>;
       if (isCurrentlySelected) {
-        const copy = { ...prev };
-        delete copy[memberId];
-        return copy;
+        nextState = { ...prev };
+        delete nextState[memberId];
+      } else {
+        nextState = {
+          ...prev,
+          [memberId]: {
+            status,
+            notes: prev[memberId]?.notes || '',
+          },
+        };
       }
-      return {
-        ...prev,
-        [memberId]: {
-          status,
-          notes: prev[memberId]?.notes || '',
-        },
-      };
+      try {
+        if (typeof window !== 'undefined' && selectedSessionId) {
+          localStorage.setItem(`scouts_att_draft_${selectedSessionId}`, JSON.stringify(nextState));
+        }
+      } catch {}
+      return nextState;
     });
   };
 
   // Update note
   const handleNotesChange = (memberId: string, notes: string) => {
     if (!canTakeAttendance || !selectedSessionId) return;
-    setRecords((prev) => ({
-      ...prev,
-      [memberId]: {
-        status: prev[memberId]?.status,
-        notes,
-      },
-    }));
+    setRecords((prev) => {
+      const nextState = {
+        ...prev,
+        [memberId]: {
+          status: prev[memberId]?.status,
+          notes,
+        },
+      };
+      try {
+        if (typeof window !== 'undefined' && selectedSessionId) {
+          localStorage.setItem(`scouts_att_draft_${selectedSessionId}`, JSON.stringify(nextState));
+        }
+      } catch {}
+      return nextState;
+    });
   };
 
   // Create New Event
@@ -384,6 +452,9 @@ function AttendancePageContent() {
         setEvents((prev) => [newEvent, ...prev.filter((e) => e.id !== newEvent.id)]);
         setSelectedSessionId(newEvent.id);
         setRecords({}); // fresh attendance roster for new event
+        if (typeof window !== 'undefined') {
+          window.history.replaceState(null, '', `/attendance?sessionId=${newEvent.id}&unitId=${selectedUnitId}`);
+        }
         setIsNewEventModalOpen(false);
 
         // Reset inputs
@@ -540,6 +611,18 @@ function AttendancePageContent() {
       .then((r) => r.json())
       .then((data) => {
         if (data.success) {
+          // Clear draft from localStorage since committed
+          try {
+            if (typeof window !== 'undefined' && selectedSessionId) {
+              localStorage.removeItem(`scouts_att_draft_${selectedSessionId}`);
+            }
+          } catch {}
+
+          // Ensure URL reflects active event session
+          if (typeof window !== 'undefined' && selectedSessionId) {
+            window.history.replaceState(null, '', `/attendance?sessionId=${selectedSessionId}&unitId=${selectedUnitId}`);
+          }
+
           setSaveNotification(
             language === 'ar'
               ? `تم حفظ كشف حضور فعالية "${activeEvent.session_title}" بنجاح!`

@@ -3,11 +3,29 @@ import { query, sql } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 
+const isUUID = (val: any): boolean =>
+  typeof val === 'string' &&
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const unitIdParam = searchParams.get('unitId');
     const sessionIdParam = searchParams.get('sessionId');
+
+    let targetUnitId = unitIdParam && !isNaN(Number(unitIdParam)) ? Number(unitIdParam) : null;
+    let targetSessionId = sessionIdParam && isUUID(sessionIdParam) ? sessionIdParam : null;
+
+    // If sessionId was provided without a valid unitId, look up unit from the session
+    if (targetSessionId && !targetUnitId) {
+      const sessRow = await query(
+        `SELECT unit_id FROM attendance_sessions WHERE id = @sid LIMIT 1`,
+        [{ name: 'sid', type: sql.UniqueIdentifier, value: targetSessionId }]
+      );
+      if (sessRow.length > 0) {
+        targetUnitId = sessRow[0].unit_id;
+      }
+    }
 
     let sessionsSql = `
       SELECT 
@@ -37,14 +55,9 @@ export async function GET(request: NextRequest) {
     const whereClauses: string[] = [];
     const params: { name: string; type: any; value: any }[] = [];
 
-    if (unitIdParam && !isNaN(Number(unitIdParam))) {
+    if (targetUnitId) {
       whereClauses.push(`s.unit_id = @unitId`);
-      params.push({ name: 'unitId', type: sql.Int, value: Number(unitIdParam) });
-    }
-
-    if (sessionIdParam) {
-      whereClauses.push(`s.id = @sessionId`);
-      params.push({ name: 'sessionId', type: sql.UniqueIdentifier, value: sessionIdParam });
+      params.push({ name: 'unitId', type: sql.Int, value: targetUnitId });
     }
 
     if (whereClauses.length > 0) {
@@ -62,7 +75,6 @@ export async function GET(request: NextRequest) {
     const sessions = await query(sessionsSql, params);
 
     // Determine which session's attendance records to load
-    let targetSessionId = sessionIdParam;
     if (!targetSessionId && sessions.length > 0) {
       targetSessionId = sessions[0].id;
     }
@@ -95,6 +107,7 @@ export async function GET(request: NextRequest) {
       sessions,
       records,
       activeSessionId: targetSessionId || null,
+      unitId: targetUnitId || null,
     });
   } catch (error: any) {
     console.error('[API /api/attendance GET] Error:', error);
@@ -121,11 +134,11 @@ export async function POST(request: NextRequest) {
       records,
     } = body;
 
-    // Resolve leader ID
-    let leaderId = recordedBy;
+    // Resolve leader ID safely as a valid UUID
+    let leaderId = isUUID(recordedBy) ? recordedBy : null;
     if (!leaderId) {
       const adminRes = await query(`SELECT id FROM users WHERE email = 'admin@scouts.org' LIMIT 1`);
-      leaderId = adminRes[0]?.id;
+      leaderId = adminRes[0]?.id || 'eddc77ff-69dc-452b-a5e1-0359ef7a8007';
     }
 
     // ACTION 1: CREATE NEW EVENT
@@ -272,9 +285,17 @@ export async function POST(request: NextRequest) {
     }
 
     // Save individual member records
-    if (Array.isArray(records) && records.length > 0) {
-      for (const rec of records) {
-        if (!rec.memberId || !rec.status) continue;
+    if (Array.isArray(records)) {
+      const validRecords = records.filter(
+        (rec: any) =>
+          rec &&
+          rec.memberId &&
+          isUUID(rec.memberId) &&
+          rec.status &&
+          ['present', 'absent', 'excused', 'late'].includes(rec.status)
+      );
+
+      for (const rec of validRecords) {
         await query(
           `
           INSERT INTO attendance_records (session_id, member_id, status, notes)
@@ -288,6 +309,20 @@ export async function POST(request: NextRequest) {
             { name: 'status', type: sql.NVarChar(20), value: rec.status },
             { name: 'notes', type: sql.NVarChar(255), value: rec.notes || null },
           ]
+        );
+      }
+
+      // Sync removal: delete records for this session that are not in validRecords
+      if (validRecords.length > 0) {
+        const idList = validRecords.map((r: any) => `'${r.memberId}'`).join(',');
+        await query(
+          `DELETE FROM attendance_records WHERE session_id = @sid AND member_id NOT IN (${idList})`,
+          [{ name: 'sid', type: sql.UniqueIdentifier, value: targetSessionId }]
+        );
+      } else {
+        await query(
+          `DELETE FROM attendance_records WHERE session_id = @sid`,
+          [{ name: 'sid', type: sql.UniqueIdentifier, value: targetSessionId }]
         );
       }
     }
