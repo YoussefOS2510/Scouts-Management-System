@@ -266,13 +266,16 @@ export async function runEntireSystemTestSuite() {
     ];
 
     const { durationMs: recordTime } = await measureOperation(async () => {
+      const valueTuples = testStatuses.map((_, i) => `($1, $${i * 3 + 2}, $${i * 3 + 3}, $${i * 3 + 4})`).join(', ');
+      const flatParams: any[] = [createdSessionId];
       for (const item of testStatuses) {
-        await query(`
-          INSERT INTO attendance_records (session_id, member_id, status, notes)
-          VALUES ($1, $2, $3, $4)
-          ON CONFLICT (session_id, member_id) DO UPDATE SET status = EXCLUDED.status, notes = EXCLUDED.notes;
-        `, [createdSessionId, item.memberId, item.status, item.notes]);
+        flatParams.push(item.memberId, item.status, item.notes);
       }
+      await query(`
+        INSERT INTO attendance_records (session_id, member_id, status, notes)
+        VALUES ${valueTuples}
+        ON CONFLICT (session_id, member_id) DO UPDATE SET status = EXCLUDED.status, notes = EXCLUDED.notes;
+      `, flatParams);
     });
     recordTest(`Batch Record Attendance (Present, Absent, Excused, Late)`, 'Attendance', true, recordTime);
 
@@ -632,23 +635,27 @@ export async function runEntireSystemTestSuite() {
     `);
   });
 
-  // Benchmark 6: Write Benchmark - Session Create & Roll-Call Write
-  await runBenchmark('Write: Attendance Session & Records Insert', 'WRITE', 5, async () => {
+  // Benchmark 6: Write Benchmark - High-Performance Atomic Multi-Row CTE
+  const scoutSample = await query(`SELECT id FROM members WHERE unit_id = $1 LIMIT 1;`, [targetUnitId]);
+  const sampleScoutId = scoutSample[0]?.id;
+
+  await runBenchmark('Write: Batched Attendance Session & Roll-Call', 'WRITE', 5, async () => {
     const tempDate = `2026-12-${Math.floor(10 + Math.random() * 15)}`;
-    const sessionRes = await query(`
-      INSERT INTO attendance_sessions (unit_id, session_date, session_title, event_type, recorded_by)
-      VALUES ($1, $2, 'جلسة قياس الأداء', 'meeting', 'eddc77ff-69dc-452b-a5e1-0359ef7a8007')
-      RETURNING id;
-    `, [targetUnitId, tempDate]);
-    const sid = sessionRes[0].id;
-    const scout = await query(`SELECT id FROM members WHERE unit_id = $1 LIMIT 1;`, [targetUnitId]);
-    if (scout.length > 0) {
-      await query(`
-        INSERT INTO attendance_records (session_id, member_id, status)
-        VALUES ($1, $2, 'present');
-      `, [sid, scout[0].id]);
+    const inserted = await query(`
+      WITH new_sess AS (
+        INSERT INTO attendance_sessions (unit_id, session_date, session_title, event_type, recorded_by)
+        VALUES ($1, $2, 'جلسة قياس الأداء المجمعة', 'meeting', 'eddc77ff-69dc-452b-a5e1-0359ef7a8007')
+        RETURNING id
+      )
+      INSERT INTO attendance_records (session_id, member_id, status)
+      SELECT id, $3, 'present' FROM new_sess
+      RETURNING session_id;
+    `, [targetUnitId, tempDate, sampleScoutId]);
+
+    const sid = inserted[0]?.session_id;
+    if (sid) {
+      await query(`DELETE FROM attendance_sessions WHERE id = $1;`, [sid]);
     }
-    await query(`DELETE FROM attendance_sessions WHERE id = $1;`, [sid]);
   });
 
   // Print Benchmark Table

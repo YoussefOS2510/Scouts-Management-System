@@ -122,16 +122,27 @@ export async function POST(request: NextRequest) {
 
     const bookingId = insertBooking[0]?.id;
 
-    // 2. Insert booking items
-    for (const item of items) {
-      await query(`
-        INSERT INTO booking_items (booking_id, equipment_id, quantity)
-        VALUES (@bid, @eid, @qty)
-      `, [
+    // 2. Insert booking items in a single batch
+    if (items.length > 0) {
+      const valueTuples: string[] = [];
+      const itemParams: any[] = [
         { name: 'bid', type: sql.UniqueIdentifier, value: bookingId },
-        { name: 'eid', type: sql.Int, value: Number(item.equipmentId || item.equipment_id) },
-        { name: 'qty', type: sql.Int, value: Number(item.quantity || item.qty) },
-      ]);
+      ];
+
+      items.forEach((item: any, idx: number) => {
+        const eidParam = `eid_${idx}`;
+        const qtyParam = `qty_${idx}`;
+        valueTuples.push(`(@bid, @${eidParam}, @${qtyParam})`);
+        itemParams.push(
+          { name: eidParam, type: sql.Int, value: Number(item.equipmentId || item.equipment_id) },
+          { name: qtyParam, type: sql.Int, value: Number(item.quantity || item.qty) }
+        );
+      });
+
+      await query(
+        `INSERT INTO booking_items (booking_id, equipment_id, quantity) VALUES ${valueTuples.join(', ')}`,
+        itemParams
+      );
     }
 
     // 3. Log to audit_logs

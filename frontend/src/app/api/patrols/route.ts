@@ -124,14 +124,17 @@ export async function PUT(req: NextRequest) {
         );
       }
 
-      for (let i = 0; i < ordered_ids.length; i++) {
+      if (ordered_ids.length > 0) {
+        const cases = ordered_ids
+          .map((id: any, index: number) => `WHEN id = ${Number(id)} THEN ${index}`)
+          .join(' ');
+        const idList = ordered_ids.map((id: any) => Number(id)).join(',');
+
         await query(
-          `UPDATE patrols SET order_index = @order_index WHERE id = @id AND unit_id = @unit_id`,
-          {
-            order_index: { type: sql.Int, value: i },
-            id: { type: sql.Int, value: Number(ordered_ids[i]) },
-            unit_id: { type: sql.Int, value: Number(unit_id) },
-          }
+          `UPDATE patrols 
+           SET order_index = CASE ${cases} END 
+           WHERE id IN (${idList}) AND unit_id = @unit_id`,
+          { unit_id: { type: sql.Int, value: Number(unit_id) } }
         );
       }
 

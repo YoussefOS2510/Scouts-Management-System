@@ -284,7 +284,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Save individual member records
+    // Save individual member records in high-performance batch
     if (Array.isArray(records)) {
       const validRecords = records.filter(
         (rec: any) =>
@@ -295,25 +295,36 @@ export async function POST(request: NextRequest) {
           ['present', 'absent', 'excused', 'late'].includes(rec.status)
       );
 
-      for (const rec of validRecords) {
+      if (validRecords.length > 0) {
+        // Multi-row batch upsert in a single network round-trip
+        const valuesSql: string[] = [];
+        const params: any[] = [
+          { name: 'targetSessionId', type: sql.UniqueIdentifier, value: targetSessionId },
+        ];
+
+        validRecords.forEach((rec: any, idx: number) => {
+          const mParam = `m_${idx}`;
+          const sParam = `s_${idx}`;
+          const nParam = `n_${idx}`;
+          valuesSql.push(`(@targetSessionId, @${mParam}, @${sParam}, @${nParam})`);
+          params.push(
+            { name: mParam, type: sql.UniqueIdentifier, value: rec.memberId },
+            { name: sParam, type: sql.NVarChar(20), value: rec.status },
+            { name: nParam, type: sql.NVarChar(255), value: rec.notes || null }
+          );
+        });
+
         await query(
           `
           INSERT INTO attendance_records (session_id, member_id, status, notes)
-          VALUES (@sessionId, @memberId, @status, @notes)
+          VALUES ${valuesSql.join(', ')}
           ON CONFLICT (session_id, member_id)
           DO UPDATE SET status = EXCLUDED.status, notes = EXCLUDED.notes
           `,
-          [
-            { name: 'sessionId', type: sql.UniqueIdentifier, value: targetSessionId },
-            { name: 'memberId', type: sql.UniqueIdentifier, value: rec.memberId },
-            { name: 'status', type: sql.NVarChar(20), value: rec.status },
-            { name: 'notes', type: sql.NVarChar(255), value: rec.notes || null },
-          ]
+          params
         );
-      }
 
-      // Sync removal: delete records for this session that are not in validRecords
-      if (validRecords.length > 0) {
+        // Sync removal: delete records for this session that are not in validRecords
         const idList = validRecords.map((r: any) => `'${r.memberId}'`).join(',');
         await query(
           `DELETE FROM attendance_records WHERE session_id = @sid AND member_id NOT IN (${idList})`,

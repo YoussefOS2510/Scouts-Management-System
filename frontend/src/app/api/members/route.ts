@@ -250,15 +250,17 @@ export async function PUT(req: NextRequest) {
         return NextResponse.json({ success: false, error: 'Missing memberId or memberIds' }, { status: 400 });
       }
 
-      for (const id of ids) {
+      // Filter valid UUIDs and batch update in a single query
+      const validIds = ids.filter((id) => typeof id === 'string' && /^[0-9a-fA-F-]{36}$/.test(id));
+      if (validIds.length > 0) {
+        const idPlaceholders = validIds.map((id) => `'${id}'`).join(',');
         await query(
           `
           UPDATE members
           SET patrol_id = @patrolId, updated_at = NOW()
-          WHERE id = @memberId;
+          WHERE id IN (${idPlaceholders});
           `,
           {
-            memberId: { type: sql.UniqueIdentifier, value: id },
             patrolId: { type: sql.Int, value: cleanPatrolId },
           }
         );
