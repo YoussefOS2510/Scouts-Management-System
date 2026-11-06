@@ -85,7 +85,22 @@ export async function POST(request: NextRequest) {
     const file = formData.get('file') as File | null;
     const eventName = (formData.get('eventName') as string) || 'General_Event';
     const unitName = (formData.get('unitName') as string) || '';
+    const unitIdRaw = formData.get('unitId') as string | null;
     const year = (formData.get('year') as string) || CURRENT_YEAR;
+
+    let targetUnitId = 5;
+    if (unitIdRaw && !isNaN(Number(unitIdRaw))) {
+      targetUnitId = Number(unitIdRaw);
+    } else if (unitName.trim()) {
+      try {
+        const uRes = await query(`SELECT id FROM units WHERE name_ar = @un OR name_en = @un OR code = @un LIMIT 1`, [
+          { name: 'un', type: sql.NVarChar(100), value: unitName.trim() },
+        ]);
+        if (uRes.length > 0) {
+          targetUnitId = Number(uRes[0].id);
+        }
+      } catch {}
+    }
 
     if (!file) {
       return NextResponse.json({ error: 'No file uploaded' }, { status: 400 });
@@ -219,8 +234,9 @@ export async function POST(request: NextRequest) {
       const yearNum = parseInt(year) || 2026;
       await query(`
         INSERT INTO media_items (unit_id, year, file_name, title_ar, title_en, media_type, url, drive_file_id)
-        VALUES (5, @yr, @fn, @title, @title, @mtype, @url, @fid)
+        VALUES (@unitId, @yr, @fn, @title, @title, @mtype, @url, @fid)
       `, [
+        { name: 'unitId', type: sql.Int, value: targetUnitId },
         { name: 'yr', type: sql.Int, value: yearNum },
         { name: 'fn', type: sql.NVarChar(255), value: file.name },
         { name: 'title', type: sql.NVarChar(200), value: eventName || file.name },

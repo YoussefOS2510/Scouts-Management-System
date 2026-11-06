@@ -3,6 +3,10 @@ import { query, sql } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 
+const isUUID = (val: any): boolean =>
+  typeof val === 'string' &&
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -38,8 +42,11 @@ export async function GET(request: NextRequest) {
     ];
 
     if (userId) {
-      logsSql += ` AND a.user_id = @userId`;
-      params.push({ name: 'userId', type: sql.UniqueIdentifier, value: userId });
+      const cleanUid = userId === 'u0' ? 'eddc77ff-69dc-452b-a5e1-0359ef7a8007' : userId;
+      if (isUUID(cleanUid)) {
+        logsSql += ` AND a.user_id = @userId`;
+        params.push({ name: 'userId', type: sql.UniqueIdentifier, value: cleanUid });
+      }
     }
     if (unitId && !isNaN(Number(unitId))) {
       logsSql += ` AND a.unit_id = @unitId`;
@@ -91,11 +98,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Resolve user ID
-    let targetUserId = userId;
+    // Resolve user ID safely
+    let targetUserId = isUUID(userId) ? userId : null;
     if (!targetUserId) {
       const adminRes = await query(`SELECT id FROM users WHERE email = 'admin@scouts.org' LIMIT 1`);
-      targetUserId = adminRes[0]?.id;
+      targetUserId = adminRes[0]?.id || 'eddc77ff-69dc-452b-a5e1-0359ef7a8007';
     }
 
     const metaStr = metadata ? JSON.stringify(metadata) : null;

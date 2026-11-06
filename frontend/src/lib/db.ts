@@ -39,6 +39,21 @@ export function getDbPool(): pg.Pool {
 
 export type QueryParam = { name?: string; type?: any; value: any };
 
+const ADMIN_UUID = 'eddc77ff-69dc-452b-a5e1-0359ef7a8007';
+const UUID_REGEX = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+
+function sanitizeParamValue(val: any, type?: any): any {
+  if (type === 'uuid' || type === sql.UniqueIdentifier) {
+    if (val === 'u0' || val === 'admin@scouts.org' || val === '11111111-0000-0000-0000-000000000001') {
+      return ADMIN_UUID;
+    }
+    if (typeof val === 'string' && !UUID_REGEX.test(val)) {
+      return null;
+    }
+  }
+  return val;
+}
+
 export async function query<T = any>(
   queryText: string,
   params?: Record<string, any> | QueryParam[] | any[]
@@ -55,7 +70,7 @@ export async function query<T = any>(
       if (isNamed) {
         const map = new Map<string, any>();
         for (const p of params as QueryParam[]) {
-          if (p.name) map.set(p.name, p.value);
+          if (p.name) map.set(p.name, sanitizeParamValue(p.value, p.type));
         }
         pgSql = pgSql.replace(/@([a-zA-Z0-9_]+)/g, (match, name) => {
           if (map.has(name)) {
@@ -71,8 +86,9 @@ export async function query<T = any>(
       const map = new Map<string, any>();
       for (const [key, p] of Object.entries(params)) {
         const name = (p as any)?.name || key;
-        const val = (p as any)?.value !== undefined ? (p as any).value : p;
-        map.set(name, val);
+        const rawVal = (p as any)?.value !== undefined ? (p as any).value : p;
+        const type = (p as any)?.type;
+        map.set(name, sanitizeParamValue(rawVal, type));
       }
       pgSql = pgSql.replace(/@([a-zA-Z0-9_]+)/g, (match, name) => {
         if (map.has(name)) {

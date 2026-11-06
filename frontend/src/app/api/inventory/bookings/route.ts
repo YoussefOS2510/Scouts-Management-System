@@ -3,6 +3,10 @@ import { query, sql } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 
+const isUUID = (val: any): boolean =>
+  typeof val === 'string' &&
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -97,10 +101,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Resolve user ID
-    let requesterId = userId;
+    let requesterId = isUUID(userId) ? userId : null;
     if (!requesterId) {
       const adminRes = await query(`SELECT id FROM users WHERE email = 'admin@scouts.org' LIMIT 1`);
-      requesterId = adminRes[0]?.id;
+      requesterId = adminRes[0]?.id || 'eddc77ff-69dc-452b-a5e1-0359ef7a8007';
     }
 
     // 1. Insert booking
@@ -174,10 +178,10 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    let apprId = approverId;
+    let apprId = isUUID(approverId) ? approverId : null;
     if (!apprId && status === 'approved') {
       const qm = await query(`SELECT id FROM users WHERE email = 'ihab.fawzy@scouts.org' OR email = 'admin@scouts.org' LIMIT 1`);
-      apprId = qm[0]?.id;
+      apprId = qm[0]?.id || 'eddc77ff-69dc-452b-a5e1-0359ef7a8007';
     }
 
     await query(`
@@ -193,11 +197,12 @@ export async function PUT(request: NextRequest) {
 
     // Log action to audit_logs
     try {
+      const auditUid = apprId || 'eddc77ff-69dc-452b-a5e1-0359ef7a8007';
       await query(`
         INSERT INTO audit_logs (user_id, unit_id, action_type, title_ar, title_en, description_ar, description_en, metadata)
         VALUES (@uid, NULL, @actType, @titleAr, @titleEn, @descAr, @descEn, @meta)
       `, [
-        { name: 'uid', type: sql.UniqueIdentifier, value: apprId },
+        { name: 'uid', type: sql.UniqueIdentifier, value: auditUid },
         { name: 'actType', type: sql.NVarChar(50), value: `booking_${status}` },
         { name: 'titleAr', type: sql.NVarChar(200), value: `تحديث حالة طلب العهدة (${status})` },
         { name: 'titleEn', type: sql.NVarChar(200), value: `Booking Status Updated (${status})` },
