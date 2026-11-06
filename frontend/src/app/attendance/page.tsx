@@ -21,6 +21,7 @@ import {
   Lock,
   RotateCcw,
   BarChart3,
+  Search,
   LayoutGrid,
   List,
   ChevronRight,
@@ -215,10 +216,48 @@ function AttendancePageContent() {
     return events.find((e) => e.id === selectedSessionId) || null;
   }, [events, selectedSessionId]);
 
+  // Search & Status Filter for Attendance Taking
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'unselected' | 'present' | 'absent' | 'excused_late'>('all');
+
   // Filter scouts for selected unit
   const activeMembers = useMemo(() => {
     return members.filter((m) => m.unit_id === selectedUnitId);
   }, [members, selectedUnitId]);
+
+  // Filtered scouts based on active search and status
+  const filteredMembers = useMemo(() => {
+    let result = activeMembers;
+
+    // 1. Text search by name, code, academic year, school, or phone
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      result = result.filter(
+        (m) =>
+          m.full_name_ar.toLowerCase().includes(q) ||
+          (m.full_name_en && m.full_name_en.toLowerCase().includes(q)) ||
+          (m.member_code && m.member_code.toLowerCase().includes(q)) ||
+          (m.academic_year && m.academic_year.toLowerCase().includes(q)) ||
+          (m.school_or_college && m.school_or_college.toLowerCase().includes(q)) ||
+          (m.member_phone && m.member_phone.includes(q)) ||
+          (m.father_phone && m.father_phone.includes(q))
+      );
+    }
+
+    // 2. Status filter
+    if (statusFilter !== 'all') {
+      result = result.filter((m) => {
+        const st = records[m.id]?.status;
+        if (statusFilter === 'unselected') return !st;
+        if (statusFilter === 'present') return st === 'present';
+        if (statusFilter === 'absent') return st === 'absent';
+        if (statusFilter === 'excused_late') return st === 'excused' || st === 'late';
+        return true;
+      });
+    }
+
+    return result;
+  }, [activeMembers, searchQuery, statusFilter, records]);
 
   // Filter patrols for selected unit
   const activePatrols = useMemo(() => {
@@ -227,11 +266,11 @@ function AttendancePageContent() {
 
   // Group scouts by patrol / six / clan
   const groupedScouts = useMemo(() => {
-    const groups: { patrolName: string; members: typeof activeMembers }[] = [];
+    const groups: { patrolName: string; members: typeof filteredMembers }[] = [];
     const unitTerms = getSubdivisionTerms(selectedUnitId);
 
     activePatrols.forEach((patrol) => {
-      const pMembers = activeMembers.filter((m) => m.patrol_id === patrol.id);
+      const pMembers = filteredMembers.filter((m) => m.patrol_id === patrol.id);
       if (pMembers.length > 0) {
         groups.push({
           patrolName: language === 'ar' ? patrol.name_ar : patrol.name_en,
@@ -240,7 +279,7 @@ function AttendancePageContent() {
       }
     });
 
-    const unassigned = activeMembers.filter(
+    const unassigned = filteredMembers.filter(
       (m) => !m.patrol_id || !activePatrols.some((p) => p.id === m.patrol_id)
     );
     if (unassigned.length > 0) {
@@ -251,13 +290,14 @@ function AttendancePageContent() {
     }
 
     return groups;
-  }, [activeMembers, activePatrols, selectedUnitId, language]);
+  }, [filteredMembers, activePatrols, selectedUnitId, language]);
 
-  // Mark all present
+  // Mark all present (respects active search/status filter if applied)
   const handleMarkAllPresent = () => {
     if (!canTakeAttendance || !selectedSessionId) return;
-    const updated: Record<string, { status: AttendanceStatus; notes: string }> = {};
-    activeMembers.forEach((m) => {
+    const targetList = (searchQuery.trim() || statusFilter !== 'all') ? filteredMembers : activeMembers;
+    const updated = { ...records };
+    targetList.forEach((m) => {
       updated[m.id] = {
         status: 'present',
         notes: records[m.id]?.notes || '',
@@ -1024,10 +1064,172 @@ function AttendancePageContent() {
             </div>
           )}
 
-          {/* 5. ROSTER MEMBERS INSIDE THE ACTIVE EVENT */}
+          {/* 5. SEARCH & QUICK STATUS FILTER BAR */}
+          {activeEvent && (
+            <div className="bg-white dark:bg-[#111827] rounded-xl p-3 border border-neutral-200 dark:border-neutral-800/80 shadow-none space-y-2.5">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+                {/* Search Input */}
+                <div className="relative flex-1">
+                  <Search className="w-4 h-4 text-neutral-400 absolute start-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') setSearchQuery('');
+                    }}
+                    placeholder={
+                      language === 'ar'
+                        ? 'ابحث فوراً بالاسم أو الكود الكشفي لرصد الحضور مباشرة...'
+                        : 'Quick search scout by name or code to take attendance...'
+                    }
+                    className="w-full bg-neutral-100 dark:bg-[#0B0F17] border border-neutral-200 dark:border-neutral-800 rounded-xl ps-9 pe-9 py-2 text-xs sm:text-sm text-neutral-900 dark:text-neutral-100 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-sky-500/40 focus:border-sky-500 transition-all"
+                  />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchQuery('')}
+                      className="absolute end-2.5 top-1/2 -translate-y-1/2 p-1 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200 rounded-lg transition-colors cursor-pointer"
+                      title={language === 'ar' ? 'مسح البحث' : 'Clear search'}
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Match Counter Badge */}
+                {(searchQuery.trim() || statusFilter !== 'all') && (
+                  <div className="flex items-center justify-between sm:justify-start gap-2 text-xs shrink-0 px-2.5 py-1.5 rounded-lg bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800/60 font-medium">
+                    <span>
+                      {language === 'ar'
+                        ? `مطابق: ${filteredMembers.length} من ${activeMembers.length}`
+                        : `Matches: ${filteredMembers.length} of ${activeMembers.length}`}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSearchQuery('');
+                        setStatusFilter('all');
+                      }}
+                      className="text-[11px] underline hover:no-underline text-sky-600 dark:text-sky-400 cursor-pointer ms-1"
+                    >
+                      {language === 'ar' ? 'إلغاء التصفية' : 'Reset'}
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Status Filter Chips */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 no-scrollbar text-xs">
+                <span className="text-[11px] text-neutral-400 shrink-0 me-1">
+                  {language === 'ar' ? 'تصفية الحالة:' : 'Filter Status:'}
+                </span>
+
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter('all')}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all shrink-0 cursor-pointer ${
+                    statusFilter === 'all'
+                      ? 'bg-neutral-800 text-white dark:bg-neutral-200 dark:text-neutral-900 font-semibold shadow-2xs'
+                      : 'bg-neutral-100 dark:bg-[#1E293B] text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700'
+                  }`}
+                >
+                  {language === 'ar' ? `الكل (${activeMembers.length})` : `All (${activeMembers.length})`}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter('unselected')}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all shrink-0 cursor-pointer flex items-center gap-1.5 ${
+                    statusFilter === 'unselected'
+                      ? 'bg-sky-600 text-white font-semibold shadow-2xs'
+                      : 'bg-neutral-100 dark:bg-[#1E293B] text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700'
+                  }`}
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-sky-400" />
+                  <span>{language === 'ar' ? `لم يُرصد (${stats.unselected})` : `Pending (${stats.unselected})`}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter('present')}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all shrink-0 cursor-pointer flex items-center gap-1.5 ${
+                    statusFilter === 'present'
+                      ? 'bg-emerald-600 text-white font-semibold shadow-2xs'
+                      : 'bg-neutral-100 dark:bg-[#1E293B] text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700'
+                  }`}
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                  <span>{language === 'ar' ? `حاضر (${stats.present})` : `Present (${stats.present})`}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter('absent')}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all shrink-0 cursor-pointer flex items-center gap-1.5 ${
+                    statusFilter === 'absent'
+                      ? 'bg-rose-600 text-white font-semibold shadow-2xs'
+                      : 'bg-neutral-100 dark:bg-[#1E293B] text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700'
+                  }`}
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
+                  <span>{language === 'ar' ? `غائب (${stats.absent})` : `Absent (${stats.absent})`}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter('excused_late')}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all shrink-0 cursor-pointer flex items-center gap-1.5 ${
+                    statusFilter === 'excused_late'
+                      ? 'bg-amber-600 text-white font-semibold shadow-2xs'
+                      : 'bg-neutral-100 dark:bg-[#1E293B] text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700'
+                  }`}
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                  <span>{language === 'ar' ? `معتذر/متأخر (${stats.excused + stats.late})` : `Excused/Late (${stats.excused + stats.late})`}</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* 6. ROSTER MEMBERS INSIDE THE ACTIVE EVENT */}
           {activeEvent && (
             <div className="space-y-4">
-              {groupedScouts.map((group, gIdx) => (
+              {groupedScouts.length === 0 ? (
+                <div className="bg-white dark:bg-[#111827] rounded-xl p-8 sm:p-12 text-center border border-dashed border-neutral-300 dark:border-neutral-800 space-y-3 animate-fadeIn">
+                  <div className="w-12 h-12 rounded-2xl bg-neutral-100 dark:bg-[#1E293B] text-neutral-400 mx-auto flex items-center justify-center border border-neutral-200 dark:border-neutral-700">
+                    <Search className="w-6 h-6" />
+                  </div>
+                  <div className="space-y-1">
+                    <h4 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
+                      {searchQuery
+                        ? language === 'ar'
+                          ? `لا يوجد كشاف باسم أو كود "${searchQuery}"`
+                          : `No scouts matching "${searchQuery}"`
+                        : language === 'ar'
+                        ? 'لا يوجد كشافون في هذا التصنيف'
+                        : 'No scouts in this category'}
+                    </h4>
+                    <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                      {language === 'ar'
+                        ? 'جرّب كتابة اسم آخر أو إلغاء تصفية الحالة'
+                        : 'Try searching with another name or reset filters'}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchQuery('');
+                      setStatusFilter('all');
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-sky-600 hover:bg-sky-500 text-white transition-colors cursor-pointer shadow-xs"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>{language === 'ar' ? 'عرض جميع الكشافين' : 'Show All Scouts'}</span>
+                  </button>
+                </div>
+              ) : (
+                groupedScouts.map((group, gIdx) => (
                 <div
                   key={gIdx}
                   className="bg-white dark:bg-[#111827] rounded-xl border border-neutral-200 dark:border-neutral-800/80 overflow-hidden shadow-none"
@@ -1273,7 +1475,7 @@ function AttendancePageContent() {
                     </div>
                   )}
                 </div>
-              ))}
+              )))}
             </div>
           )}
         </>
