@@ -51,10 +51,11 @@ export default function TamamSheet({
     <div
       dir="rtl"
       className="tamam-sheet-page w-full max-w-[210mm] mx-auto bg-white text-black font-sans box-border p-2 sm:p-4 print:p-0 print:m-0 print:max-w-none print:w-full"
+      style={{ minHeight: '280mm' }}
     >
       {/* Outer Double Frame Border (Classic Scout Certificate / Attendance Template) */}
-      <div className="border-[3px] border-black p-1 box-border">
-        <div className="border border-black p-4 sm:p-6">
+      <div className="border-[3px] border-black p-1 h-full min-h-[270mm] flex flex-col justify-between box-border">
+        <div className="border border-black p-5 sm:p-7 flex-1 flex flex-col justify-between">
           
           {/* Top Section */}
           <div>
