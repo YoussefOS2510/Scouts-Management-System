@@ -1,15 +1,38 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query, sql } from '@/lib/db';
 
+let roleSchemaEnsured = false;
+async function ensureMemberRoleSchema() {
+  if (roleSchemaEnsured) return;
+  try {
+    await query(`ALTER TABLE members ADD COLUMN IF NOT EXISTS patrol_role VARCHAR(100);`);
+    await query(`
+      CREATE TABLE IF NOT EXISTS unit_custom_roles (
+        id SERIAL PRIMARY KEY,
+        unit_id INT NOT NULL REFERENCES units(id) ON DELETE CASCADE,
+        role_name VARCHAR(100) NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(unit_id, role_name)
+      );
+    `);
+    roleSchemaEnsured = true;
+  } catch (err) {
+    console.error('Failed to ensure patrol_role schema:', err);
+  }
+}
+
 export async function GET() {
   try {
-    const [members, patrols] = await Promise.all([
+    await ensureMemberRoleSchema();
+
+    const [members, patrols, customRoles] = await Promise.all([
       query(`
         SELECT 
           m.id,
           m.member_code,
           m.unit_id,
           m.patrol_id,
+          m.patrol_role,
           m.full_name_ar,
           m.full_name_en,
           TO_CHAR(m.date_of_birth, 'YYYY-MM-DD') AS date_of_birth,
@@ -43,6 +66,11 @@ export async function GET() {
         FROM patrols 
         ORDER BY unit_id, order_index ASC, id ASC
       `),
+      query(`
+        SELECT unit_id, role_name
+        FROM unit_custom_roles
+        ORDER BY unit_id ASC, id ASC
+      `),
     ]);
 
     const formattedMembers = members.map((m: any) => ({
@@ -50,6 +78,7 @@ export async function GET() {
       id: String(m.id),
       unit_id: Number(m.unit_id),
       patrol_id: m.patrol_id !== null && m.patrol_id !== undefined ? Number(m.patrol_id) : null,
+      patrol_role: m.patrol_role || null,
       is_active: Boolean(m.is_active),
       has_missing_data: Boolean(m.has_missing_data),
       missing_fields: m.missing_fields || '',
@@ -63,10 +92,20 @@ export async function GET() {
       order_index: Number(p.order_index ?? 0),
     }));
 
+    const customRolesByUnit: Record<number, string[]> = {};
+    for (const row of customRoles) {
+      const uid = Number(row.unit_id);
+      if (!customRolesByUnit[uid]) customRolesByUnit[uid] = [];
+      if (row.role_name && !customRolesByUnit[uid].includes(row.role_name)) {
+        customRolesByUnit[uid].push(row.role_name);
+      }
+    }
+
     return NextResponse.json({
       success: true,
       members: formattedMembers,
       patrols: formattedPatrols,
+      customRolesByUnit,
     });
   } catch (error: any) {
     console.error('Error fetching members from ScoutsDB:', error);
@@ -79,12 +118,15 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
+    await ensureMemberRoleSchema();
+
     const body = await req.json();
     const {
       full_name_ar,
       full_name_en,
       unit_id,
       patrol_id,
+      patrol_role,
       date_of_birth,
       member_phone,
       father_phone,
@@ -108,6 +150,9 @@ export async function POST(req: NextRequest) {
     // Auto-generate unique member code: SCT-2026-XXXX
     const randomSuffix = Math.floor(1000 + Math.random() * 9000);
     const memberCode = body.member_code || `SCT-2026-${randomSuffix}`;
+    const cleanPatrolRole = patrol_role && String(patrol_role).trim() !== '' && patrol_role !== 'none'
+      ? String(patrol_role).trim()
+      : null;
 
     const insertResult = await query(
       `
@@ -116,6 +161,7 @@ export async function POST(req: NextRequest) {
         pin_hash,
         unit_id,
         patrol_id,
+        patrol_role,
         full_name_ar,
         full_name_en,
         date_of_birth,
@@ -136,6 +182,7 @@ export async function POST(req: NextRequest) {
         '1234',
         @unit_id,
         @patrol_id,
+        @patrol_role,
         @full_name_ar,
         @full_name_en,
         @date_of_birth,
@@ -156,6 +203,7 @@ export async function POST(req: NextRequest) {
         member_code,
         unit_id,
         patrol_id,
+        patrol_role,
         full_name_ar,
         full_name_en,
         date_of_birth,
@@ -175,6 +223,7 @@ export async function POST(req: NextRequest) {
         member_code: { type: sql.NVarChar(50), value: memberCode },
         unit_id: { type: sql.Int, value: Number(unit_id) },
         patrol_id: { type: sql.Int, value: patrol_id && patrol_id !== 'none' ? Number(patrol_id) : null },
+        patrol_role: { type: sql.NVarChar(100), value: cleanPatrolRole },
         full_name_ar: { type: sql.NVarChar(255), value: full_name_ar.trim() },
         full_name_en: { type: sql.NVarChar(255), value: (full_name_en || '').trim() || null },
         date_of_birth: { type: sql.Date, value: date_of_birth || '2015-01-01' },
@@ -222,6 +271,7 @@ export async function POST(req: NextRequest) {
         id: String(created.id),
         unit_id: Number(created.unit_id),
         patrol_id: created.patrol_id ? Number(created.patrol_id) : null,
+        patrol_role: created.patrol_role || null,
       },
     });
   } catch (error: any) {
@@ -235,6 +285,8 @@ export async function POST(req: NextRequest) {
 
 export async function PUT(req: NextRequest) {
   try {
+    await ensureMemberRoleSchema();
+
     const body = await req.json();
     const { action, memberId, patrolId } = body;
 
@@ -255,11 +307,17 @@ export async function PUT(req: NextRequest) {
       if (validIds.length > 0) {
         const idPlaceholders = validIds.map((id) => `'${id}'`).join(',');
         await query(
-          `
-          UPDATE members
-          SET patrol_id = @patrolId, updated_at = NOW()
-          WHERE id IN (${idPlaceholders});
-          `,
+          cleanPatrolId === null
+            ? `
+              UPDATE members
+              SET patrol_id = @patrolId, patrol_role = NULL, updated_at = NOW()
+              WHERE id IN (${idPlaceholders});
+              `
+            : `
+              UPDATE members
+              SET patrol_id = @patrolId, updated_at = NOW()
+              WHERE id IN (${idPlaceholders});
+              `,
           {
             patrolId: { type: sql.Int, value: cleanPatrolId },
           }
@@ -267,6 +325,180 @@ export async function PUT(req: NextRequest) {
       }
 
       return NextResponse.json({ success: true, memberIds: ids, patrolId: cleanPatrolId });
+    }
+
+    if (action === 'assign_patrol_role') {
+      if (!memberId) {
+        return NextResponse.json({ success: false, error: 'Missing memberId' }, { status: 400 });
+      }
+      if (typeof memberId !== 'string' || !/^[0-9a-fA-F-]{36}$/.test(memberId)) {
+        return NextResponse.json({ success: false, error: 'Invalid memberId format' }, { status: 400 });
+      }
+
+      const rawRole = body.patrolRole;
+      const cleanRole =
+        rawRole !== null && rawRole !== undefined && String(rawRole).trim() !== '' && rawRole !== 'none'
+          ? String(rawRole).trim()
+          : null;
+
+      await query(
+        `
+        UPDATE members
+        SET patrol_role = @patrolRole, updated_at = NOW()
+        WHERE id = @memberId;
+        `,
+        {
+          memberId: { type: sql.UniqueIdentifier, value: memberId },
+          patrolRole: { type: sql.NVarChar(100), value: cleanRole },
+        }
+      );
+
+      // Persist custom role in unit_custom_roles if it's not one of the 3 basic roles
+      if (cleanRole && !['CP', 'CG', '3rd'].includes(cleanRole)) {
+        await query(
+          `
+          INSERT INTO unit_custom_roles (unit_id, role_name)
+          SELECT unit_id, @patrolRole FROM members WHERE id = @memberId
+          ON CONFLICT (unit_id, role_name) DO NOTHING;
+          `,
+          {
+            memberId: { type: sql.UniqueIdentifier, value: memberId },
+            patrolRole: { type: sql.NVarChar(100), value: cleanRole },
+          }
+        );
+      }
+
+      return NextResponse.json({ success: true, memberId, patrolRole: cleanRole });
+    }
+
+    if (action === 'add_unit_custom_role') {
+      const unitId = Number(body.unitId);
+      const roleName = typeof body.roleName === 'string' ? body.roleName.trim() : '';
+      if (!unitId || !roleName) {
+        return NextResponse.json({ success: false, error: 'Missing unitId or roleName' }, { status: 400 });
+      }
+
+      await query(
+        `
+        INSERT INTO unit_custom_roles (unit_id, role_name)
+        VALUES (@unitId, @roleName)
+        ON CONFLICT (unit_id, role_name) DO NOTHING;
+        `,
+        {
+          unitId: { type: sql.Int, value: unitId },
+          roleName: { type: sql.NVarChar(100), value: roleName },
+        }
+      );
+
+      return NextResponse.json({ success: true, unitId, roleName });
+    }
+
+    if (action === 'remove_unit_custom_role') {
+      const unitId = Number(body.unitId);
+      const roleName = typeof body.roleName === 'string' ? body.roleName.trim() : '';
+      if (!unitId || !roleName) {
+        return NextResponse.json({ success: false, error: 'Missing unitId or roleName' }, { status: 400 });
+      }
+
+      await query(
+        `
+        DELETE FROM unit_custom_roles
+        WHERE unit_id = @unitId AND role_name = @roleName;
+        `,
+        {
+          unitId: { type: sql.Int, value: unitId },
+          roleName: { type: sql.NVarChar(100), value: roleName },
+        }
+      );
+
+      return NextResponse.json({ success: true, unitId, roleName });
+    }
+
+    if (action === 'update_member') {
+      if (!memberId) {
+        return NextResponse.json({ success: false, error: 'Missing memberId' }, { status: 400 });
+      }
+
+      const {
+        full_name_ar,
+        full_name_en,
+        unit_id,
+        patrol_id,
+        patrol_role,
+        date_of_birth,
+        member_phone,
+        father_phone,
+        mother_phone,
+        address_ar,
+        school_or_college,
+        academic_year,
+        father_of_confession,
+        notes,
+      } = body;
+
+      const missingList: string[] = [];
+      if (!father_phone && !mother_phone && !member_phone) missingList.push('phone');
+      if (!academic_year) missingList.push('grade');
+      const hasMissing = missingList.length > 0;
+      const missingStr = hasMissing ? missingList.join(',') : null;
+      const cleanPatrol = patrol_id !== null && patrol_id !== undefined && patrol_id !== 'none' ? Number(patrol_id) : null;
+      const hasPatrolRoleParam = patrol_role !== undefined;
+      const cleanPatrolRole =
+        hasPatrolRoleParam && patrol_role !== null && String(patrol_role).trim() !== '' && patrol_role !== 'none'
+          ? String(patrol_role).trim()
+          : null;
+
+      await query(
+        `
+        UPDATE members
+        SET
+          full_name_ar = COALESCE(@full_name_ar, full_name_ar),
+          full_name_en = @full_name_en,
+          unit_id = COALESCE(@unit_id, unit_id),
+          patrol_id = @patrol_id,
+          patrol_role = CASE WHEN @update_patrol_role = 1 THEN @patrol_role ELSE patrol_role END,
+          date_of_birth = COALESCE(@date_of_birth, date_of_birth),
+          member_phone = @member_phone,
+          father_phone = @father_phone,
+          mother_phone = @mother_phone,
+          address_ar = COALESCE(@address_ar, address_ar),
+          school_or_college = @school_or_college,
+          academic_year = @academic_year,
+          father_of_confession = @father_of_confession,
+          notes = @notes,
+          has_missing_data = @has_missing_data,
+          missing_fields = @missing_fields,
+          updated_at = NOW()
+        WHERE id = @memberId;
+        `,
+        {
+          memberId: { type: sql.UniqueIdentifier, value: memberId },
+          full_name_ar: { type: sql.NVarChar, value: full_name_ar || null },
+          full_name_en: { type: sql.NVarChar, value: full_name_en || null },
+          unit_id: { type: sql.Int, value: unit_id ? Number(unit_id) : null },
+          patrol_id: { type: sql.Int, value: cleanPatrol },
+          update_patrol_role: { type: sql.Bit, value: hasPatrolRoleParam ? 1 : 0 },
+          patrol_role: { type: sql.NVarChar(100), value: cleanPatrolRole },
+          date_of_birth: { type: sql.Date, value: date_of_birth || null },
+          member_phone: { type: sql.NVarChar, value: member_phone || null },
+          father_phone: { type: sql.NVarChar, value: father_phone || null },
+          mother_phone: { type: sql.NVarChar, value: mother_phone || null },
+          address_ar: { type: sql.NVarChar, value: address_ar || null },
+          school_or_college: { type: sql.NVarChar, value: school_or_college || null },
+          academic_year: { type: sql.NVarChar, value: academic_year || null },
+          father_of_confession: { type: sql.NVarChar, value: father_of_confession || null },
+          notes: { type: sql.NVarChar, value: notes || null },
+          has_missing_data: { type: sql.Bit, value: hasMissing ? 1 : 0 },
+          missing_fields: { type: sql.NVarChar, value: missingStr },
+        }
+      );
+
+      return NextResponse.json({
+        success: true,
+        memberId,
+        has_missing_data: hasMissing,
+        missing_fields: missingStr,
+      });
     }
 
     return NextResponse.json({ success: false, error: 'Unknown action' }, { status: 400 });

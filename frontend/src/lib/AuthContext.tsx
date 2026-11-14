@@ -80,6 +80,11 @@ interface AuthContextType {
   patrols: Patrol[];
   assignScoutPatrol: (memberId: string, patrolId: number | null) => boolean;
   batchAssignScoutPatrol: (memberIds: string[], patrolId: number | null) => Promise<boolean>;
+  assignScoutRole: (memberId: string, patrolRole: string | null) => Promise<boolean>;
+  unitCustomRoles: Record<number, string[]>;
+  addUnitCustomRole: (unitId: number, roleName: string) => Promise<boolean>;
+  removeUnitCustomRole: (unitId: number, roleName: string) => Promise<boolean>;
+  getUnitRoles: (unitId: number) => string[];
   addPatrol: (unitId: number, nameAr: string, nameEn?: string) => Promise<Patrol | null>;
   updatePatrol: (patrolId: number, nameAr: string, nameEn?: string) => Promise<boolean>;
   reorderPatrols: (unitId: number, orderedIds: number[]) => Promise<boolean>;
@@ -117,6 +122,35 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const CACHE_KEY_RBAC = 'scouts_cached_rbac_v2';
 const CACHE_KEY_MEMBERS = 'scouts_cached_members_v2';
 const CACHE_KEY_PATROLS = 'scouts_cached_patrols_v2';
+const CACHE_KEY_UNIT_ROLES = 'scouts_cached_unit_roles_v1';
+export const BASIC_SCOUT_ROLES = ['CP', 'CG', '3rd'] as const;
+
+export function getScoutRolePriority(role?: string | null): number {
+  const r = (role || '').trim().toUpperCase();
+  if (r === 'CP') return 1;
+  if (r === 'CG') return 2;
+  if (r === '3RD') return 3;
+  if (r.length > 0) return 4;
+  return 5;
+}
+
+export function sortMembersByPatrolRole<T extends { patrol_role?: string | null }>(list: T[]): T[] {
+  return [...list].sort((a, b) => getScoutRolePriority(a.patrol_role) - getScoutRolePriority(b.patrol_role));
+}
+
+export function getScoutRoleBadgeClass(role?: string | null): string {
+  const r = (role || '').trim().toUpperCase();
+  if (r === 'CP') {
+    return 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800';
+  }
+  if (r === 'CG') {
+    return 'bg-sky-100 text-sky-800 border-sky-300 dark:bg-sky-950/60 dark:text-sky-300 dark:border-sky-800';
+  }
+  if (r === '3RD') {
+    return 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800';
+  }
+  return 'bg-violet-100 text-violet-800 border-violet-300 dark:bg-violet-950/60 dark:text-violet-300 dark:border-violet-800';
+}
 
 interface CachedRbacState {
   users: User[];
@@ -255,6 +289,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch {}
     return [];
   });
+  const [unitCustomRoles, setUnitCustomRoles] = useState<Record<number, string[]>>(() => {
+    if (typeof window === 'undefined') return {};
+    try {
+      const raw = localStorage.getItem(CACHE_KEY_UNIT_ROLES);
+      if (raw) return JSON.parse(raw);
+    } catch {}
+    return {};
+  });
 
   const [isDbConnected, setIsDbConnected] = useState<boolean>(false);
   const [isLoadingPermissions, setIsLoadingPermissions] = useState<boolean>(() => {
@@ -318,6 +360,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setPatrols(memData.patrols);
             try {
               localStorage.setItem(CACHE_KEY_PATROLS, JSON.stringify(memData.patrols));
+            } catch {}
+          }
+          if (memData.customRolesByUnit && typeof memData.customRolesByUnit === 'object') {
+            setUnitCustomRoles(memData.customRolesByUnit);
+            try {
+              localStorage.setItem(CACHE_KEY_UNIT_ROLES, JSON.stringify(memData.customRolesByUnit));
             } catch {}
           }
         }
@@ -836,7 +884,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Optimistically update local state & cache
     setMembers((prev) => {
-      const updated = prev.map((m) => (m.id === memberId ? { ...m, patrol_id: patrolId } : m));
+      const updated = prev.map((m) =>
+        m.id === memberId
+          ? { ...m, patrol_id: patrolId, ...(patrolId === null ? { patrol_role: null } : {}) }
+          : m
+      );
       try {
         localStorage.setItem(CACHE_KEY_MEMBERS, JSON.stringify(updated));
       } catch {}
@@ -877,7 +929,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Optimistically update local state & cache
     setMembers((prev) => {
-      const updated = prev.map((m) => (idSet.has(m.id) ? { ...m, patrol_id: patrolId } : m));
+      const updated = prev.map((m) =>
+        idSet.has(m.id)
+          ? { ...m, patrol_id: patrolId, ...(patrolId === null ? { patrol_role: null } : {}) }
+          : m
+      );
       try {
         localStorage.setItem(CACHE_KEY_MEMBERS, JSON.stringify(updated));
       } catch {}
@@ -901,6 +957,159 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return false;
     }
   };
+
+  const assignScoutRole = async (memberId: string, patrolRole: string | null): Promise<boolean> => {
+    const targetMember = members.find((m) => m.id === memberId);
+    if (!targetMember) return false;
+
+    const hasAccess = isSuperAdmin || accessibleUnits.some((u) => u.id === targetMember.unit_id);
+    if (!hasAccess) {
+      return false;
+    }
+
+    const cleanRole =
+      patrolRole !== null && patrolRole !== undefined && patrolRole.trim() !== '' && patrolRole !== 'none'
+        ? patrolRole.trim()
+        : null;
+
+    // Optimistically update local member state & cache
+    setMembers((prev) => {
+      const updated = prev.map((m) => (m.id === memberId ? { ...m, patrol_role: cleanRole } : m));
+      try {
+        localStorage.setItem(CACHE_KEY_MEMBERS, JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
+    // Optimistically register custom role at team level if not a basic role
+    if (cleanRole && !BASIC_SCOUT_ROLES.includes(cleanRole as any)) {
+      setUnitCustomRoles((prev) => {
+        const existing = prev[targetMember.unit_id] || [];
+        if (existing.includes(cleanRole)) return prev;
+        const next = { ...prev, [targetMember.unit_id]: [...existing, cleanRole] };
+        try {
+          localStorage.setItem(CACHE_KEY_UNIT_ROLES, JSON.stringify(next));
+        } catch {}
+        return next;
+      });
+    }
+
+    logAction({
+      action_type: 'patrol_role_assigned',
+      title_ar: 'تعيين دور كشفي داخل التشكيل',
+      title_en: 'Scout Patrol Role Assigned',
+      description_ar: cleanRole
+        ? `تم تعيين دور (${cleanRole}) للكشاف ${targetMember.full_name_ar}`
+        : `تم إلغاء الدور الكشفي للكشاف ${targetMember.full_name_ar}`,
+      description_en: cleanRole
+        ? `Assigned role (${cleanRole}) to scout ${targetMember.full_name_ar}`
+        : `Cleared patrol role for scout ${targetMember.full_name_ar}`,
+      unit_id: targetMember.unit_id,
+      metadata: { member_id: memberId, patrol_role: cleanRole },
+    });
+
+    try {
+      const res = await fetch('/api/members', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'assign_patrol_role',
+          memberId,
+          patrolRole: cleanRole,
+        }),
+      });
+      const data = await res.json();
+      return Boolean(data.success);
+    } catch (e) {
+      console.error('Failed to assign scout patrol role in DB:', e);
+      return false;
+    }
+  };
+
+  const addUnitCustomRole = async (unitId: number, roleName: string): Promise<boolean> => {
+    const cleanRole = roleName.trim();
+    if (!unitId || !cleanRole) return false;
+    if (BASIC_SCOUT_ROLES.includes(cleanRole as any)) return true;
+
+    setUnitCustomRoles((prev) => {
+      const existing = prev[unitId] || [];
+      if (existing.includes(cleanRole)) return prev;
+      const next = { ...prev, [unitId]: [...existing, cleanRole] };
+      try {
+        localStorage.setItem(CACHE_KEY_UNIT_ROLES, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+
+    try {
+      const res = await fetch('/api/members', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'add_unit_custom_role',
+          unitId,
+          roleName: cleanRole,
+        }),
+      });
+      const data = await res.json();
+      return Boolean(data.success);
+    } catch (e) {
+      console.error('Failed to add custom unit role in DB:', e);
+      return false;
+    }
+  };
+
+  const removeUnitCustomRole = async (unitId: number, roleName: string): Promise<boolean> => {
+    const cleanRole = roleName.trim();
+    if (!unitId || !cleanRole) return false;
+
+    setUnitCustomRoles((prev) => {
+      const existing = prev[unitId] || [];
+      const next = { ...prev, [unitId]: existing.filter((r) => r !== cleanRole) };
+      try {
+        localStorage.setItem(CACHE_KEY_UNIT_ROLES, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+
+    try {
+      const res = await fetch('/api/members', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'remove_unit_custom_role',
+          unitId,
+          roleName: cleanRole,
+        }),
+      });
+      const data = await res.json();
+      return Boolean(data.success);
+    } catch (e) {
+      console.error('Failed to remove custom unit role in DB:', e);
+      return false;
+    }
+  };
+
+  const getUnitRoles = useCallback(
+    (unitId: number): string[] => {
+      const customFromMap = unitCustomRoles[unitId] || [];
+      const customFromMembers = members
+        .filter((m) => m.unit_id === unitId && m.patrol_role && m.patrol_role.trim() !== '')
+        .map((m) => m.patrol_role!.trim());
+
+      const all = [...BASIC_SCOUT_ROLES, ...customFromMap, ...customFromMembers];
+      const seen = new Set<string>();
+      const unique: string[] = [];
+      for (const r of all) {
+        if (!seen.has(r)) {
+          seen.add(r);
+          unique.push(r);
+        }
+      }
+      return unique;
+    },
+    [unitCustomRoles, members]
+  );
 
   const addMember = (memberData: Omit<Member, 'id'> & { id?: string }): Member => {
     const tempId = memberData.id || `m_${Date.now()}`;
@@ -1316,6 +1525,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         patrols,
         assignScoutPatrol,
         batchAssignScoutPatrol,
+        assignScoutRole,
+        unitCustomRoles,
+        addUnitCustomRole,
+        removeUnitCustomRole,
+        getUnitRoles,
         addPatrol,
         updatePatrol,
         reorderPatrols,

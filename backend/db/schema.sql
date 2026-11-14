@@ -29,6 +29,15 @@ CREATE TABLE IF NOT EXISTS patrols (
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+-- 2b. Unit Custom Patrol Roles (per-team custom roles alongside CP / CG / 3rd)
+CREATE TABLE IF NOT EXISTS unit_custom_roles (
+    id SERIAL PRIMARY KEY,
+    unit_id INT NOT NULL REFERENCES units(id) ON DELETE CASCADE,
+    role_name VARCHAR(100) NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(unit_id, role_name)
+);
+
 -- 3. Members (Youth Scouts & Members)
 CREATE TABLE IF NOT EXISTS members (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -36,6 +45,7 @@ CREATE TABLE IF NOT EXISTS members (
     pin_hash VARCHAR(255) NOT NULL DEFAULT '1234',
     unit_id INT NOT NULL REFERENCES units(id),
     patrol_id INT REFERENCES patrols(id) ON DELETE SET NULL,
+    patrol_role VARCHAR(100),
     full_name_ar VARCHAR(255) NOT NULL,
     full_name_en VARCHAR(255),
     date_of_birth DATE NOT NULL,

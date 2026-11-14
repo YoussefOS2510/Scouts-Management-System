@@ -6,7 +6,8 @@ export interface TamamMember {
   id?: string;
   full_name_ar: string;
   member_code?: string;
-  rank?: string;
+  rank?: string | null;
+  patrol_role?: string | null;
 }
 
 export interface TamamSheetProps {
@@ -28,17 +29,24 @@ export default function TamamSheet({
   dateStr,
   minRows = 8,
 }: TamamSheetProps) {
-  // Pad table with empty rows if fewer than minRows
-  const totalRows = Math.max(members.length, minRows);
-  const rows = Array.from({ length: totalRows }, (_, idx) => members[idx] || null);
+  const getRolePriority = (m: TamamMember) => {
+    const r = (m.patrol_role ?? m.rank ?? '').trim().toUpperCase();
+    if (r === 'CP') return 1;
+    if (r === 'CG') return 2;
+    if (r === '3RD') return 3;
+    if (r.length > 0) return 4;
+    return 5;
+  };
+  const sortedMembers = [...members].sort((a, b) => getRolePriority(a) - getRolePriority(b));
 
-  // Default role labels matching the official template: 1: CP, 2: CG, 3: 3rd
-  const getRank = (idx: number, member: TamamMember | null) => {
-    if (member?.rank) return member.rank;
-    if (idx === 0) return 'CP';
-    if (idx === 1) return 'CG';
-    if (idx === 2) return '3rd';
-    return '';
+  // Pad table with empty rows if fewer than minRows
+  const totalRows = Math.max(sortedMembers.length, minRows);
+  const rows = Array.from({ length: totalRows }, (_, idx) => sortedMembers[idx] || null);
+
+  // Return each scout's assigned role (CP, CG, 3rd, or custom role)
+  const getRank = (_idx: number, member: TamamMember | null) => {
+    if (!member) return '';
+    return (member.patrol_role ?? member.rank ?? '').trim();
   };
 
   const formattedDate = dateStr || new Date().toLocaleDateString('ar-EG', {
@@ -151,8 +159,11 @@ export default function TamamSheet({
                           {idx + 1}
                         </td>
 
-                        {/* 2. Scout Role (CP / CG / 3rd) */}
-                        <td className="border border-black font-bold font-mono text-xs sm:text-sm uppercase">
+                        {/* 2. Scout Role (CP / CG / 3rd / Custom) */}
+                        <td
+                          dir="auto"
+                          className="border border-black font-bold text-xs sm:text-sm px-1"
+                        >
                           {role}
                         </td>
 

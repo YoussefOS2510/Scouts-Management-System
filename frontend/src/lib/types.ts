@@ -25,6 +25,7 @@ export interface Member {
   pin?: string; // 4-digit PIN for kid login
   unit_id: number;
   patrol_id?: number | null;
+  patrol_role?: string | null;
   full_name_ar: string;
   full_name_en?: string;
   date_of_birth: string;
@@ -235,6 +236,7 @@ export type AuditActionType =
   | 'user_login'
   | 'leader_team_assigned'
   | 'patrol_assigned'
+  | 'patrol_role_assigned'
   | 'leader_created'
   | 'leader_deleted'
   | 'equipment_created'

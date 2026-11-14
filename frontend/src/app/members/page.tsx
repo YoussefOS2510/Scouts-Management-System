@@ -3,7 +3,12 @@
 import React, { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { useLanguage } from '../../lib/LanguageContext';
-import { useAuth } from '../../lib/AuthContext';
+import {
+  useAuth,
+  BASIC_SCOUT_ROLES,
+  sortMembersByPatrolRole,
+  getScoutRoleBadgeClass,
+} from '../../lib/AuthContext';
 import { INITIAL_UNITS } from '../../lib/data';
 import {
   Users,
@@ -54,6 +59,11 @@ export default function MembersDirectoryPage() {
     members,
     patrols,
     assignScoutPatrol,
+    assignScoutRole,
+    unitCustomRoles,
+    addUnitCustomRole,
+    removeUnitCustomRole,
+    getUnitRoles,
     addMember,
     deleteMember,
     addLeader,
@@ -100,6 +110,12 @@ export default function MembersDirectoryPage() {
 
   const [patrolToDelete, setPatrolToDelete] = useState<any | null>(null);
   const [isDeletingPatrol, setIsDeletingPatrol] = useState(false);
+
+  // Team Basic & Custom Roles State (Patrol Board)
+  const [newCustomTeamRole, setNewCustomTeamRole] = useState('');
+  const [isSavingCustomTeamRole, setIsSavingCustomTeamRole] = useState(false);
+  const [customRolePromptMemberId, setCustomRolePromptMemberId] = useState<string | null>(null);
+  const [customRoleInputText, setCustomRoleInputText] = useState('');
 
   // Tamam Sheet State
   const [tamamPreviewPatrol, setTamamPreviewPatrol] = useState<any | null>(null);
@@ -246,6 +262,47 @@ export default function MembersDirectoryPage() {
           : `Patrol updated for (${scout?.full_name_ar}) to: ${patrol ? patrol.name_en : 'Unassigned'}`
       );
       setTimeout(() => setPatrolActionSuccess(null), 3500);
+    }
+  };
+
+  // Handle assigning scout role inside patrol / six
+  const handleAssignMemberRole = async (memberId: string, role: string | null) => {
+    const cleanRole = role && role.trim() !== '' ? role.trim() : null;
+    const success = await assignScoutRole(memberId, cleanRole);
+    if (success) {
+      const scout = members.find((m) => m.id === memberId);
+      setPatrolActionSuccess(
+        language === 'ar'
+          ? cleanRole
+            ? `تم تعيين دور (${cleanRole}) للكشاف (${scout?.full_name_ar || ''})`
+            : `تم إلغاء الدور الكشفي للكشاف (${scout?.full_name_ar || ''})`
+          : cleanRole
+            ? `Assigned role (${cleanRole}) to ${scout?.full_name_en || scout?.full_name_ar || ''}`
+            : `Cleared role for ${scout?.full_name_en || scout?.full_name_ar || ''}`
+      );
+      setTimeout(() => setPatrolActionSuccess(null), 3500);
+    }
+  };
+
+  // Handle adding custom role preset for current board unit
+  const handleAddBoardCustomRole = async (e: React.FormEvent, unitId: number) => {
+    e.preventDefault();
+    const clean = newCustomTeamRole.trim();
+    if (!clean) return;
+    setIsSavingCustomTeamRole(true);
+    try {
+      const ok = await addUnitCustomRole(unitId, clean);
+      if (ok) {
+        setNewCustomTeamRole('');
+        setPatrolActionSuccess(
+          language === 'ar'
+            ? `تمت إضافة الدور المخصص "${clean}" للفريق بنجاح`
+            : `Custom role "${clean}" added to team`
+        );
+        setTimeout(() => setPatrolActionSuccess(null), 3500);
+      }
+    } finally {
+      setIsSavingCustomTeamRole(false);
     }
   };
 
@@ -1124,11 +1181,84 @@ export default function MembersDirectoryPage() {
                 </div>
               </div>
 
+              {/* Team Roles Management Bar (Basic: CP / CG / 3rd + Custom Roles) */}
+              {(() => {
+                const boardRoles = getUnitRoles(boardUnitId);
+                const customOnly = boardRoles.filter((r) => !BASIC_SCOUT_ROLES.includes(r as any));
+                return (
+                  <div className="p-3 rounded-lg bg-white dark:bg-[#121214] border border-zinc-200 dark:border-zinc-800 flex flex-col lg:flex-row lg:items-center justify-between gap-2.5">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 flex items-center gap-1 me-1">
+                        <ShieldCheck className="w-3.5 h-3.5 text-violet-500" />
+                        <span>{language === 'ar' ? 'أدوار التشكيلات:' : 'Formation Roles:'}</span>
+                      </span>
+                      {BASIC_SCOUT_ROLES.map((r) => (
+                        <span
+                          key={r}
+                          className={`px-2 py-0.5 rounded text-[11px] font-bold border ${getScoutRoleBadgeClass(r)}`}
+                        >
+                          {r}
+                        </span>
+                      ))}
+                      {customOnly.map((r) => {
+                        const isPreset = (unitCustomRoles[boardUnitId] || []).includes(r);
+                        return (
+                          <span
+                            key={r}
+                            dir="auto"
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold border ${getScoutRoleBadgeClass(r)}`}
+                          >
+                            <span>{r}</span>
+                            {canManagePatrols && isPreset && (
+                              <button
+                                type="button"
+                                onClick={() => removeUnitCustomRole(boardUnitId, r)}
+                                title={language === 'ar' ? 'حذف الدور المخصص' : 'Remove custom role'}
+                                className="hover:text-rose-600 transition-colors cursor-pointer"
+                              >
+                                <X className="w-2.5 h-2.5" />
+                              </button>
+                            )}
+                          </span>
+                        );
+                      })}
+                    </div>
+
+                    {canManagePatrols && (
+                      <form onSubmit={(e) => handleAddBoardCustomRole(e, boardUnitId)} className="flex items-center gap-1.5 shrink-0">
+                        <input
+                          type="text"
+                          value={newCustomTeamRole}
+                          onChange={(e) => setNewCustomTeamRole(e.target.value)}
+                          placeholder={
+                            language === 'ar'
+                              ? 'إضافة دور مخصص للفريق (أمين السر، مسعف...)'
+                              : 'Add custom role (Treasurer, First Aid...)'
+                          }
+                          dir="auto"
+                          className="w-52 sm:w-64 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg px-2.5 py-1 text-xs text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                        />
+                        <button
+                          type="submit"
+                          disabled={isSavingCustomTeamRole || !newCustomTeamRole.trim()}
+                          className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-violet-600 hover:bg-violet-500 text-white inline-flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>{language === 'ar' ? 'إضافة دور' : 'Add Role'}</span>
+                        </button>
+                      </form>
+                    )}
+                  </div>
+                );
+              })()}
+
               {/* Patrols Columns Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                 {/* Each Patrol Column */}
                 {unitPatrols.map((patrol, patrolIdx) => {
-                  const pMembers = unitMembers.filter((m) => m.patrol_id === patrol.id);
+                  const pMembers = sortMembersByPatrolRole(unitMembers.filter((m) => m.patrol_id === patrol.id));
+                  const boardRoles = getUnitRoles(boardUnitId);
+                  const boardCustomOnlyRoles = boardRoles.filter((r) => !BASIC_SCOUT_ROLES.includes(r as any));
 
                   return (
                     <div
@@ -1211,10 +1341,10 @@ export default function MembersDirectoryPage() {
                           pMembers.map((scout) => (
                             <div
                               key={scout.id}
-                              className="p-2 rounded bg-zinc-50/70 dark:bg-zinc-900/40 border border-zinc-200/70 dark:border-zinc-800 flex items-center justify-between gap-2 text-xs"
+                              className="p-2 rounded bg-zinc-50/70 dark:bg-zinc-900/40 border border-zinc-200/70 dark:border-zinc-800 flex flex-wrap items-center justify-between gap-1.5 text-xs"
                             >
-                              <div>
-                                <div className="font-medium text-zinc-900 dark:text-zinc-100 text-xs">
+                              <div className="min-w-0 flex-1">
+                                <div className="font-medium text-zinc-900 dark:text-zinc-100 text-xs truncate" dir="auto">
                                   {scout.full_name_ar}
                                 </div>
                                 <div className="text-[10px] font-mono text-zinc-400">
@@ -1222,21 +1352,128 @@ export default function MembersDirectoryPage() {
                                 </div>
                               </div>
 
-                              <select
-                                value={scout.patrol_id || ''}
-                                onChange={(e) => {
-                                  const pId = e.target.value === '' ? null : Number(e.target.value);
-                                  handleAssignPatrol(scout.id, pId);
-                                }}
-                                className="text-[11px] bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded px-1.5 py-0.5 focus:outline-none cursor-pointer text-zinc-700 dark:text-zinc-300"
-                              >
-                                {unitPatrols.map((p) => (
-                                  <option key={p.id} value={p.id}>
-                                    {language === 'ar' ? p.name_ar : p.name_en}
-                                  </option>
-                                ))}
-                                <option value="">{language === 'ar' ? 'إلغاء التعيين' : 'Unassign'}</option>
-                              </select>
+                              <div className="flex items-center gap-1 shrink-0">
+                                {!canManagePatrols ? (
+                                  scout.patrol_role && (
+                                    <span
+                                      dir="auto"
+                                      className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${getScoutRoleBadgeClass(scout.patrol_role)}`}
+                                    >
+                                      {scout.patrol_role}
+                                    </span>
+                                  )
+                                ) : customRolePromptMemberId === scout.id ? (
+                                  <div className="flex items-center gap-1">
+                                    <input
+                                      type="text"
+                                      value={customRoleInputText}
+                                      onChange={(e) => setCustomRoleInputText(e.target.value)}
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                          e.preventDefault();
+                                          if (customRoleInputText.trim()) {
+                                            handleAssignMemberRole(scout.id, customRoleInputText.trim());
+                                          }
+                                          setCustomRolePromptMemberId(null);
+                                          setCustomRoleInputText('');
+                                        } else if (e.key === 'Escape') {
+                                          setCustomRolePromptMemberId(null);
+                                          setCustomRoleInputText('');
+                                        }
+                                      }}
+                                      placeholder={language === 'ar' ? 'اسم الدور...' : 'Role...'}
+                                      dir="auto"
+                                      autoFocus
+                                      className="w-20 text-[10px] bg-white dark:bg-zinc-900 border border-violet-400 rounded px-1.5 py-0.5 text-zinc-900 dark:text-zinc-100 focus:outline-none"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        if (customRoleInputText.trim()) {
+                                          handleAssignMemberRole(scout.id, customRoleInputText.trim());
+                                        }
+                                        setCustomRolePromptMemberId(null);
+                                        setCustomRoleInputText('');
+                                      }}
+                                      className="p-0.5 rounded bg-violet-600 text-white cursor-pointer"
+                                      title={language === 'ar' ? 'حفظ' : 'Save'}
+                                    >
+                                      <Check className="w-3 h-3" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setCustomRolePromptMemberId(null);
+                                        setCustomRoleInputText('');
+                                      }}
+                                      className="p-0.5 rounded bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 cursor-pointer"
+                                      title={language === 'ar' ? 'إلغاء' : 'Cancel'}
+                                    >
+                                      <X className="w-3 h-3" />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <select
+                                    value={scout.patrol_role || ''}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      if (val === '__custom__') {
+                                        setCustomRolePromptMemberId(scout.id);
+                                        setCustomRoleInputText(
+                                          scout.patrol_role && !BASIC_SCOUT_ROLES.includes(scout.patrol_role as any)
+                                            ? scout.patrol_role
+                                            : ''
+                                        );
+                                      } else {
+                                        handleAssignMemberRole(scout.id, val || null);
+                                      }
+                                    }}
+                                    title={language === 'ar' ? 'الدور الكشفي' : 'Scout Role'}
+                                    className={`text-[10px] font-bold rounded px-1.5 py-0.5 border cursor-pointer max-w-[95px] ${
+                                      scout.patrol_role
+                                        ? getScoutRoleBadgeClass(scout.patrol_role)
+                                        : 'bg-white dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 font-medium'
+                                    }`}
+                                  >
+                                    <option value="">{language === 'ar' ? 'بدون دور' : 'No Role'}</option>
+                                    <optgroup label={language === 'ar' ? 'الأدوار الأساسية' : 'Basic Roles'}>
+                                      {BASIC_SCOUT_ROLES.map((r) => (
+                                        <option key={r} value={r}>
+                                          {r}
+                                        </option>
+                                      ))}
+                                    </optgroup>
+                                    {boardCustomOnlyRoles.length > 0 && (
+                                      <optgroup label={language === 'ar' ? 'أدوار الفريق' : 'Team Roles'}>
+                                        {boardCustomOnlyRoles.map((r) => (
+                                          <option key={r} value={r}>
+                                            {r}
+                                          </option>
+                                        ))}
+                                      </optgroup>
+                                    )}
+                                    <option value="__custom__">{language === 'ar' ? '+ دور مخصص...' : '+ Custom Role...'}</option>
+                                  </select>
+                                )}
+
+                                {canManagePatrols && (
+                                  <select
+                                    value={scout.patrol_id || ''}
+                                    onChange={(e) => {
+                                      const pId = e.target.value === '' ? null : Number(e.target.value);
+                                      handleAssignPatrol(scout.id, pId);
+                                    }}
+                                    className="text-[11px] bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded px-1.5 py-0.5 focus:outline-none cursor-pointer text-zinc-700 dark:text-zinc-300 max-w-[95px]"
+                                  >
+                                    {unitPatrols.map((p) => (
+                                      <option key={p.id} value={p.id}>
+                                        {language === 'ar' ? p.name_ar : p.name_en}
+                                      </option>
+                                    ))}
+                                    <option value="">{language === 'ar' ? 'إلغاء التعيين' : 'Unassign'}</option>
+                                  </select>
+                                )}
+                              </div>
                             </div>
                           ))
                         )}

@@ -4,7 +4,12 @@ import React, { useState, useMemo, useEffect, Suspense } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useLanguage } from '@/lib/LanguageContext';
-import { useAuth } from '@/lib/AuthContext';
+import {
+  useAuth,
+  BASIC_SCOUT_ROLES,
+  sortMembersByPatrolRole,
+  getScoutRoleBadgeClass,
+} from '@/lib/AuthContext';
 import { INITIAL_UNITS } from '@/lib/data';
 import { getSubdivisionTerms } from '@/lib/scout-terms';
 import { AttendanceSession, Member, Patrol } from '@/lib/types';
@@ -82,6 +87,11 @@ function UnitHubContent() {
     deletePatrol,
     assignScoutPatrol,
     batchAssignScoutPatrol,
+    assignScoutRole,
+    unitCustomRoles,
+    addUnitCustomRole,
+    removeUnitCustomRole,
+    getUnitRoles,
   } = useAuth();
 
   const canViewAllUnits = isSuperAdmin || currentRole?.name === 'group_leader';
@@ -265,8 +275,19 @@ function UnitHubContent() {
 
   const currentMembersInEditingPatrol = useMemo(() => {
     if (!editingPatrol) return [];
-    return unitMembers.filter((m) => m.patrol_id === editingPatrol.id);
+    return sortMembersByPatrolRole(unitMembers.filter((m) => m.patrol_id === editingPatrol.id));
   }, [unitMembers, editingPatrol]);
+
+  // Custom & Basic Scouting Roles State for this team
+  const unitRoleOptions = useMemo(() => getUnitRoles(unitId), [getUnitRoles, unitId]);
+  const unitCustomOnlyRoles = useMemo(
+    () => unitRoleOptions.filter((r) => !BASIC_SCOUT_ROLES.includes(r as any)),
+    [unitRoleOptions]
+  );
+  const [newCustomTeamRole, setNewCustomTeamRole] = useState('');
+  const [isSavingCustomTeamRole, setIsSavingCustomTeamRole] = useState(false);
+  const [customRolePromptMemberId, setCustomRolePromptMemberId] = useState<string | null>(null);
+  const [customRoleInputText, setCustomRoleInputText] = useState('');
 
   const [patrolToDelete, setPatrolToDelete] = useState<Patrol | null>(null);
   const [isDeletingPatrol, setIsDeletingPatrol] = useState(false);
@@ -539,6 +560,157 @@ function UnitHubContent() {
       );
       setTimeout(() => setNotification(null), 3000);
     }
+  };
+
+  // Handle Assigning Basic or Custom Scouting Role to Member
+  const handleAssignMemberRole = async (memberId: string, role: string | null) => {
+    const cleanRole = role && role.trim() !== '' ? role.trim() : null;
+    const ok = await assignScoutRole(memberId, cleanRole);
+    const scout = unitMembers.find((m) => m.id === memberId);
+    if (ok) {
+      setNotification(
+        language === 'ar'
+          ? cleanRole
+            ? `تم تعيين دور (${cleanRole}) للكشاف (${scout?.full_name_ar || ''})`
+            : `تم إزالة الدور عن (${scout?.full_name_ar || ''})`
+          : cleanRole
+            ? `Assigned role (${cleanRole}) to ${scout?.full_name_en || scout?.full_name_ar || ''}`
+            : `Cleared role for ${scout?.full_name_en || scout?.full_name_ar || ''}`
+      );
+      setTimeout(() => setNotification(null), 3000);
+    }
+  };
+
+  // Handle Adding Custom Role at Team Level
+  const handleAddTeamCustomRole = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const roleName = newCustomTeamRole.trim();
+    if (!roleName) return;
+    setIsSavingCustomTeamRole(true);
+    try {
+      const ok = await addUnitCustomRole(unitId, roleName);
+      if (ok) {
+        setNewCustomTeamRole('');
+        setNotification(
+          language === 'ar'
+            ? `تمت إضافة الدور المخصص "${roleName}" لأدوار الفريق`
+            : `Added custom role "${roleName}" to team`
+        );
+        setTimeout(() => setNotification(null), 3000);
+      }
+    } finally {
+      setIsSavingCustomTeamRole(false);
+    }
+  };
+
+  // Shared Inline Role Badge + Selector Helper (Patrol Cards & Edit Patrol Modal)
+  const renderRoleSelector = (m: Member) => {
+    if (!canManageMembers) {
+      return m.patrol_role ? (
+        <span
+          dir="auto"
+          className={`px-1.5 py-0.5 rounded text-[10px] font-bold border shrink-0 ${getScoutRoleBadgeClass(m.patrol_role)}`}
+        >
+          {m.patrol_role}
+        </span>
+      ) : null;
+    }
+
+    if (customRolePromptMemberId === m.id) {
+      return (
+        <div className="flex items-center gap-1 shrink-0">
+          <input
+            type="text"
+            value={customRoleInputText}
+            onChange={(e) => setCustomRoleInputText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                if (customRoleInputText.trim()) {
+                  handleAssignMemberRole(m.id, customRoleInputText.trim());
+                }
+                setCustomRolePromptMemberId(null);
+                setCustomRoleInputText('');
+              } else if (e.key === 'Escape') {
+                setCustomRolePromptMemberId(null);
+                setCustomRoleInputText('');
+              }
+            }}
+            placeholder={language === 'ar' ? 'اسم الدور...' : 'Role name...'}
+            dir="auto"
+            autoFocus
+            className="w-24 text-[10px] bg-white dark:bg-[#0B0F17] border border-violet-400 rounded-md px-1.5 py-0.5 text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-violet-500"
+          />
+          <button
+            type="button"
+            onClick={() => {
+              if (customRoleInputText.trim()) {
+                handleAssignMemberRole(m.id, customRoleInputText.trim());
+              }
+              setCustomRolePromptMemberId(null);
+              setCustomRoleInputText('');
+            }}
+            title={language === 'ar' ? 'حفظ الدور' : 'Save role'}
+            className="p-0.5 rounded bg-violet-600 hover:bg-violet-500 text-white cursor-pointer"
+          >
+            <Check className="w-3 h-3" />
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setCustomRolePromptMemberId(null);
+              setCustomRoleInputText('');
+            }}
+            title={language === 'ar' ? 'إلغاء' : 'Cancel'}
+            className="p-0.5 rounded bg-neutral-200 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-200 cursor-pointer"
+          >
+            <X className="w-3 h-3" />
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <select
+        value={m.patrol_role || ''}
+        onChange={(e) => {
+          const val = e.target.value;
+          if (val === '__custom__') {
+            setCustomRolePromptMemberId(m.id);
+            setCustomRoleInputText(
+              m.patrol_role && !BASIC_SCOUT_ROLES.includes(m.patrol_role as any) ? m.patrol_role : ''
+            );
+          } else {
+            handleAssignMemberRole(m.id, val || null);
+          }
+        }}
+        title={language === 'ar' ? 'الدور الكشفي في التشكيل' : 'Scout Role in Formation'}
+        className={`text-[10px] font-bold rounded-md px-1.5 py-0.5 border cursor-pointer shrink-0 max-w-[115px] ${
+          m.patrol_role
+            ? getScoutRoleBadgeClass(m.patrol_role)
+            : 'bg-white dark:bg-[#111827] border-neutral-200 dark:border-neutral-700 text-neutral-600 dark:text-neutral-300 font-medium'
+        }`}
+      >
+        <option value="">{language === 'ar' ? 'بدون دور' : 'No Role'}</option>
+        <optgroup label={language === 'ar' ? 'الأدوار الأساسية' : 'Basic Roles'}>
+          {BASIC_SCOUT_ROLES.map((r) => (
+            <option key={r} value={r}>
+              {r}
+            </option>
+          ))}
+        </optgroup>
+        {unitCustomOnlyRoles.length > 0 && (
+          <optgroup label={language === 'ar' ? 'أدوار الفريق المخصصة' : 'Team Custom Roles'}>
+            {unitCustomOnlyRoles.map((r) => (
+              <option key={r} value={r}>
+                {r}
+              </option>
+            ))}
+          </optgroup>
+        )}
+        <option value="__custom__">{language === 'ar' ? '+ دور مخصص...' : '+ Custom Role...'}</option>
+      </select>
+    );
   };
 
   return (
@@ -1279,6 +1451,72 @@ function UnitHubContent() {
             </div>
           </div>
 
+          {/* Team Roles Bar (Basic: CP / CG / 3rd + Custom Team Roles) */}
+          <div className="p-3.5 rounded-2xl bg-white dark:bg-[#111827] border border-neutral-200 dark:border-neutral-800 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-xs font-bold text-neutral-700 dark:text-neutral-200 flex items-center gap-1.5 me-1">
+                <ShieldCheck className="w-3.5 h-3.5 text-violet-500" />
+                <span>{language === 'ar' ? 'أدوار التشكيلات:' : 'Formation Roles:'}</span>
+              </span>
+              {BASIC_SCOUT_ROLES.map((r) => (
+                <span
+                  key={r}
+                  className={`px-2 py-0.5 rounded-md text-[11px] font-bold border ${getScoutRoleBadgeClass(r)}`}
+                  title={language === 'ar' ? 'دور أساسي' : 'Basic role'}
+                >
+                  {r}
+                </span>
+              ))}
+              {unitCustomOnlyRoles.map((r) => {
+                const isExplicitUnitRole = (unitCustomRoles[unitId] || []).includes(r);
+                return (
+                  <span
+                    key={r}
+                    dir="auto"
+                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold border ${getScoutRoleBadgeClass(r)}`}
+                  >
+                    <span>{r}</span>
+                    {canManageMembers && isExplicitUnitRole && (
+                      <button
+                        type="button"
+                        onClick={() => removeUnitCustomRole(unitId, r)}
+                        title={language === 'ar' ? 'حذف من قائمة أدوار الفريق' : 'Remove team role preset'}
+                        className="hover:text-rose-600 transition-colors cursor-pointer"
+                      >
+                        <X className="w-2.5 h-2.5" />
+                      </button>
+                    )}
+                  </span>
+                );
+              })}
+            </div>
+
+            {canManageMembers && (
+              <form onSubmit={handleAddTeamCustomRole} className="flex items-center gap-1.5 shrink-0">
+                <input
+                  type="text"
+                  value={newCustomTeamRole}
+                  onChange={(e) => setNewCustomTeamRole(e.target.value)}
+                  placeholder={
+                    language === 'ar'
+                      ? 'إضافة دور مخصص للفريق (أمين السر، مسعف...)'
+                      : 'Add custom team role (Treasurer, First Aid...)'
+                  }
+                  dir="auto"
+                  className="w-56 sm:w-64 bg-neutral-100 dark:bg-[#0B0F17] border border-neutral-200 dark:border-neutral-800 rounded-xl px-2.5 py-1.5 text-xs text-neutral-900 dark:text-neutral-100 placeholder:text-neutral-400 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                />
+                <button
+                  type="submit"
+                  disabled={isSavingCustomTeamRole || !newCustomTeamRole.trim()}
+                  className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-violet-600 hover:bg-violet-500 text-white inline-flex items-center gap-1 transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>{language === 'ar' ? 'إضافة دور' : 'Add Role'}</span>
+                </button>
+              </form>
+            )}
+          </div>
+
           {/* Unassigned Scouts Card (if any) */}
           {unassignedMembers.length > 0 && (
             <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-2xl space-y-2.5">
@@ -1358,7 +1596,9 @@ function UnitHubContent() {
               </div>
             ) : (
               unitPatrols.map((patrol) => {
-                const membersInPatrol = unitMembers.filter((m) => m.patrol_id === patrol.id);
+                const membersInPatrol = sortMembersByPatrolRole(
+                  unitMembers.filter((m) => m.patrol_id === patrol.id)
+                );
                 return (
                   <div
                     key={patrol.id}
@@ -1427,7 +1667,7 @@ function UnitHubContent() {
                       </div>
 
                       {/* Scouts List inside Patrol Card */}
-                      <div className="space-y-1.5 max-h-52 overflow-y-auto mt-2.5 pe-1 no-scrollbar">
+                      <div className="space-y-1.5 max-h-64 overflow-y-auto mt-2.5 pe-1 no-scrollbar">
                         {membersInPatrol.length === 0 ? (
                           <div className="py-6 text-center text-xs text-neutral-400">
                             {language === 'ar' ? 'لا يوجد كشافون معينون بعد' : 'No scouts assigned yet'}
@@ -1436,7 +1676,7 @@ function UnitHubContent() {
                           membersInPatrol.map((m) => (
                             <div
                               key={m.id}
-                              className="p-2 rounded-xl bg-neutral-50 dark:bg-[#161F30]/60 hover:bg-neutral-100 dark:hover:bg-[#161F30] flex items-center justify-between text-xs transition-colors gap-2"
+                              className="p-2 rounded-xl bg-neutral-50 dark:bg-[#161F30]/60 hover:bg-neutral-100 dark:hover:bg-[#161F30] flex flex-wrap items-center justify-between text-xs transition-colors gap-1.5"
                             >
                               <div
                                 className="min-w-0 flex-1 cursor-pointer"
@@ -1448,24 +1688,28 @@ function UnitHubContent() {
                                 <div className="text-[10px] font-mono text-neutral-400">{m.member_code}</div>
                               </div>
 
-                              {canManageMembers && (
-                                <select
-                                  value={m.patrol_id ?? 'none'}
-                                  onChange={(e) => {
-                                    const val = e.target.value === 'none' ? null : Number(e.target.value);
-                                    handleAssignScout(m.id, val);
-                                  }}
-                                  className="text-[10px] font-medium bg-white dark:bg-[#111827] border border-neutral-200 dark:border-neutral-700 rounded-md px-1.5 py-0.5 text-neutral-700 dark:text-neutral-300 cursor-pointer shrink-0"
-                                  title={language === 'ar' ? 'نقل الكشاف' : 'Move Scout'}
-                                >
-                                  {unitPatrols.map((p) => (
-                                    <option key={p.id} value={p.id}>
-                                      {language === 'ar' ? p.name_ar : p.name_en}
-                                    </option>
-                                  ))}
-                                  <option value="none">{language === 'ar' ? 'إلغاء التعيين' : 'Unassign'}</option>
-                                </select>
-                              )}
+                              <div className="flex items-center gap-1 shrink-0">
+                                {renderRoleSelector(m)}
+
+                                {canManageMembers && (
+                                  <select
+                                    value={m.patrol_id ?? 'none'}
+                                    onChange={(e) => {
+                                      const val = e.target.value === 'none' ? null : Number(e.target.value);
+                                      handleAssignScout(m.id, val);
+                                    }}
+                                    className="text-[10px] font-medium bg-white dark:bg-[#111827] border border-neutral-200 dark:border-neutral-700 rounded-md px-1.5 py-0.5 text-neutral-700 dark:text-neutral-300 cursor-pointer shrink-0 max-w-[95px]"
+                                    title={language === 'ar' ? 'نقل الكشاف' : 'Move Scout'}
+                                  >
+                                    {unitPatrols.map((p) => (
+                                      <option key={p.id} value={p.id}>
+                                        {language === 'ar' ? p.name_ar : p.name_en}
+                                      </option>
+                                    ))}
+                                    <option value="none">{language === 'ar' ? 'إلغاء التعيين' : 'Unassign'}</option>
+                                  </select>
+                                )}
+                              </div>
                             </div>
                           ))
                         )}
@@ -2257,24 +2501,29 @@ function UnitHubContent() {
                       {language === 'ar' ? 'لا يوجد كشافون مسكنون في هذا التشكيل حالياً.' : 'No scouts currently assigned to this formation.'}
                     </div>
                   ) : (
-                    <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto p-2 rounded-xl bg-neutral-50/70 dark:bg-[#0B0F17]/50 border border-neutral-200/70 dark:border-neutral-800">
+                    <div className="space-y-1.5 max-h-40 overflow-y-auto p-2 rounded-xl bg-neutral-50/70 dark:bg-[#0B0F17]/50 border border-neutral-200/70 dark:border-neutral-800">
                       {currentMembersInEditingPatrol.map((m) => (
                         <div
                           key={m.id}
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white dark:bg-[#161F30] border border-neutral-200 dark:border-neutral-700 text-xs text-neutral-800 dark:text-neutral-200 shadow-2xs"
+                          className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg bg-white dark:bg-[#161F30] border border-neutral-200 dark:border-neutral-700 text-xs text-neutral-800 dark:text-neutral-200 shadow-2xs"
                         >
-                          <span className="font-medium truncate max-w-[130px]" dir="auto">
-                            {language === 'ar' ? m.full_name_ar : (m.full_name_en || m.full_name_ar)}
-                          </span>
-                          <span className="text-[10px] text-neutral-400 font-mono">({m.member_code})</span>
-                          <button
-                            type="button"
-                            onClick={() => assignScoutPatrol(m.id, null)}
-                            title={language === 'ar' ? 'إلغاء التسكين من التشكيل' : 'Unassign from formation'}
-                            className="p-0.5 rounded text-neutral-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
+                          <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                            <span className="font-medium truncate" dir="auto">
+                              {language === 'ar' ? m.full_name_ar : (m.full_name_en || m.full_name_ar)}
+                            </span>
+                            <span className="text-[10px] text-neutral-400 font-mono shrink-0">({m.member_code})</span>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            {renderRoleSelector(m)}
+                            <button
+                              type="button"
+                              onClick={() => assignScoutPatrol(m.id, null)}
+                              title={language === 'ar' ? 'إلغاء التسكين من التشكيل' : 'Unassign from formation'}
+                              className="p-0.5 rounded text-neutral-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
                         </div>
                       ))}
                     </div>
