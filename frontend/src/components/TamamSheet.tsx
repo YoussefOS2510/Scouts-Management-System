@@ -31,8 +31,9 @@ export default function TamamSheet({
   // Pad table with empty rows if fewer than minRows
   const totalRows = Math.max(members.length, minRows);
   const rows = Array.from({ length: totalRows }, (_, idx) => members[idx] || null);
+  const rowHeight = Math.max(48, Math.floor(620 / rows.length));
 
-  // Default rank labels matching the official template: 1: CP, 2: CG, 3: 3rd
+  // Default role labels matching the official template: 1: CP, 2: CG, 3: 3rd
   const getRank = (idx: number, member: TamamMember | null) => {
     if (member?.rank) return member.rank;
     if (idx === 0) return 'CP';
@@ -54,13 +55,13 @@ export default function TamamSheet({
       style={{ minHeight: '280mm' }}
     >
       {/* Outer Double Frame Border (Classic Scout Certificate / Attendance Template) */}
-      <div className="border-[3px] border-black p-1 h-full min-h-[270mm] flex flex-col justify-between box-border">
-        <div className="border border-black p-5 sm:p-7 flex-1 flex flex-col justify-between">
+      <div className="border-[3px] border-black p-1 h-full min-h-[270mm] flex flex-col box-border">
+        <div className="border border-black p-5 sm:p-7 flex-1 flex flex-col">
           
           {/* Top Section */}
-          <div>
+          <div className="flex-1 flex flex-col">
             {/* Header: Logo, Cross, Title */}
-            <div className="grid grid-cols-3 items-start gap-2 mb-4">
+            <div className="grid grid-cols-3 items-start gap-2 mb-6 pb-2">
               
               {/* Top Right: Scout Group Details */}
               <div className="flex items-center gap-3">
@@ -93,7 +94,7 @@ export default function TamamSheet({
               </div>
 
               {/* Top Left: Attendance Statistics & Roll Call */}
-              <div className="text-left text-xs sm:text-sm font-bold space-y-1 pr-2 pt-1">
+              <div className="text-left text-xs sm:text-sm font-bold space-y-1.5 pr-2 pt-1">
                 <div className="flex items-center justify-end gap-1">
                   <span className="font-semibold">اليوم:</span>
                   <span>{dayName}</span>
@@ -119,13 +120,13 @@ export default function TamamSheet({
             </div>
 
             {/* Attendance Table */}
-            <div className="w-full mt-4">
-              <table className="w-full border-collapse border-2 border-black text-center text-xs sm:text-sm">
+            <div className="w-full mt-2 flex-1 flex flex-col">
+              <table className="w-full flex-1 border-collapse border-2 border-black text-center text-sm">
                 <thead>
-                  <tr className="bg-zinc-100/60 print:bg-transparent border-b-2 border-black h-11 text-black font-bold">
+                  <tr className="bg-zinc-100/60 print:bg-transparent border-b-2 border-black h-12 text-black font-bold">
                     <th className="border border-black w-10 py-1.5">م</th>
                     <th className="border border-black w-24 py-1.5 leading-tight">
-                      الرتبه<br />الكشفيه
+                      الدور<br />الكشفي
                     </th>
                     <th className="border border-black py-1.5 text-center px-3">الأسم</th>
                     <th className="border border-black w-24 py-1.5 leading-tight">
@@ -140,30 +141,23 @@ export default function TamamSheet({
                 </thead>
                 <tbody>
                   {rows.map((scout, idx) => {
-                    const rank = getRank(idx, scout);
+                    const role = getRank(idx, scout);
                     return (
-                      <tr key={idx} className="h-11 sm:h-12 border-b border-black">
+                      <tr key={idx} className="border-b border-black" style={{ height: `${rowHeight}px` }}>
                         {/* 1. Sequence Number */}
                         <td className="border border-black font-mono font-bold text-sm bg-zinc-50/40 print:bg-transparent">
                           {idx + 1}
                         </td>
 
-                        {/* 2. Scout Rank (CP / CG / 3rd) */}
+                        {/* 2. Scout Role (CP / CG / 3rd) */}
                         <td className="border border-black font-bold font-mono text-sm uppercase">
-                          {rank}
+                          {role}
                         </td>
 
                         {/* 3. Scout Name */}
-                        <td className="border border-black font-semibold text-right px-3 text-xs sm:text-[13px] text-zinc-950">
+                        <td className="border border-black font-semibold text-right px-3 text-sm sm:text-[15px] text-zinc-950">
                           {scout ? (
-                            <div className="flex items-center justify-between">
-                              <span>{scout.full_name_ar}</span>
-                              {scout.member_code && (
-                                <span className="font-mono text-[10px] text-zinc-400 print:text-zinc-600">
-                                  {scout.member_code}
-                                </span>
-                              )}
-                            </div>
+                            <span>{scout.full_name_ar}</span>
                           ) : (
                             <span className="text-transparent">.</span>
                           )}
