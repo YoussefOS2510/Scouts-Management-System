@@ -305,9 +305,9 @@ export function GoogleWorkspaceLayout({ children }: { children: React.ReactNode 
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#F8FAFD] dark:bg-[#0B0F17] text-[#0F172A] dark:text-[#F1F5F9] font-sans antialiased">
+    <div className="min-h-screen flex flex-col bg-[#F8FAFD] dark:bg-[#0B0F17] text-[#0F172A] dark:text-[#F1F5F9] font-sans antialiased print:min-h-0 print:block print:bg-white print:text-black">
       {/* 1. TOP APP BAR (SaaS Standard Header) */}
-      <header className="h-16 shrink-0 bg-white dark:bg-[#111827] px-3 sm:px-6 flex items-center justify-between gap-2 sm:gap-4 z-40 border-b border-neutral-200/80 dark:border-neutral-800/60 relative">
+      <header className="h-16 shrink-0 bg-white dark:bg-[#111827] px-3 sm:px-6 flex items-center justify-between gap-2 sm:gap-4 z-40 border-b border-neutral-200/80 dark:border-neutral-800/60 relative print:hidden">
         {isMobileSearchOpen ? (
           /* Mobile Search Bar Overlay (Active) */
           <div className="flex-1 flex items-center gap-2 px-1">
@@ -654,12 +654,12 @@ export function GoogleWorkspaceLayout({ children }: { children: React.ReactNode 
       </header>
 
       {/* 2. BODY WORKSPACE (Collapsible Drawer + Main Canvas) */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex overflow-hidden print:block print:overflow-visible">
         {/* Navigation Drawer (Sidebar) */}
         <aside
           className={`${
             isSidebarOpen ? 'w-64' : 'w-20'
-          } hidden md:flex flex-col shrink-0 bg-white dark:bg-[#111827] p-3 transition-all duration-200 border-e border-neutral-200/80 dark:border-neutral-800/60 select-none`}
+          } hidden md:flex flex-col shrink-0 bg-white dark:bg-[#111827] p-3 transition-all duration-200 border-e border-neutral-200/80 dark:border-neutral-800/60 select-none print:hidden`}
         >
           {/* New Action Button (Only visible if the leader has permission for at least one action) */}
           {hasAnyNewAction && (
@@ -784,7 +784,7 @@ export function GoogleWorkspaceLayout({ children }: { children: React.ReactNode 
 
         {/* Mobile Slide-over Drawer */}
         {isMobileSidebarOpen && (
-          <div className="fixed inset-0 z-50 md:hidden flex">
+          <div className="fixed inset-0 z-50 md:hidden flex print:hidden">
             <div
               className="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity animate-fadeIn"
               onClick={() => setIsMobileSidebarOpen(false)}
@@ -991,15 +991,15 @@ export function GoogleWorkspaceLayout({ children }: { children: React.ReactNode 
         )}
 
         {/* 3. MAIN CANVAS */}
-        <main className="flex-1 overflow-y-auto bg-[#F8FAFD] dark:bg-[#0B0F17] p-3.5 sm:p-6 lg:p-8 pb-24 md:pb-8">
-          <div className="max-w-7xl mx-auto w-full">
+        <main className="flex-1 overflow-y-auto bg-[#F8FAFD] dark:bg-[#0B0F17] p-3.5 sm:p-6 lg:p-8 pb-24 md:pb-8 print:p-0 print:m-0 print:bg-white print:overflow-visible">
+          <div className="max-w-7xl mx-auto w-full print:max-w-none print:p-0 print:m-0">
             {children}
           </div>
         </main>
       </div>
 
       {/* 4. MOBILE BOTTOM APP BAR (Native iOS / Android experience) */}
-      <nav className="md:hidden fixed bottom-0 inset-x-0 bg-white/95 dark:bg-[#111827]/95 backdrop-blur-md border-t border-neutral-200/80 dark:border-neutral-800/80 z-40 px-2 py-1.5 pb-safe flex items-center justify-around select-none">
+      <nav className="md:hidden fixed bottom-0 inset-x-0 bg-white/95 dark:bg-[#111827]/95 backdrop-blur-md border-t border-neutral-200/80 dark:border-neutral-800/80 z-40 px-2 py-1.5 pb-safe flex items-center justify-around select-none print:hidden">
         {bottomBarItems.map((item) => {
           const Icon = item.icon;
           const isActive = pathname === item.href || (item.href === '/' && pathname.startsWith('/units')) || (item.href === '/events' && pathname.startsWith('/attendance'));

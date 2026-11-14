@@ -59,7 +59,7 @@ function TamamPrintContent() {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-100 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 font-sans">
+    <div className="min-h-screen bg-zinc-100 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 font-sans print:min-h-0 print:bg-white print:text-black">
       
       {/* Non-Printable Floating Toolbar */}
       <div className="print:hidden sticky top-0 z-50 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md border-b border-zinc-200 dark:border-zinc-800 px-4 py-3 shadow-sm">
@@ -161,7 +161,7 @@ function TamamPrintContent() {
             return (
               <div
                 key={patrol.id}
-                className="bg-white rounded-xl shadow-lg border border-zinc-200 print:border-none print:shadow-none print:rounded-none overflow-hidden print:break-after-page"
+                className="bg-white rounded-xl shadow-lg border border-zinc-200 print:border-none print:shadow-none print:rounded-none overflow-hidden print:break-after-page last:print:break-after-auto"
               >
                 <TamamSheet
                   unitNameAr={unit?.name_ar}
@@ -191,10 +191,16 @@ function TamamPrintContent() {
             color: black !important;
             padding: 0 !important;
             margin: 0 !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
           }
           .print\\:break-after-page {
             break-after: page;
             page-break-after: always;
+          }
+          .print\\:break-after-page:last-child {
+            break-after: auto;
+            page-break-after: auto;
           }
         }
       `}</style>

@@ -509,8 +509,9 @@ export default function MembersDirectoryPage() {
   }
 
   return (
-    <div className="space-y-5 animate-fadeIn pb-12">
-      {/* 1. DRIVE LOCATION PATH & VIEW CONTROLS */}
+    <div className="space-y-5 animate-fadeIn pb-12 print:pb-0 print:space-y-0 print:m-0 print:p-0">
+      <div className="print:hidden space-y-5">
+        {/* 1. DRIVE LOCATION PATH & VIEW CONTROLS */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-[#F0F4F9] dark:border-[#2D2F31]">
         {/* Breadcrumb Path */}
         <div className="flex items-center gap-1.5 text-sm text-[#444746] dark:text-[#C4C7C5]">
@@ -2280,6 +2281,7 @@ export default function MembersDirectoryPage() {
           </div>
         );
       })()}
+      </div>
 
       {/* Tamam Sheet Preview & Print Modal */}
       {tamamPreviewPatrol && (() => {
@@ -2288,8 +2290,8 @@ export default function MembersDirectoryPage() {
         const pMembers = members.filter((m) => m.patrol_id === tamamPreviewPatrol.id);
 
         return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-2 sm:p-4 overflow-y-auto print:p-0 print:bg-white print:static">
-            <div className="bg-white dark:bg-[#18181b] border border-zinc-200 dark:border-zinc-700 rounded-2xl shadow-2xl max-w-4xl w-full p-4 sm:p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150 my-auto max-h-[96vh] flex flex-col print:border-none print:shadow-none print:p-0 print:max-w-none print:max-h-none print:m-0">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-2 sm:p-4 overflow-y-auto print:static print:inset-auto print:p-0 print:m-0 print:bg-white print:overflow-visible print:block">
+            <div className="bg-white dark:bg-[#18181b] border border-zinc-200 dark:border-zinc-700 rounded-2xl shadow-2xl max-w-4xl w-full p-4 sm:p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150 my-auto max-h-[96vh] flex flex-col print:border-none print:shadow-none print:rounded-none print:p-0 print:m-0 print:max-w-none print:max-h-none print:w-full print:bg-white print:space-y-0 print:block">
               
               {/* Modal Header & Print Bar (Hidden on Print) */}
               <div className="print:hidden flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-zinc-200 dark:border-zinc-800">
@@ -2405,6 +2407,8 @@ export default function MembersDirectoryPage() {
           body {
             background: white !important;
             color: black !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
           }
         }
       `}</style>
