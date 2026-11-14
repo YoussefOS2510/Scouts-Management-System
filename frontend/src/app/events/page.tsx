@@ -37,6 +37,7 @@ import {
   Trophy,
   Church,
   PartyPopper,
+  Camera,
 } from 'lucide-react';
 
 const EVENT_PRESETS = [
@@ -715,11 +716,11 @@ function EventsPageContent() {
                   </div>
                 </div>
 
-                {/* Card Footer Action: Take Attendance */}
-                <div className="p-3 bg-neutral-50/70 dark:bg-[#161F30]/60 border-t border-neutral-200/70 dark:border-neutral-800/70">
+                {/* Card Footer Action: Take Attendance + Scan Tamam AI */}
+                <div className="p-3 bg-neutral-50/70 dark:bg-[#161F30]/60 border-t border-neutral-200/70 dark:border-neutral-800/70 flex items-center gap-2">
                   <Link
                     href={`/attendance?sessionId=${evt.id}&unitId=${evt.unit_id}`}
-                    className={`w-full py-2.5 px-4 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-2xs ${
+                    className={`flex-1 py-2.5 px-4 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-2xs ${
                       hasAttendance
                         ? 'bg-neutral-800 hover:bg-neutral-900 text-white dark:bg-neutral-700 dark:hover:bg-neutral-600'
                         : 'bg-sky-600 hover:bg-sky-500 text-white'
@@ -733,6 +734,16 @@ function EventsPageContent() {
                       <ArrowRight className="w-3.5 h-3.5" />
                     )}
                   </Link>
+                  {canManageEvents && (
+                    <Link
+                      href={`/attendance?sessionId=${evt.id}&unitId=${evt.unit_id}&scanTamam=1`}
+                      className="py-2.5 px-3 rounded-xl text-xs font-semibold bg-violet-600 hover:bg-violet-500 text-white flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-2xs shrink-0"
+                      title={language === 'ar' ? 'مسح التمام بالذكاء الاصطناعي' : 'Scan Tamam Photos (AI)'}
+                    >
+                      <Camera className="w-4 h-4" />
+                      <span className="hidden sm:inline">{language === 'ar' ? 'مسح التمام (AI)' : 'Scan AI'}</span>
+                    </Link>
+                  )}
                 </div>
               </div>
             );

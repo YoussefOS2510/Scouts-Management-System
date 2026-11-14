@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useEffect, Suspense } from 'react';
+import React, { useState, useMemo, useEffect, useRef, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useLanguage } from '../../lib/LanguageContext';
@@ -40,8 +40,119 @@ import {
   Info,
   ArrowRight,
   ArrowLeft,
+  Camera,
+  Upload,
+  KeyRound,
+  Image as ImageIcon,
+  ScanLine,
+  AlertCircle,
 } from 'lucide-react';
 import { TeamAttendanceAnalytics } from '../../components/TeamAttendanceAnalytics';
+
+interface ScannedTamamImage {
+  id: string;
+  fileName: string;
+  previewUrl: string;
+  mimeType: string;
+  base64Data: string;
+}
+
+interface ScannedScoutResult {
+  memberId: string;
+  full_name_ar: string;
+  patrol_name_ar: string;
+  patrol_role?: string;
+  status: AttendanceStatus;
+  notes: string;
+  scannedNameAr?: string;
+  confidence: 'high' | 'medium' | 'low';
+}
+
+interface TamamScanResponse {
+  patrolsDetected: string[];
+  results: ScannedScoutResult[];
+  unmatchedRows: {
+    scannedNameAr: string;
+    patrolNameAr?: string;
+    status: string;
+    notes?: string;
+  }[];
+  summary: {
+    imagesScanned: number;
+    totalMatched: number;
+    presentCount: number;
+    absentCount: number;
+    excusedCount: number;
+    lateCount: number;
+    unmatchedCount?: number;
+  };
+  modelUsed?: string;
+}
+
+/**
+ * Resize and compress a photo of a Tamam sheet client-side before sending to Gemini,
+ * keeping text crisp (max 1600px) while avoiding oversized request payloads when scanning many patrols.
+ */
+async function compressImageFile(file: File): Promise<{
+  mimeType: string;
+  base64Data: string;
+  previewUrl: string;
+}> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error(`Failed to read file ${file.name}`));
+    reader.onload = () => {
+      const dataUrl = String(reader.result || '');
+      const img = new window.Image();
+      img.onerror = () => {
+        // Fallback: use raw base64 if browser cannot decode image onto canvas
+        const idx = dataUrl.indexOf('base64,');
+        resolve({
+          mimeType: file.type || 'image/jpeg',
+          base64Data: idx !== -1 ? dataUrl.slice(idx + 7) : dataUrl,
+          previewUrl: dataUrl,
+        });
+      };
+      img.onload = () => {
+        const maxDim = 1600;
+        let width = img.width;
+        let height = img.height;
+        if (width > maxDim || height > maxDim) {
+          if (width >= height) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          } else {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          const idx = dataUrl.indexOf('base64,');
+          resolve({
+            mimeType: file.type || 'image/jpeg',
+            base64Data: idx !== -1 ? dataUrl.slice(idx + 7) : dataUrl,
+            previewUrl: dataUrl,
+          });
+          return;
+        }
+        ctx.drawImage(img, 0, 0, width, height);
+        const compressedUrl = canvas.toDataURL('image/jpeg', 0.85);
+        const idx = compressedUrl.indexOf('base64,');
+        resolve({
+          mimeType: 'image/jpeg',
+          base64Data: idx !== -1 ? compressedUrl.slice(idx + 7) : compressedUrl,
+          previewUrl: compressedUrl,
+        });
+      };
+      img.src = dataUrl;
+    };
+    reader.readAsDataURL(file);
+  });
+}
 
 const EVENT_PRESETS = [
   { ar: 'اجتماع كشفي أسبوعي', en: 'Weekly Scout Meeting', type: 'meeting' },
@@ -58,6 +169,7 @@ function AttendancePageContent() {
   const searchParams = useSearchParams();
   const querySessionId = searchParams.get('sessionId');
   const queryUnitId = searchParams.get('unitId') || searchParams.get('unit');
+  const queryScanTamam = searchParams.get('scanTamam');
 
   const {
     currentUser,
@@ -128,6 +240,40 @@ function AttendancePageContent() {
   const [isNewEventModalOpen, setIsNewEventModalOpen] = useState<boolean>(false);
   const [isEditEventModalOpen, setIsEditEventModalOpen] = useState<boolean>(false);
   const [isDeletingEvent, setIsDeletingEvent] = useState<boolean>(false);
+
+  // AI Tamam Scanner State
+  const [isScanModalOpen, setIsScanModalOpen] = useState<boolean>(false);
+  const [scanImages, setScanImages] = useState<ScannedTamamImage[]>([]);
+  const [isScanningTamam, setIsScanningTamam] = useState<boolean>(false);
+  const [scanError, setScanError] = useState<string | null>(null);
+  const [hasServerGeminiKey, setHasServerGeminiKey] = useState<boolean>(false);
+  const [userGeminiApiKey, setUserGeminiApiKey] = useState<string>('');
+  const [showApiKeyInput, setShowApiKeyInput] = useState<boolean>(false);
+  const [includeSubColumnsInNotes, setIncludeSubColumnsInNotes] = useState<boolean>(true);
+  const [replaceExistingMarks, setReplaceExistingMarks] = useState<boolean>(true);
+  const [scanResponse, setScanResponse] = useState<TamamScanResponse | null>(null);
+  const didAutoOpenScanRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        const storedKey = localStorage.getItem('scouts_gemini_api_key') || '';
+        if (storedKey) setUserGeminiApiKey(storedKey);
+      }
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    if (!isScanModalOpen) return;
+    fetch('/api/attendance/scan-tamam')
+      .then((r) => r.json())
+      .then((data) => {
+        if (data?.success) {
+          setHasServerGeminiKey(Boolean(data.hasServerApiKey));
+        }
+      })
+      .catch(() => {});
+  }, [isScanModalOpen]);
 
   // New Event Form State
   const [newEventTitle, setNewEventTitle] = useState<string>('اجتماع كشفي أسبوعي');
@@ -258,6 +404,14 @@ function AttendancePageContent() {
   const activeEvent = useMemo(() => {
     return events.find((e) => e.id === selectedSessionId) || null;
   }, [events, selectedSessionId]);
+
+  // Auto-open Tamam AI scanner if navigated with ?scanTamam=1
+  useEffect(() => {
+    if (queryScanTamam === '1' && activeEvent && canTakeAttendance && !didAutoOpenScanRef.current) {
+      didAutoOpenScanRef.current = true;
+      setIsScanModalOpen(true);
+    }
+  }, [queryScanTamam, activeEvent, canTakeAttendance]);
 
   // Search & Status Filter for Attendance Taking
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -410,6 +564,213 @@ function AttendancePageContent() {
       } catch {}
       return nextState;
     });
+  };
+
+  // Handle adding camera/uploaded Tamam photos
+  const handleScanFilesSelected = async (fileList: FileList | null) => {
+    if (!fileList || fileList.length === 0) return;
+    setScanError(null);
+    const files = Array.from(fileList).filter((f) => f.type.startsWith('image/'));
+    if (files.length === 0) {
+      setScanError(
+        language === 'ar' ? 'يرجى اختيار ملفات صور صالحة فقط.' : 'Please select valid image files only.'
+      );
+      return;
+    }
+
+    try {
+      const processed: ScannedTamamImage[] = await Promise.all(
+        files.map(async (file, index) => {
+          const compressed = await compressImageFile(file);
+          return {
+            id: `${Date.now()}-${index}-${Math.random().toString(36).slice(2, 8)}`,
+            fileName: file.name || `tamam-${scanImages.length + index + 1}.jpg`,
+            previewUrl: compressed.previewUrl,
+            mimeType: compressed.mimeType,
+            base64Data: compressed.base64Data,
+          };
+        })
+      );
+      setScanImages((prev) => [...prev, ...processed]);
+      setScanResponse(null);
+    } catch (err: any) {
+      console.error('Image preparation error:', err);
+      setScanError(
+        err?.message ||
+          (language === 'ar' ? 'تعذر معالجة الصور المرفقة.' : 'Failed to process selected images.')
+      );
+    }
+  };
+
+  const handleRemoveScanImage = (imgId: string) => {
+    setScanImages((prev) => prev.filter((img) => img.id !== imgId));
+    setScanResponse(null);
+  };
+
+  const handleSaveUserApiKey = (val: string) => {
+    setUserGeminiApiKey(val);
+    try {
+      if (typeof window !== 'undefined') {
+        if (val.trim()) {
+          localStorage.setItem('scouts_gemini_api_key', val.trim());
+        } else {
+          localStorage.removeItem('scouts_gemini_api_key');
+        }
+      }
+    } catch {}
+  };
+
+  const handleRunTamamScan = async () => {
+    if (scanImages.length === 0) {
+      setScanError(
+        language === 'ar'
+          ? 'يرجى التقاط أو رفع صورة واحدة على الأقل لكشف التمام.'
+          : 'Please take or upload at least one Tamam sheet photo.'
+      );
+      return;
+    }
+    if (activeMembers.length === 0) {
+      setScanError(
+        language === 'ar'
+          ? 'لا يوجد كشافون في هذه الوحدة للمطابقة معهم.'
+          : 'No scouts found in this unit to match against.'
+      );
+      return;
+    }
+
+    setIsScanningTamam(true);
+    setScanError(null);
+    setScanResponse(null);
+
+    try {
+      const patrolNameMap = new Map<number, string>();
+      activePatrols.forEach((p) => patrolNameMap.set(p.id, p.name_ar));
+
+      const rosterPayload = activeMembers.map((m) => ({
+        id: m.id,
+        full_name_ar: m.full_name_ar,
+        full_name_en: m.full_name_en,
+        member_code: m.member_code,
+        patrol_id: m.patrol_id,
+        patrol_name_ar: m.patrol_id ? patrolNameMap.get(m.patrol_id) || '' : '',
+        patrol_role: m.patrol_role || '',
+      }));
+
+      const res = await fetch('/api/attendance/scan-tamam', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          images: scanImages.map((img) => ({
+            mimeType: img.mimeType,
+            data: img.base64Data,
+            fileName: img.fileName,
+          })),
+          members: rosterPayload,
+          includeSubColumnsInNotes,
+          apiKey: userGeminiApiKey.trim() || undefined,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        if (data?.errorCode === 'MISSING_API_KEY') {
+          setShowApiKeyInput(true);
+        }
+        setScanError(
+          data?.error ||
+            (language === 'ar' ? 'فشل تحليل صور التمام عبر Gemini API.' : 'Failed to analyze Tamam images.')
+        );
+        return;
+      }
+
+      setScanResponse({
+        patrolsDetected: data.patrolsDetected || [],
+        results: data.results || [],
+        unmatchedRows: data.unmatchedRows || [],
+        summary: data.summary || {
+          imagesScanned: scanImages.length,
+          totalMatched: (data.results || []).length,
+          presentCount: 0,
+          absentCount: 0,
+          excusedCount: 0,
+          lateCount: 0,
+        },
+        modelUsed: data.modelUsed,
+      });
+    } catch (err: any) {
+      console.error('Tamam scan request failed:', err);
+      setScanError(
+        err?.message ||
+          (language === 'ar'
+            ? 'تعذر الاتصال بخدمة المسح الذكي.'
+            : 'Could not reach the AI scanner endpoint.')
+      );
+    } finally {
+      setIsScanningTamam(false);
+    }
+  };
+
+  const handleUpdatePreviewRowStatus = (memberId: string, status: AttendanceStatus) => {
+    setScanResponse((prev) => {
+      if (!prev) return prev;
+      const updatedResults = prev.results.map((r) =>
+        r.memberId === memberId ? { ...r, status } : r
+      );
+      return {
+        ...prev,
+        results: updatedResults,
+        summary: {
+          ...prev.summary,
+          presentCount: updatedResults.filter((r) => r.status === 'present').length,
+          absentCount: updatedResults.filter((r) => r.status === 'absent').length,
+          excusedCount: updatedResults.filter((r) => r.status === 'excused').length,
+          lateCount: updatedResults.filter((r) => r.status === 'late').length,
+        },
+      };
+    });
+  };
+
+  const handleUpdatePreviewRowNotes = (memberId: string, notes: string) => {
+    setScanResponse((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        results: prev.results.map((r) => (r.memberId === memberId ? { ...r, notes } : r)),
+      };
+    });
+  };
+
+  const handleApplyScannedAttendance = () => {
+    if (!canTakeAttendance || !selectedSessionId || !scanResponse) return;
+    const updated = { ...records };
+    let appliedCount = 0;
+
+    scanResponse.results.forEach((row) => {
+      const existing = updated[row.memberId];
+      if (!replaceExistingMarks && existing?.status) {
+        return;
+      }
+      updated[row.memberId] = {
+        status: row.status,
+        notes: row.notes || existing?.notes || '',
+      };
+      appliedCount += 1;
+    });
+
+    try {
+      if (typeof window !== 'undefined' && selectedSessionId) {
+        localStorage.setItem(`scouts_att_draft_${selectedSessionId}`, JSON.stringify(updated));
+      }
+    } catch {}
+
+    setRecords(updated);
+    setIsScanModalOpen(false);
+    setSaveNotification(
+      language === 'ar'
+        ? `تم رصد حضور ${appliedCount} كشاف تلقائياً من صور التمام! يمكنك المراجعة والتعديل يدوياً ثم الضغط على "حفظ حضور الفعالية".`
+        : `Populated attendance for ${appliedCount} scouts from Tamam photos! Review or edit manually, then click Save.`
+    );
+    setTimeout(() => setSaveNotification(null), 7000);
   };
 
   // Create New Event
@@ -922,7 +1283,19 @@ function AttendancePageContent() {
             {/* Actions: Batch Mark, Export Excel, Save Session */}
             <div className="flex items-center gap-2 w-full md:w-auto justify-end pt-2 md:pt-0 border-t md:border-t-0 border-neutral-100 dark:border-neutral-800">
               {canTakeAttendance && activeEvent && (
-                <div className="flex items-center gap-1.5">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setScanError(null);
+                      setIsScanModalOpen(true);
+                    }}
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 shadow-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                    title={language === 'ar' ? 'مسح كشوف التمام بالذكاء الاصطناعي' : 'Scan Tamam Photos (AI)'}
+                  >
+                    <Camera className="w-3.5 h-3.5" />
+                    <span>{language === 'ar' ? 'مسح التمام (AI)' : 'Scan Tamam (AI)'}</span>
+                  </button>
                   <button
                     onClick={handleMarkAllPresent}
                     className="px-2.5 py-1.5 rounded-lg text-xs font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
@@ -1027,9 +1400,21 @@ function AttendancePageContent() {
                 )}
               </div>
 
-              {/* Event Actions: Edit & Delete */}
+              {/* Event Actions: Scan Tamam AI, Edit & Delete */}
               {canTakeAttendance && (
-                <div className="flex items-center gap-2 self-end md:self-center shrink-0">
+                <div className="flex flex-wrap items-center gap-2 self-end md:self-center shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setScanError(null);
+                      setIsScanModalOpen(true);
+                    }}
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-violet-600 hover:bg-violet-500 text-white flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+                    title={language === 'ar' ? 'تصوير أو رفع كشوف التمام لكل الطلائع' : 'Photograph or upload all patrol Tamam sheets'}
+                  >
+                    <ScanLine className="w-3.5 h-3.5" />
+                    <span>{language === 'ar' ? 'مسح كشوف التمام بالذكاء الاصطناعي' : 'Scan Tamam Photos (AI)'}</span>
+                  </button>
                   <button
                     onClick={openEditModal}
                     className="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-white dark:bg-[#1E293B] hover:bg-neutral-100 dark:hover:bg-neutral-700/80 text-neutral-700 dark:text-neutral-200 border border-neutral-200 dark:border-neutral-700 flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
@@ -1438,15 +1823,22 @@ function AttendancePageContent() {
                                 </button>
                               </div>
 
-                              {/* Excuse Reason Input */}
-                              {currentStatus === 'excused' && (
+                              {/* Excuse Reason / Scanned Notes Input */}
+                              {(currentStatus === 'excused' || Boolean(current?.notes)) && (
                                 <div className="w-full sm:w-56 animate-fadeIn">
                                   <input
                                     type="text"
-                                    placeholder={language === 'ar' ? 'سبب الاعتذار...' : 'Excuse reason...'}
+                                    placeholder={
+                                      language === 'ar'
+                                        ? currentStatus === 'excused'
+                                          ? 'سبب الاعتذار...'
+                                          : 'ملاحظات...'
+                                        : currentStatus === 'excused'
+                                        ? 'Excuse reason...'
+                                        : 'Notes...'
+                                    }
                                     value={current?.notes || ''}
                                     onChange={(e) => handleNotesChange(member.id, e.target.value)}
-                                    autoFocus
                                     className="w-full bg-neutral-100 dark:bg-[#0B0F17] border border-amber-500/40 rounded-lg px-2.5 py-1 text-xs text-neutral-900 dark:text-neutral-100 placeholder-neutral-400 focus:outline-none focus:ring-1 focus:ring-amber-500"
                                     dir="auto"
                                   />
@@ -1540,14 +1932,21 @@ function AttendancePageContent() {
                               </button>
                             </div>
 
-                            {/* Dynamic excuse reason input */}
-                            {currentStatus === 'excused' && (
+                            {/* Dynamic excuse reason / scanned notes input */}
+                            {(currentStatus === 'excused' || Boolean(current?.notes)) && (
                               <input
                                 type="text"
-                                placeholder={language === 'ar' ? 'سبب الاعتذار...' : 'Excuse reason...'}
+                                placeholder={
+                                  language === 'ar'
+                                    ? currentStatus === 'excused'
+                                      ? 'سبب الاعتذار...'
+                                      : 'ملاحظات...'
+                                    : currentStatus === 'excused'
+                                    ? 'Excuse reason...'
+                                    : 'Notes...'
+                                }
                                 value={current?.notes || ''}
                                 onChange={(e) => handleNotesChange(member.id, e.target.value)}
-                                autoFocus
                                 className="w-full bg-neutral-100 dark:bg-[#0B0F17] border border-amber-500/40 rounded-lg px-2.5 py-1 text-xs text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-amber-500"
                                 dir="auto"
                               />
@@ -1841,6 +2240,454 @@ function AttendancePageContent() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 8. MODAL: AI TAMAM PHOTO SCANNER (GEMINI VISION) */}
+      {/* ========================================================================= */}
+      {isScanModalOpen && activeEvent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/65 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white dark:bg-[#111827] w-full max-w-3xl max-h-[92vh] rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-2xl overflow-hidden flex flex-col animate-scaleUp">
+            {/* Modal Header */}
+            <div className="px-5 py-4 border-b border-neutral-200/80 dark:border-neutral-800 flex items-center justify-between bg-gradient-to-r from-violet-500/10 via-indigo-500/5 to-transparent dark:from-violet-500/15 dark:via-indigo-500/5 dark:to-transparent shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-violet-600 text-white flex items-center justify-center shadow-xs shrink-0">
+                  <Sparkles className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm sm:text-base text-neutral-900 dark:text-neutral-100">
+                    {language === 'ar'
+                      ? 'مسح كشوف التمام بالذكاء الاصطناعي (Gemini AI)'
+                      : 'Scan Tamam Attendance Sheets (Gemini AI)'}
+                  </h3>
+                  <p className="text-[11px] text-neutral-500 dark:text-neutral-400">
+                    {language === 'ar'
+                      ? `التقط أو ارفع صور كشوف تمام كل طلائع وسداسيات ${currentUnitObj?.name_ar || 'الوحدة'} لفعالية "${activeEvent.session_title}"`
+                      : `Take or upload photos of Tamam sheets for all patrols in ${currentUnitObj?.name_en || 'the unit'} for "${activeEvent.session_title}"`}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsScanModalOpen(false)}
+                className="p-1.5 rounded-lg text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Scrollable Body */}
+            <div className="p-5 space-y-4 overflow-y-auto flex-1">
+              {/* Gemini API Key Status / Input */}
+              <div className="rounded-xl p-3 bg-neutral-50 dark:bg-[#0B0F17] border border-neutral-200/80 dark:border-neutral-800 space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 text-xs">
+                    <KeyRound className="w-4 h-4 text-violet-500 shrink-0" />
+                    {hasServerGeminiKey && !userGeminiApiKey ? (
+                      <span className="inline-flex items-center gap-1.5 font-semibold text-emerald-700 dark:text-emerald-400">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                        {language === 'ar'
+                          ? 'مفتاح Gemini AI مُعدّ تلقائياً على الخادم'
+                          : 'Gemini AI key configured on server'}
+                      </span>
+                    ) : userGeminiApiKey.trim() ? (
+                      <span className="inline-flex items-center gap-1.5 font-semibold text-emerald-700 dark:text-emerald-400">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                        {language === 'ar'
+                          ? 'يتم استخدام مفتاح Gemini API المحفوظ لديك'
+                          : 'Using your saved Gemini API key'}
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 font-semibold text-amber-700 dark:text-amber-400">
+                        <AlertCircle className="w-3.5 h-3.5" />
+                        {language === 'ar'
+                          ? 'مطلوب مفتاح Gemini API (أو إضافته في GEMINI_API_KEY)'
+                          : 'Gemini API key required (or set GEMINI_API_KEY on server)'}
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowApiKeyInput((v) => !v)}
+                    className="text-[11px] font-medium text-violet-600 dark:text-violet-400 hover:underline cursor-pointer"
+                  >
+                    {showApiKeyInput
+                      ? language === 'ar'
+                        ? 'إخفاء إدخال المفتاح'
+                        : 'Hide API key input'
+                      : language === 'ar'
+                      ? 'إدخال / تغيير مفتاح Gemini API'
+                      : 'Enter / Change Gemini API Key'}
+                  </button>
+                </div>
+
+                {(showApiKeyInput || (!hasServerGeminiKey && !userGeminiApiKey.trim())) && (
+                  <div className="pt-1 space-y-1.5">
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <input
+                        type="password"
+                        value={userGeminiApiKey}
+                        onChange={(e) => handleSaveUserApiKey(e.target.value)}
+                        placeholder={
+                          language === 'ar'
+                            ? 'الصق مفتاح Gemini API هنا (AIza...)'
+                            : 'Paste your Gemini API key here (AIza...)'
+                        }
+                        className="flex-1 bg-white dark:bg-[#111827] border border-neutral-300 dark:border-neutral-700 rounded-lg px-3 py-1.5 text-xs font-mono text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                        dir="ltr"
+                      />
+                      <a
+                        href="https://aistudio.google.com/apikey"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300 border border-violet-200 dark:border-violet-800 hover:bg-violet-100 dark:hover:bg-violet-900/50 transition-colors text-center shrink-0"
+                      >
+                        {language === 'ar' ? 'الحصول على مفتاح Gemini' : 'Get Gemini API Key'}
+                      </a>
+                    </div>
+                    <p className="text-[10px] text-neutral-500 dark:text-neutral-400">
+                      {language === 'ar'
+                        ? 'يُحفظ المفتاح محلياً في متصفحك فقط ويُستخدم لإرسال صور التمام إلى نموذج Gemini Vision.'
+                        : 'Saved locally in your browser and used only to analyze uploaded Tamam photos via Gemini Vision.'}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Camera Capture + Multi-Upload Controls */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <label className="flex items-center justify-center gap-2.5 p-4 rounded-xl border-2 border-dashed border-violet-300 dark:border-violet-800/80 bg-violet-50/60 dark:bg-violet-950/20 hover:bg-violet-100/60 dark:hover:bg-violet-900/30 text-violet-800 dark:text-violet-300 cursor-pointer transition-colors">
+                  <Camera className="w-5 h-5 shrink-0" />
+                  <div className="text-start">
+                    <div className="text-xs font-bold">
+                      {language === 'ar' ? 'تصوير بكاميرا الموبايل' : 'Take Photo with Camera'}
+                    </div>
+                    <div className="text-[10px] opacity-80">
+                      {language === 'ar'
+                        ? 'صوّر كشف طليعة وأضف التالي بسهولة'
+                        : 'Snap a patrol Tamam sheet one by one'}
+                    </div>
+                  </div>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    className="hidden"
+                    onChange={(e) => {
+                      handleScanFilesSelected(e.target.files);
+                      e.target.value = '';
+                    }}
+                  />
+                </label>
+
+                <label className="flex items-center justify-center gap-2.5 p-4 rounded-xl border-2 border-dashed border-sky-300 dark:border-sky-800/80 bg-sky-50/60 dark:bg-sky-950/20 hover:bg-sky-100/60 dark:hover:bg-sky-900/30 text-sky-800 dark:text-sky-300 cursor-pointer transition-colors">
+                  <Upload className="w-5 h-5 shrink-0" />
+                  <div className="text-start">
+                    <div className="text-xs font-bold">
+                      {language === 'ar' ? 'رفع صور التمام (متعدد)' : 'Upload Tamam Photos (Multiple)'}
+                    </div>
+                    <div className="text-[10px] opacity-80">
+                      {language === 'ar'
+                        ? 'اختر صور كشوف جميع الطلائع دفعة واحدة'
+                        : 'Select photos of all patrol sheets at once'}
+                    </div>
+                  </div>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => {
+                      handleScanFilesSelected(e.target.files);
+                      e.target.value = '';
+                    }}
+                  />
+                </label>
+              </div>
+
+              {/* Uploaded Thumbnails Preview */}
+              {scanImages.length > 0 && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-semibold text-neutral-700 dark:text-neutral-300 flex items-center gap-1.5">
+                      <ImageIcon className="w-3.5 h-3.5 text-violet-500" />
+                      <span>
+                        {language === 'ar'
+                          ? `الصور المرفقة (${scanImages.length} ورقة تمام)`
+                          : `Attached Photos (${scanImages.length} Tamam sheet${scanImages.length > 1 ? 's' : ''})`}
+                      </span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setScanImages([]);
+                        setScanResponse(null);
+                      }}
+                      className="text-[11px] text-rose-600 dark:text-rose-400 hover:underline cursor-pointer"
+                    >
+                      {language === 'ar' ? 'مسح كل الصور' : 'Clear all photos'}
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-3 sm:grid-cols-5 gap-2.5">
+                    {scanImages.map((img, idx) => (
+                      <div
+                        key={img.id}
+                        className="relative group rounded-xl overflow-hidden border border-neutral-200 dark:border-neutral-700 bg-neutral-100 dark:bg-[#0B0F17] aspect-[3/4]"
+                      >
+                        <img
+                          src={img.previewUrl}
+                          alt={img.fileName}
+                          className="w-full h-full object-cover"
+                        />
+                        <span className="absolute bottom-1 start-1 px-1.5 py-0.5 rounded bg-black/70 text-white text-[10px] font-mono">
+                          #{idx + 1}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveScanImage(img.id)}
+                          className="absolute top-1 end-1 p-1 rounded-full bg-rose-600/90 hover:bg-rose-500 text-white shadow-xs cursor-pointer"
+                          title={language === 'ar' ? 'حذف الصورة' : 'Remove photo'}
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Scan Options */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1 text-xs">
+                <label className="flex items-center gap-2 text-neutral-700 dark:text-neutral-300 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={includeSubColumnsInNotes}
+                    onChange={(e) => setIncludeSubColumnsInNotes(e.target.checked)}
+                    className="rounded border-neutral-300 text-violet-600 focus:ring-violet-500 cursor-pointer"
+                  />
+                  <span>
+                    {language === 'ar'
+                      ? 'تضمين علامات (قداس / مدارس أحد / الزي) في الملاحظات'
+                      : 'Include Mass / Sunday School / Uniform marks in notes'}
+                  </span>
+                </label>
+
+                <label className="flex items-center gap-2 text-neutral-700 dark:text-neutral-300 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={replaceExistingMarks}
+                    onChange={(e) => setReplaceExistingMarks(e.target.checked)}
+                    className="rounded border-neutral-300 text-violet-600 focus:ring-violet-500 cursor-pointer"
+                  />
+                  <span>
+                    {language === 'ar'
+                      ? 'استبدال التحضير المسجل مسبقاً للمطابقين'
+                      : 'Overwrite existing marks for matched scouts'}
+                  </span>
+                </label>
+              </div>
+
+              {/* Error Banner */}
+              {scanError && (
+                <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-300 dark:border-rose-800 text-rose-800 dark:text-rose-300 text-xs flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>{scanError}</span>
+                </div>
+              )}
+
+              {/* Scan Button */}
+              {scanImages.length > 0 && (
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={handleRunTamamScan}
+                    disabled={isScanningTamam}
+                    className="w-full sm:w-auto px-5 py-2.5 rounded-xl text-xs font-bold bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 disabled:opacity-60 text-white shadow-sm flex items-center justify-center gap-2 transition-all cursor-pointer"
+                  >
+                    {isScanningTamam ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        <span>
+                          {language === 'ar'
+                            ? 'جاري قراءة كشوف التمام ومطابقة الأسماء...'
+                            : 'Scanning Tamam sheets & matching scouts...'}
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <ScanLine className="w-4 h-4" />
+                        <span>
+                          {language === 'ar'
+                            ? `تحليل واستخراج الحضور من ${scanImages.length} صورة`
+                            : `Scan & Extract Attendance (${scanImages.length} photo${scanImages.length > 1 ? 's' : ''})`}
+                        </span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
+
+              {/* Scanned Results Preview & Quick Inline Adjustment */}
+              {scanResponse && (
+                <div className="space-y-3 pt-2 border-t border-neutral-200 dark:border-neutral-800 animate-fadeIn">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                      <span className="px-2.5 py-1 rounded-lg bg-neutral-100 dark:bg-[#1E293B] font-bold text-neutral-800 dark:text-neutral-200">
+                        {language === 'ar'
+                          ? `تمت مطابقة ${scanResponse.results.length} كشاف`
+                          : `Matched ${scanResponse.results.length} scouts`}
+                      </span>
+                      <span className="px-2 py-1 rounded-lg bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 font-semibold">
+                        {language === 'ar' ? 'حاضر:' : 'Present:'} {scanResponse.summary.presentCount}
+                      </span>
+                      <span className="px-2 py-1 rounded-lg bg-rose-500/15 text-rose-700 dark:text-rose-400 font-semibold">
+                        {language === 'ar' ? 'غائب:' : 'Absent:'} {scanResponse.summary.absentCount}
+                      </span>
+                      {(scanResponse.summary.excusedCount > 0 || scanResponse.summary.lateCount > 0) && (
+                        <span className="px-2 py-1 rounded-lg bg-amber-500/15 text-amber-700 dark:text-amber-400 font-semibold">
+                          {language === 'ar' ? 'معتذر/متأخر:' : 'Excused/Late:'}{' '}
+                          {scanResponse.summary.excusedCount + scanResponse.summary.lateCount}
+                        </span>
+                      )}
+                    </div>
+
+                    {scanResponse.patrolsDetected.length > 0 && (
+                      <div className="flex flex-wrap items-center gap-1">
+                        {scanResponse.patrolsDetected.map((pat, i) => (
+                          <span
+                            key={i}
+                            className="px-2 py-0.5 rounded-md text-[10px] font-medium bg-sky-500/10 text-sky-700 dark:text-sky-300 border border-sky-500/20"
+                          >
+                            {pat}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Preview Table */}
+                  {scanResponse.results.length > 0 ? (
+                    <div className="border border-neutral-200 dark:border-neutral-800 rounded-xl overflow-hidden max-h-64 overflow-y-auto divide-y divide-neutral-200/70 dark:divide-neutral-800/70">
+                      {scanResponse.results.map((row) => (
+                        <div
+                          key={row.memberId}
+                          className="p-2.5 bg-white dark:bg-[#0B0F17]/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold text-neutral-900 dark:text-neutral-100 truncate">
+                                {row.full_name_ar}
+                              </span>
+                              {row.patrol_name_ar && (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-neutral-100 dark:bg-[#1E293B] text-neutral-500 dark:text-neutral-400 shrink-0">
+                                  {row.patrol_name_ar}
+                                </span>
+                              )}
+                              {row.confidence !== 'high' && (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-300 shrink-0">
+                                  {language === 'ar' ? 'تطابق تقريبي' : 'Verify match'}
+                                </span>
+                              )}
+                            </div>
+                            <input
+                              type="text"
+                              value={row.notes}
+                              onChange={(e) => handleUpdatePreviewRowNotes(row.memberId, e.target.value)}
+                              placeholder={language === 'ar' ? 'ملاحظات...' : 'Notes...'}
+                              className="mt-1 w-full bg-neutral-50 dark:bg-[#111827] border border-neutral-200 dark:border-neutral-800 rounded-md px-2 py-0.5 text-[11px] text-neutral-700 dark:text-neutral-300 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                              dir="auto"
+                            />
+                          </div>
+
+                          <div className="inline-flex p-0.5 rounded-lg bg-neutral-100 dark:bg-[#111827] border border-neutral-200 dark:border-neutral-800 shrink-0">
+                            {(
+                              [
+                                { id: 'present', ar: 'حاضر', en: 'Present', activeCls: 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 font-semibold' },
+                                { id: 'absent', ar: 'غائب', en: 'Absent', activeCls: 'bg-rose-500/20 text-rose-700 dark:text-rose-300 font-semibold' },
+                                { id: 'excused', ar: 'معتذر', en: 'Excused', activeCls: 'bg-amber-500/20 text-amber-700 dark:text-amber-300 font-semibold' },
+                                { id: 'late', ar: 'متأخر', en: 'Late', activeCls: 'bg-amber-500/20 text-amber-700 dark:text-amber-300 font-semibold' },
+                              ] as const
+                            ).map((opt) => (
+                              <button
+                                key={opt.id}
+                                type="button"
+                                onClick={() => handleUpdatePreviewRowStatus(row.memberId, opt.id)}
+                                className={`px-2 py-1 rounded-md text-[11px] transition-colors cursor-pointer ${
+                                  row.status === opt.id
+                                    ? opt.activeCls
+                                    : 'text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200'
+                                }`}
+                              >
+                                {language === 'ar' ? opt.ar : opt.en}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-xs text-amber-800 dark:text-amber-300">
+                      {language === 'ar'
+                        ? 'لم يتم العثور على أسماء مطابقة لأعضاء هذه الوحدة في الصور المرفوعة. تأكد من وضوح الصور وأن الفعالية تخص الوحدة الصحيحة.'
+                        : 'No rows in the uploaded photos matched scouts in this unit. Make sure the photos are clear and belong to the selected unit.'}
+                    </div>
+                  )}
+
+                  {/* Unmatched rows notice */}
+                  {scanResponse.unmatchedRows.length > 0 && (
+                    <div className="p-3 rounded-xl bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200/80 dark:border-amber-900/50 text-[11px] text-amber-800 dark:text-amber-300 space-y-1">
+                      <div className="font-semibold flex items-center gap-1.5">
+                        <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                        <span>
+                          {language === 'ar'
+                            ? `أسماء مقروءة لم تُطابق تلقائياً (${scanResponse.unmatchedRows.length}) — يرجى مراجعتها يدوياً:`
+                            : `Unmatched scanned rows (${scanResponse.unmatchedRows.length}) — please verify manually:`}
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5 pt-0.5">
+                        {scanResponse.unmatchedRows.map((u, i) => (
+                          <span
+                            key={i}
+                            className="px-2 py-0.5 rounded bg-white/80 dark:bg-[#111827] border border-amber-300/60 dark:border-amber-800/60"
+                          >
+                            {u.scannedNameAr} ({u.status})
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-5 py-3.5 border-t border-neutral-200/80 dark:border-neutral-800 bg-neutral-50/60 dark:bg-[#161F30]/60 flex flex-wrap items-center justify-between gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsScanModalOpen(false)}
+                className="px-4 py-2 rounded-xl text-xs font-medium text-neutral-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors cursor-pointer"
+              >
+                {language === 'ar' ? 'إغلاق' : 'Close'}
+              </button>
+
+              {scanResponse && scanResponse.results.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleApplyScannedAttendance}
+                  className="px-5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>
+                    {language === 'ar'
+                      ? `تطبيق الحضور على الصفحة للتعديل اليدوي (${scanResponse.results.length})`
+                      : `Apply to Attendance Page for Manual Editing (${scanResponse.results.length})`}
+                  </span>
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}
