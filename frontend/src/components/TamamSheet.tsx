@@ -31,7 +31,6 @@ export default function TamamSheet({
   // Pad table with empty rows if fewer than minRows
   const totalRows = Math.max(members.length, minRows);
   const rows = Array.from({ length: totalRows }, (_, idx) => members[idx] || null);
-  const rowHeight = Math.max(48, Math.floor(620 / rows.length));
 
   // Default role labels matching the official template: 1: CP, 2: CG, 3: 3rd
   const getRank = (idx: number, member: TamamMember | null) => {
@@ -52,16 +51,15 @@ export default function TamamSheet({
     <div
       dir="rtl"
       className="tamam-sheet-page w-full max-w-[210mm] mx-auto bg-white text-black font-sans box-border p-2 sm:p-4 print:p-0 print:m-0 print:max-w-none print:w-full"
-      style={{ minHeight: '280mm' }}
     >
       {/* Outer Double Frame Border (Classic Scout Certificate / Attendance Template) */}
-      <div className="border-[3px] border-black p-1 h-full min-h-[270mm] flex flex-col box-border">
-        <div className="border border-black p-5 sm:p-7 flex-1 flex flex-col">
+      <div className="border-[3px] border-black p-1 box-border">
+        <div className="border border-black p-4 sm:p-6">
           
           {/* Top Section */}
-          <div className="flex-1 flex flex-col">
+          <div>
             {/* Header: Logo, Cross, Title */}
-            <div className="grid grid-cols-3 items-start gap-2 mb-6 pb-2">
+            <div className="grid grid-cols-3 items-center gap-2 mb-4">
               
               {/* Top Right: Scout Group Details */}
               <div className="flex items-center gap-3">
@@ -83,7 +81,7 @@ export default function TamamSheet({
               </div>
 
               {/* Center: Coptic Cross & Tamam Title */}
-              <div className="text-center pt-1">
+              <div className="text-center">
                 {/* Ornate Cross */}
                 <div className="text-3xl font-serif text-black leading-none mb-2 select-none">
                   ♱
@@ -93,37 +91,44 @@ export default function TamamSheet({
                 </div>
               </div>
 
-              {/* Top Left: Attendance Statistics & Roll Call */}
-              <div className="text-left text-xs sm:text-sm font-bold space-y-1.5 pr-2 pt-1">
-                <div className="flex items-center justify-end gap-1">
+              {/* Top Left: Day & Date */}
+              <div className="text-left text-xs sm:text-sm font-bold space-y-1.5 pr-2">
+                <div className="flex items-center justify-end gap-1.5">
                   <span className="font-semibold">اليوم:</span>
                   <span>{dayName}</span>
-                  <span className="font-mono text-xs">{formattedDate}</span>
                 </div>
                 <div className="flex items-center justify-end gap-1.5">
-                  <span className="font-semibold">أصل القوة:</span>
-                  <span className="font-mono font-bold text-sm underline decoration-2">{members.length}</span>
-                </div>
-                <div className="flex items-center justify-end gap-1">
-                  <span className="font-semibold text-zinc-800">أرض الطابور:</span>
-                  <span className="inline-block w-16 border-b border-black"></span>
-                </div>
-                <div className="flex items-center justify-end gap-1">
-                  <span className="font-semibold text-zinc-800">غياب بعذر:</span>
-                  <span className="inline-block w-16 border-b border-black"></span>
-                </div>
-                <div className="flex items-center justify-end gap-1">
-                  <span className="font-semibold text-zinc-800">غياب بدون عذر:</span>
-                  <span className="inline-block w-14 border-b border-black"></span>
+                  <span className="font-semibold">التاريخ:</span>
+                  <span className="font-mono text-xs">{formattedDate}</span>
                 </div>
               </div>
             </div>
 
+            {/* Roll-Call Summary Bar (Below Logo, On Top of Table) */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 print:grid-cols-4 gap-3 border-2 border-black bg-zinc-50/60 print:bg-transparent px-4 py-2.5 mb-3 text-xs sm:text-sm font-bold">
+              <div className="flex items-center gap-1.5">
+                <span className="font-semibold">أصل القوة:</span>
+                <span className="font-mono font-bold text-sm underline decoration-2">{members.length}</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="font-semibold text-zinc-800">أرض الطابور:</span>
+                <span className="inline-block flex-1 min-w-10 border-b border-black"></span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="font-semibold text-zinc-800">غياب بعذر:</span>
+                <span className="inline-block flex-1 min-w-10 border-b border-black"></span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="font-semibold text-zinc-800">غياب بدون عذر:</span>
+                <span className="inline-block flex-1 min-w-10 border-b border-black"></span>
+              </div>
+            </div>
+
             {/* Attendance Table */}
-            <div className="w-full mt-2 flex-1 flex flex-col">
-              <table className="w-full flex-1 border-collapse border-2 border-black text-center text-sm">
+            <div className="w-full">
+              <table className="w-full border-collapse border-2 border-black text-center text-xs sm:text-sm">
                 <thead>
-                  <tr className="bg-zinc-100/60 print:bg-transparent border-b-2 border-black h-12 text-black font-bold">
+                  <tr className="bg-zinc-100/60 print:bg-transparent border-b-2 border-black h-10 sm:h-11 text-black font-bold">
                     <th className="border border-black w-10 py-1.5">م</th>
                     <th className="border border-black w-24 py-1.5 leading-tight">
                       الدور<br />الكشفي
@@ -143,19 +148,19 @@ export default function TamamSheet({
                   {rows.map((scout, idx) => {
                     const role = getRank(idx, scout);
                     return (
-                      <tr key={idx} className="border-b border-black" style={{ height: `${rowHeight}px` }}>
+                      <tr key={idx} className="h-10 sm:h-11 border-b border-black">
                         {/* 1. Sequence Number */}
-                        <td className="border border-black font-mono font-bold text-sm bg-zinc-50/40 print:bg-transparent">
+                        <td className="border border-black font-mono font-bold text-xs sm:text-sm bg-zinc-50/40 print:bg-transparent">
                           {idx + 1}
                         </td>
 
                         {/* 2. Scout Role (CP / CG / 3rd) */}
-                        <td className="border border-black font-bold font-mono text-sm uppercase">
+                        <td className="border border-black font-bold font-mono text-xs sm:text-sm uppercase">
                           {role}
                         </td>
 
                         {/* 3. Scout Name */}
-                        <td className="border border-black font-semibold text-right px-3 text-sm sm:text-[15px] text-zinc-950">
+                        <td className="border border-black font-semibold text-right px-3 py-1.5 text-xs sm:text-sm text-zinc-950">
                           {scout ? (
                             <span>{scout.full_name_ar}</span>
                           ) : (
