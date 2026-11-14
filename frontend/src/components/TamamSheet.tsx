@@ -62,7 +62,7 @@ export default function TamamSheet({
             {/* Header: Logo, Cross, Title */}
             <div className="grid grid-cols-3 items-center gap-2 mb-4">
               
-              {/* Top Right: Scout Group Details */}
+              {/* Top Right: Scout Group Emblem & Unit */}
               <div className="flex items-center gap-3">
                 {/* Official High-Res Emblem */}
                 <img
@@ -70,15 +70,11 @@ export default function TamamSheet({
                   alt="شعار المجموعة الكشفية البحرية"
                   className="w-20 h-20 sm:w-24 sm:h-24 object-contain shrink-0"
                 />
-                <div className="text-[11px] sm:text-xs font-bold leading-relaxed text-black">
-                  <div>المجموعة الكشفية البحرية</div>
-                  <div className="text-[10px] sm:text-[11px] font-semibold text-zinc-800">بكنيسة السيدة العذراء بالرحاب</div>
-                  {unitNameAr && (
-                    <div className="mt-1 inline-block px-1.5 py-0.5 border border-black rounded text-[10px] font-bold">
-                      {unitNameAr}
-                    </div>
-                  )}
-                </div>
+                {unitNameAr && (
+                  <div className="px-2 py-0.5 border border-black rounded text-xs font-bold">
+                    {unitNameAr}
+                  </div>
+                )}
               </div>
 
               {/* Center: Coptic Cross & Tamam Title */}
@@ -105,23 +101,23 @@ export default function TamamSheet({
               </div>
             </div>
 
-            {/* Roll-Call Summary Bar (Below Logo, On Top of Table) */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 print:grid-cols-4 gap-3 border-2 border-black bg-zinc-50/60 print:bg-transparent px-4 py-2.5 mb-3 text-xs sm:text-sm font-bold">
+            {/* Roll-Call Summary (Stacked Vertically Below Logo, On Top of Table) */}
+            <div className="flex flex-col items-start space-y-1.5 mb-3 text-xs sm:text-sm font-bold">
               <div className="flex items-center gap-1.5">
                 <span className="font-semibold">أصل القوة:</span>
                 <span className="font-mono font-bold text-sm underline decoration-2">{members.length}</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="font-semibold text-zinc-800">أرض الطابور:</span>
-                <span className="inline-block flex-1 min-w-10 border-b border-black"></span>
+                <span className="inline-block w-20 border-b border-black"></span>
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="font-semibold text-zinc-800">غياب بعذر:</span>
-                <span className="inline-block flex-1 min-w-10 border-b border-black"></span>
+                <span className="inline-block w-20 border-b border-black"></span>
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="font-semibold text-zinc-800">غياب بدون عذر:</span>
-                <span className="inline-block flex-1 min-w-10 border-b border-black"></span>
+                <span className="inline-block w-20 border-b border-black"></span>
               </div>
             </div>
 
