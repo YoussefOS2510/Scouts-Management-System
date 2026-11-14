@@ -188,22 +188,6 @@ export default function TamamSheet({
             </div>
           </div>
 
-          {/* Bottom Notes / Signatures Section */}
-          <div className="pt-8 grid grid-cols-3 text-xs font-bold text-center border-t border-dashed border-zinc-400 mt-6 print:mt-4">
-            <div>
-              <span>توقيع رائد الطليعة (CP):</span>
-              <div className="mt-6 border-b border-black w-3/4 mx-auto"></div>
-            </div>
-            <div>
-              <span>ملاحظات إضافية:</span>
-              <div className="mt-6 border-b border-black w-3/4 mx-auto"></div>
-            </div>
-            <div>
-              <span>اعتماد قائد المرحلة:</span>
-              <div className="mt-6 border-b border-black w-3/4 mx-auto"></div>
-            </div>
-          </div>
-
         </div>
       </div>
     </div>
