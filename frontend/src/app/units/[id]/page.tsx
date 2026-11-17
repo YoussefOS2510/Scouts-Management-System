@@ -13,7 +13,7 @@ import {
 import { INITIAL_UNITS } from '@/lib/data';
 import { getSubdivisionTerms } from '@/lib/scout-terms';
 import { AttendanceSession, Member, Patrol } from '@/lib/types';
-import TamamSheet from '@/components/TamamSheet';
+import { downloadTamamPdf } from '@/lib/tamam-pdf';
 import {
   Folder,
   Calendar,
@@ -48,9 +48,8 @@ import {
   LayoutGrid,
   List,
   AlertCircle,
-  ExternalLink,
-  Printer,
-  FileText,
+  Download,
+  RefreshCw,
 } from 'lucide-react';
 
 const EVENT_PRESETS = [
@@ -293,8 +292,8 @@ function UnitHubContent() {
   const [patrolToDelete, setPatrolToDelete] = useState<Patrol | null>(null);
   const [isDeletingPatrol, setIsDeletingPatrol] = useState(false);
 
-  // Tamam Sheet State
-  const [tamamPreviewPatrol, setTamamPreviewPatrol] = useState<Patrol | null>(null);
+  // Tamam PDF Download State & Handlers (no preview modal — downloads immediately)
+  const [downloadingTamamId, setDownloadingTamamId] = useState<number | 'all' | null>(null);
   const [tamamDate, setTamamDate] = useState<string>(() => {
     const d = new Date();
     const day = d.getDay();
@@ -303,6 +302,50 @@ function UnitHubContent() {
     return d.toISOString().split('T')[0];
   });
   const [tamamDay, setTamamDay] = useState<string>('الجمعة');
+
+  const handleDownloadPatrolTamam = async (patrol: Patrol) => {
+    setDownloadingTamamId(patrol.id);
+    try {
+      const pMembers = unitMembers.filter((m) => m.patrol_id === patrol.id);
+      await downloadTamamPdf(
+        {
+          unitNameAr: unitObj.name_ar,
+          patrolNameAr: patrol.name_ar,
+          members: pMembers,
+          dayName: tamamDay,
+          dateStr: tamamDate.replace(/-/g, ' / '),
+          minRows: 8,
+        },
+        `تمام_${patrol.name_ar}`
+      );
+    } catch (err: any) {
+      console.error('Failed to download Tamam PDF:', err);
+      alert(language === 'ar' ? 'تعذر إنشاء ملف PDF للتمام' : 'Failed to generate Tamam PDF');
+    } finally {
+      setDownloadingTamamId(null);
+    }
+  };
+
+  const handleDownloadAllUnitTamam = async () => {
+    if (unitPatrols.length === 0) return;
+    setDownloadingTamamId('all');
+    try {
+      const sheets = unitPatrols.map((patrol) => ({
+        unitNameAr: unitObj.name_ar,
+        patrolNameAr: patrol.name_ar,
+        members: unitMembers.filter((m) => m.patrol_id === patrol.id),
+        dayName: tamamDay,
+        dateStr: tamamDate.replace(/-/g, ' / '),
+        minRows: 8,
+      }));
+      await downloadTamamPdf(sheets, `تمام_${unitObj.name_ar}`);
+    } catch (err: any) {
+      console.error('Failed to download all Tamam PDF:', err);
+      alert(language === 'ar' ? 'تعذر إنشاء ملف PDF للتمام' : 'Failed to generate Tamam PDF');
+    } finally {
+      setDownloadingTamamId(null);
+    }
+  };
 
   // New Event Form State
   const [newEventTitle, setNewEventTitle] = useState('اجتماع كشفي أسبوعي');
@@ -1431,15 +1474,42 @@ function UnitHubContent() {
             </div>
 
             <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
-              <Link
-                href={`/members/tamam?unitId=${unitId}`}
-                target="_blank"
-                className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-emerald-700 hover:bg-emerald-800 text-white flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
-                title={language === 'ar' ? `طباعة كشوف تمام جميع ${subdivisionTerms.pluralAr} المرحلة` : `Print All ${subdivisionTerms.pluralEn} Tamam`}
+              {/* Compact Meeting Day & Date for Immediate PDF Download */}
+              <div className="flex items-center gap-1.5 bg-neutral-100 dark:bg-[#0B0F17] border border-neutral-200 dark:border-neutral-800 rounded-xl px-2 py-1 text-xs">
+                <select
+                  value={tamamDay}
+                  onChange={(e) => setTamamDay(e.target.value)}
+                  className="bg-transparent text-neutral-700 dark:text-neutral-200 font-medium focus:outline-none cursor-pointer"
+                  title={language === 'ar' ? 'يوم الاجتماع في كشف التمام' : 'Tamam sheet day'}
+                >
+                  <option value="الجمعة" className="dark:bg-[#111827]">الجمعة</option>
+                  <option value="الخميس" className="dark:bg-[#111827]">الخميس</option>
+                  <option value="السبت" className="dark:bg-[#111827]">السبت</option>
+                  <option value="الأحد" className="dark:bg-[#111827]">الأحد</option>
+                </select>
+                <input
+                  type="date"
+                  value={tamamDate}
+                  onChange={(e) => setTamamDate(e.target.value)}
+                  className="bg-transparent text-neutral-700 dark:text-neutral-200 font-mono text-[11px] focus:outline-none cursor-pointer"
+                  title={language === 'ar' ? 'تاريخ كشف التمام' : 'Tamam sheet date'}
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={handleDownloadAllUnitTamam}
+                disabled={downloadingTamamId === 'all' || unitPatrols.length === 0}
+                className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
+                title={language === 'ar' ? `تحميل كشوف تمام جميع ${subdivisionTerms.pluralAr} المرحلة PDF` : `Download All ${subdivisionTerms.pluralEn} Tamam PDF`}
               >
-                <Printer className="w-3.5 h-3.5" />
-                <span>{language === 'ar' ? `كشوف تمام الـ${subdivisionTerms.pluralAr} (PDF)` : `Tamam Sheets (PDF)`}</span>
-              </Link>
+                {downloadingTamamId === 'all' ? (
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Download className="w-3.5 h-3.5" />
+                )}
+                <span>{language === 'ar' ? `تحميل تمام كل الـ${subdivisionTerms.pluralAr} (PDF)` : `Download All Tamam (PDF)`}</span>
+              </button>
 
               {canManageMembers && (
                 <button
@@ -1635,14 +1705,19 @@ function UnitHubContent() {
                             {membersInPatrol.length} {language === 'ar' ? 'كشاف' : 'scouts'}
                           </span>
 
-                          {/* Print Tamam Sheet Button */}
+                          {/* Direct Download Tamam PDF Button (No Preview Step) */}
                           <button
                             type="button"
-                            onClick={() => setTamamPreviewPatrol(patrol)}
-                            title={language === 'ar' ? 'طباعة كشف التمام (PDF)' : 'Print Tamam Sheet (PDF)'}
-                            className="px-2 py-1 rounded-lg text-emerald-700 dark:text-emerald-400 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/60 border border-emerald-200 dark:border-emerald-800 transition-colors cursor-pointer flex items-center gap-1 text-[11px] font-semibold"
+                            onClick={() => handleDownloadPatrolTamam(patrol)}
+                            disabled={downloadingTamamId === patrol.id}
+                            title={language === 'ar' ? 'تحميل كشف التمام PDF مباشرة' : 'Download Tamam PDF'}
+                            className="px-2 py-1 rounded-lg text-emerald-700 dark:text-emerald-400 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/60 border border-emerald-200 dark:border-emerald-800 transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1 text-[11px] font-semibold"
                           >
-                            <Printer className="w-3 h-3" />
+                            {downloadingTamamId === patrol.id ? (
+                              <RefreshCw className="w-3 h-3 animate-spin" />
+                            ) : (
+                              <Download className="w-3 h-3" />
+                            )}
                             <span>{language === 'ar' ? 'التمام' : 'Tamam'}</span>
                           </button>
 
@@ -2784,119 +2859,6 @@ function UnitHubContent() {
         </div>
       )}
       </div>
-
-      {/* 12. TAMAM SHEET PREVIEW & PRINT MODAL */}
-      {tamamPreviewPatrol && (() => {
-        const pMembers = unitMembers.filter((m) => m.patrol_id === tamamPreviewPatrol.id);
-
-        return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-2 sm:p-4 overflow-y-auto print:static print:inset-auto print:p-0 print:m-0 print:bg-white print:overflow-visible print:block">
-            <div className="bg-white dark:bg-[#18181b] border border-zinc-200 dark:border-zinc-700 rounded-2xl shadow-2xl max-w-4xl w-full p-4 sm:p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150 my-auto max-h-[96vh] flex flex-col print:border-none print:shadow-none print:rounded-none print:p-0 print:m-0 print:max-w-none print:max-h-none print:w-full print:bg-white print:space-y-0 print:block">
-              
-              {/* Modal Header & Print Bar (Hidden on Print) */}
-              <div className="print:hidden flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-zinc-200 dark:border-zinc-800">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 flex items-center justify-center">
-                    <FileText className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
-                      {language === 'ar' ? 'كشف تمام حضور وغياب الطليعة (PDF)' : 'Patrol Attendance Sheet (PDF)'}
-                    </h3>
-                    <p className="text-[11px] text-zinc-500 font-medium">
-                      {tamamPreviewPatrol.name_ar} &bull; {unitObj.name_ar} ({pMembers.length} {language === 'ar' ? 'كشاف' : 'scouts'})
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2">
-                  {/* Day Picker */}
-                  <select
-                    value={tamamDay}
-                    onChange={(e) => setTamamDay(e.target.value)}
-                    className="bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg px-2.5 py-1.5 text-xs font-medium focus:outline-none"
-                  >
-                    <option value="الجمعة">يوم الجمعة</option>
-                    <option value="الخميس">يوم الخميس</option>
-                    <option value="السبت">يوم السبت</option>
-                    <option value="الأحد">يوم الأحد</option>
-                  </select>
-
-                  {/* Date Picker */}
-                  <input
-                    type="date"
-                    value={tamamDate}
-                    onChange={(e) => setTamamDate(e.target.value)}
-                    className="bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg px-2 py-1 text-xs font-mono focus:outline-none"
-                  />
-
-                  {/* Open in Dedicated Page Link */}
-                  <Link
-                    href={`/members/tamam?patrolId=${tamamPreviewPatrol.id}`}
-                    target="_blank"
-                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-zinc-300 dark:border-zinc-700 text-xs font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-                    title={language === 'ar' ? 'فتح في نافذة كاملة' : 'Open in New Tab'}
-                  >
-                    <ExternalLink className="w-3.5 h-3.5" />
-                    <span className="hidden sm:inline">{language === 'ar' ? 'صفحة كاملة' : 'Full Page'}</span>
-                  </Link>
-
-                  {/* Print / Save PDF Button */}
-                  <button
-                    type="button"
-                    onClick={() => window.print()}
-                    className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer"
-                  >
-                    <Printer className="w-3.5 h-3.5" />
-                    <span>{language === 'ar' ? 'طباعة / حفظ PDF' : 'Print / Save PDF'}</span>
-                  </button>
-
-                  {/* Close Modal Button */}
-                  <button
-                    type="button"
-                    onClick={() => setTamamPreviewPatrol(null)}
-                    className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors cursor-pointer"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-
-              {/* Sheet Container */}
-              <div className="flex-1 overflow-y-auto bg-zinc-100 dark:bg-zinc-950/60 p-2 sm:p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 flex justify-center print:border-none print:p-0 print:bg-white print:overflow-visible">
-                <div id="tamam-modal-sheet" className="bg-white shadow-md print:shadow-none w-full max-w-[210mm]">
-                  <TamamSheet
-                    unitNameAr={unitObj.name_ar}
-                    unitNameEn={unitObj.name_en}
-                    patrolNameAr={tamamPreviewPatrol.name_ar}
-                    patrolNameEn={tamamPreviewPatrol.name_en}
-                    members={pMembers}
-                    dayName={tamamDay}
-                    dateStr={tamamDate.replace(/-/g, ' / ')}
-                    minRows={8}
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* Print Styles for Modal Print */}
-      <style jsx global>{`
-        @media print {
-          @page {
-            size: A4 portrait;
-            margin: 6mm;
-          }
-          body {
-            background: white !important;
-            color: black !important;
-            -webkit-print-color-adjust: exact;
-            print-color-adjust: exact;
-          }
-        }
-      `}</style>
     </div>
   );
 }

@@ -7,7 +7,8 @@ import { useAuth } from '@/lib/AuthContext';
 import { INITIAL_UNITS } from '@/lib/data';
 import { getSubdivisionTerms } from '@/lib/scout-terms';
 import TamamSheet from '@/components/TamamSheet';
-import { Printer, ArrowRight, Calendar, Users, FileDown } from 'lucide-react';
+import { downloadTamamPdf } from '@/lib/tamam-pdf';
+import { Printer, ArrowRight, Calendar, Users, FileDown, RefreshCw } from 'lucide-react';
 
 function TamamPrintContent() {
   const router = useRouter();
@@ -53,6 +54,30 @@ function TamamPrintContent() {
     const found = unitPatrols.find((p) => p.id === selectedPatrolId);
     return found ? [found] : unitPatrols;
   }, [unitPatrols, selectedPatrolId]);
+
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState<boolean>(false);
+
+  const handleDownloadPdf = async () => {
+    if (patrolsToRender.length === 0) return;
+    setIsDownloadingPdf(true);
+    try {
+      const sheets = patrolsToRender.map((patrol) => ({
+        unitNameAr: unit?.name_ar,
+        patrolNameAr: patrol.name_ar,
+        members: members.filter((m) => m.patrol_id === patrol.id),
+        dayName,
+        dateStr: customDate.replace(/-/g, ' / '),
+        minRows: 8,
+      }));
+      const fileName =
+        patrolsToRender.length === 1
+          ? `تمام_${patrolsToRender[0].name_ar}`
+          : `تمام_${unit?.name_ar || 'الطلائع'}`;
+      await downloadTamamPdf(sheets, fileName);
+    } finally {
+      setIsDownloadingPdf(false);
+    }
+  };
 
   const handlePrint = () => {
     window.print();
@@ -135,14 +160,29 @@ function TamamPrintContent() {
               />
             </div>
 
-            {/* Print / Save PDF Button */}
+            {/* Direct Download PDF Button */}
+            <button
+              type="button"
+              onClick={handleDownloadPdf}
+              disabled={isDownloadingPdf || patrolsToRender.length === 0}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold shadow-md hover:shadow-lg transition-all cursor-pointer"
+            >
+              {isDownloadingPdf ? (
+                <RefreshCw className="w-4 h-4 animate-spin" />
+              ) : (
+                <FileDown className="w-4 h-4" />
+              )}
+              <span>تحميل PDF</span>
+            </button>
+
+            {/* Print Button */}
             <button
               type="button"
               onClick={handlePrint}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#0B57D0] hover:bg-[#0842a0] text-white text-xs font-bold shadow-md hover:shadow-lg transition-all cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#0B57D0] hover:bg-[#0842a0] text-white text-xs font-bold shadow-md hover:shadow-lg transition-all cursor-pointer"
             >
               <Printer className="w-4 h-4" />
-              <span>طباعة / حفظ PDF</span>
+              <span>طباعة</span>
             </button>
           </div>
         </div>
