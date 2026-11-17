@@ -144,6 +144,7 @@ export default function MembersDirectoryPage() {
   const [mConfession, setMConfession] = useState('');
   const [mNotes, setMNotes] = useState('');
   const [mPin, setMPin] = useState('1234');
+  const [isSubmittingMember, setIsSubmittingMember] = useState(false);
 
   // Add Leader Modal State
   const [isAddLeaderOpen, setIsAddLeaderOpen] = useState(false);
@@ -392,50 +393,64 @@ export default function MembersDirectoryPage() {
   };
 
   // Submit Add Member
-  const handleCreateMemberSubmit = (e: React.FormEvent) => {
+  const handleCreateMemberSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!mNameAr.trim() || !mFatherPhone.trim()) return;
+    if (!mNameAr.trim()) return;
 
+    setIsSubmittingMember(true);
     const unitObj = INITIAL_UNITS.find((u) => u.id === mUnitId);
     const codePrefix = unitObj ? unitObj.code.split('_')[0].toUpperCase() : 'SCOUT';
     const randomNum = Math.floor(100 + Math.random() * 900);
     const autoCode = `${codePrefix}-2026-${randomNum}`;
 
-    const created = addMember({
-      full_name_ar: mNameAr.trim(),
-      full_name_en: mNameEn.trim() || undefined,
-      member_code: autoCode,
-      pin: mPin.trim() || '1234',
-      unit_id: mUnitId,
-      patrol_id: mPatrolId === 'none' ? null : Number(mPatrolId),
-      date_of_birth: mDob,
-      father_phone: mFatherPhone.trim(),
-      mother_phone: mMotherPhone.trim() || undefined,
-      member_phone: mPhone.trim() || undefined,
-      address_ar: mAddress.trim() || 'القاهرة، مصر',
-      academic_year: mGrade.trim(),
-      school_or_college: mSchool.trim() || undefined,
-      father_of_confession: mConfession.trim() || undefined,
-      notes: mNotes.trim() || undefined,
-      is_active: true,
-    });
+    try {
+      const created = await addMember({
+        full_name_ar: mNameAr.trim(),
+        full_name_en: mNameEn.trim() || undefined,
+        member_code: autoCode,
+        pin: mPin.trim() || '1234',
+        unit_id: mUnitId,
+        patrol_id: mPatrolId === 'none' ? null : Number(mPatrolId),
+        date_of_birth: mDob,
+        father_phone: mFatherPhone.trim(),
+        mother_phone: mMotherPhone.trim() || undefined,
+        member_phone: mPhone.trim() || undefined,
+        address_ar: mAddress.trim(),
+        academic_year: mGrade.trim() || unitObj?.target_grade || '',
+        school_or_college: mSchool.trim() || undefined,
+        father_of_confession: mConfession.trim() || undefined,
+        notes: mNotes.trim() || undefined,
+        is_active: true,
+      });
 
-    setIsAddMemberOpen(false);
-    setMNameAr('');
-    setMNameEn('');
-    setMFatherPhone('');
-    setMMotherPhone('');
-    setMPhone('');
-    setMAddress('');
-    setMNotes('');
-    setMConfession('');
+      setIsAddMemberOpen(false);
+      setMNameAr('');
+      setMNameEn('');
+      setMPatrolId('none');
+      setMFatherPhone('');
+      setMMotherPhone('');
+      setMPhone('');
+      setMAddress('');
+      setMSchool('');
+      setMNotes('');
+      setMConfession('');
 
-    setActionSuccessMsg(
-      language === 'ar'
-        ? `تم تسجيل الكشاف (${created.full_name_ar}) بكود [${created.member_code}] بنجاح!`
-        : `Scout member (${created.full_name_ar}) registered with code [${created.member_code}]!`
-    );
-    setTimeout(() => setActionSuccessMsg(null), 4000);
+      setActionSuccessMsg(
+        language === 'ar'
+          ? `تم تسجيل الكشاف (${created.full_name_ar}) بكود [${created.member_code}] وحفظه في قاعدة البيانات بنجاح!`
+          : `Scout member (${created.full_name_ar}) saved to database with code [${created.member_code}]!`
+      );
+      setTimeout(() => setActionSuccessMsg(null), 4000);
+    } catch (err: any) {
+      console.error('Error registering member:', err);
+      alert(
+        language === 'ar'
+          ? `تعذر حفظ الكشاف في قاعدة البيانات: ${err.message}`
+          : `Failed to save scout to database: ${err.message}`
+      );
+    } finally {
+      setIsSubmittingMember(false);
+    }
   };
 
   // Submit Add Leader
@@ -1674,11 +1689,10 @@ export default function MembersDirectoryPage() {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
-                    {language === 'ar' ? 'تاريخ الميلاد' : 'Date of Birth'} *
+                    {language === 'ar' ? 'تاريخ الميلاد' : 'Date of Birth'}
                   </label>
                   <input
                     type="date"
-                    required
                     value={mDob}
                     onChange={(e) => setMDob(e.target.value)}
                     className="w-full text-xs rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -1716,11 +1730,10 @@ export default function MembersDirectoryPage() {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
-                    {language === 'ar' ? 'هاتف ولي الأمر (الأب)' : 'Father Phone'} *
+                    {language === 'ar' ? 'هاتف ولي الأمر (الأب)' : 'Father Phone'}
                   </label>
                   <input
                     type="tel"
-                    required
                     value={mFatherPhone}
                     onChange={(e) => setMFatherPhone(e.target.value)}
                     placeholder="+2010..."
@@ -1809,11 +1822,19 @@ export default function MembersDirectoryPage() {
                 </button>
                 <button
                   type="submit"
-                  disabled={!mNameAr.trim() || !mFatherPhone.trim()}
+                  disabled={!mNameAr.trim() || isSubmittingMember}
                   className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#0B57D0] hover:bg-[#0842A0] text-white text-xs font-semibold shadow-xs transition-colors disabled:opacity-50 cursor-pointer"
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  <span>{language === 'ar' ? 'حفظ وإضافة الكشاف' : 'Save & Register Member'}</span>
+                  <span>
+                    {isSubmittingMember
+                      ? language === 'ar'
+                        ? 'جاري الحفظ...'
+                        : 'Saving...'
+                      : language === 'ar'
+                        ? 'حفظ وإضافة الكشاف'
+                        : 'Save & Register Member'}
+                  </span>
                 </button>
               </div>
             </form>

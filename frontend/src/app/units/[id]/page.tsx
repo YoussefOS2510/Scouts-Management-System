@@ -386,7 +386,7 @@ function UnitHubContent() {
   };
 
   // Handle Add Member Submit
-  const handleAddMemberSubmit = (e: React.FormEvent) => {
+  const handleAddMemberSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!mNameAr.trim()) return;
 
@@ -396,7 +396,7 @@ function UnitHubContent() {
     const autoCode = `${codePrefix}-2026-${randomNum}`;
 
     try {
-      const created = addMember({
+      const created = await addMember({
         full_name_ar: mNameAr.trim(),
         full_name_en: mNameEn.trim() || undefined,
         member_code: autoCode,
@@ -407,8 +407,8 @@ function UnitHubContent() {
         father_phone: mFatherPhone.trim(),
         mother_phone: mMotherPhone.trim() || undefined,
         member_phone: mPhone.trim() || undefined,
-        address_ar: mAddress.trim() || 'القاهرة، مصر',
-        academic_year: mGrade.trim(),
+        address_ar: mAddress.trim(),
+        academic_year: mGrade.trim() || unitObj.target_grade || '',
         school_or_college: mSchool.trim() || undefined,
         father_of_confession: mConfession.trim() || undefined,
         notes: mNotes.trim() || undefined,
@@ -418,22 +418,29 @@ function UnitHubContent() {
       setIsAddMemberModalOpen(false);
       setMNameAr('');
       setMNameEn('');
+      setMPatrolId('none');
       setMFatherPhone('');
       setMMotherPhone('');
       setMPhone('');
       setMAddress('');
+      setMGrade('');
+      setMSchool('');
       setMNotes('');
       setMConfession('');
 
       setNotification(
         language === 'ar'
-          ? `تم تسجيل الكشاف (${created.full_name_ar}) بكود [${created.member_code}] بنجاح!`
-          : `Scout member (${created.full_name_ar}) registered with code [${created.member_code}]!`
+          ? `تم تسجيل الكشاف (${created.full_name_ar}) بكود [${created.member_code}] وحفظه في قاعدة البيانات بنجاح!`
+          : `Scout member (${created.full_name_ar}) saved to database with code [${created.member_code}]!`
       );
       setTimeout(() => setNotification(null), 4000);
     } catch (err: any) {
       console.error('Error registering member:', err);
-      alert('Error: ' + err.message);
+      alert(
+        language === 'ar'
+          ? `تعذر حفظ الكشاف في قاعدة البيانات: ${err.message}`
+          : `Failed to save scout to database: ${err.message}`
+      );
     } finally {
       setIsSubmittingMember(false);
     }
@@ -2065,6 +2072,39 @@ function UnitHubContent() {
                     value={mConfession}
                     onChange={(e) => setMConfession(e.target.value)}
                     placeholder={language === 'ar' ? 'مثال: أبونا ميخائيل' : 'e.g. Fr. Michael'}
+                    className="w-full bg-neutral-100 dark:bg-[#0B0F17] border border-neutral-200 dark:border-neutral-800 rounded-xl px-3 py-2 text-xs text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    dir="auto"
+                  />
+                </div>
+              </div>
+
+              {/* Address & School (Optional) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-neutral-700 dark:text-neutral-300">
+                    {language === 'ar' ? 'العنوان' : 'Home Address'}{' '}
+                    <span className="text-neutral-400 text-[10px]">({language === 'ar' ? 'اختياري' : 'Optional'})</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={mAddress}
+                    onChange={(e) => setMAddress(e.target.value)}
+                    placeholder={language === 'ar' ? 'الشارع، المنطقة...' : 'Street, Area...'}
+                    className="w-full bg-neutral-100 dark:bg-[#0B0F17] border border-neutral-200 dark:border-neutral-800 rounded-xl px-3 py-2 text-xs text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    dir="auto"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-neutral-700 dark:text-neutral-300">
+                    {language === 'ar' ? 'المدرسة / الكلية' : 'School / College'}{' '}
+                    <span className="text-neutral-400 text-[10px]">({language === 'ar' ? 'اختياري' : 'Optional'})</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={mSchool}
+                    onChange={(e) => setMSchool(e.target.value)}
+                    placeholder={language === 'ar' ? 'اسم المدرسة...' : 'School name...'}
                     className="w-full bg-neutral-100 dark:bg-[#0B0F17] border border-neutral-200 dark:border-neutral-800 rounded-xl px-3 py-2 text-xs text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                     dir="auto"
                   />

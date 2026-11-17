@@ -65,7 +65,7 @@ interface AuthContextType {
   accessibleUnits: Unit[];
   assignLeaderUnit: (userId: string, unitId: number | null | number[], roleId?: number) => boolean;
   assignLeaderUnits: (userId: string, unitIds: number[], roleId?: number) => boolean;
-  addMember: (memberData: Omit<Member, 'id'> & { id?: string }) => Member;
+  addMember: (memberData: Omit<Member, 'id'> & { id?: string }) => Promise<Member>;
   deleteMember: (memberId: string) => Promise<boolean>;
   addLeader: (leaderData: {
     full_name: string;
@@ -1111,41 +1111,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [unitCustomRoles, members]
   );
 
-  const addMember = (memberData: Omit<Member, 'id'> & { id?: string }): Member => {
-    const tempId = memberData.id || `m_${Date.now()}`;
-    const newMember: Member = {
-      ...memberData,
-      id: tempId,
-      is_active: memberData.is_active !== undefined ? memberData.is_active : true,
-    };
-
-    setMembers((prev) => [newMember, ...prev]);
-
-    // Persist to Microsoft SQL Server
-    fetch('/api/members', {
+  const addMember = async (memberData: Omit<Member, 'id'> & { id?: string }): Promise<Member> => {
+    const res = await fetch('/api/members', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(memberData),
-    })
-      .then((r) => r.json())
-      .then((data) => {
-        if (data.success && data.member) {
-          setMembers((prev) => prev.map((m) => (m.id === tempId ? data.member : m)));
-        }
-      })
-      .catch((e) => console.error('Failed to add member in DB:', e));
+    });
+
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data?.success || !data?.member) {
+      throw new Error(data?.error || 'Failed to save scout to database');
+    }
+
+    const savedMember: Member = data.member;
+
+    setMembers((prev) => {
+      const updated = [savedMember, ...prev.filter((m) => m.id !== savedMember.id)];
+      try {
+        localStorage.setItem(CACHE_KEY_MEMBERS, JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
 
     logAction({
       action_type: 'member_created',
       title_ar: 'إضافة عضو كشفي جديد',
       title_en: 'New Scout Member Added',
-      description_ar: `تمت إضافة الكشاف (${newMember.full_name_ar}) إلى المنظومة`,
-      description_en: `Scout member (${newMember.full_name_ar}) registered in the directory`,
-      unit_id: newMember.unit_id,
-      metadata: { member_id: tempId, member_code: newMember.member_code },
+      description_ar: `تمت إضافة الكشاف (${savedMember.full_name_ar}) إلى المنظومة`,
+      description_en: `Scout member (${savedMember.full_name_ar}) registered in the directory`,
+      unit_id: savedMember.unit_id,
+      metadata: { member_id: savedMember.id, member_code: savedMember.member_code },
     });
 
-    return newMember;
+    return savedMember;
   };
 
   const addLeader = (leaderData: {
