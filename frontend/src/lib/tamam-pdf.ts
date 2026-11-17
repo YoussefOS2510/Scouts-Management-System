@@ -131,7 +131,7 @@ async function renderTamamPageToJpeg(
   const colW = cw / 3;
 
   // Right third (RTL start): Logo + Unit badge (no redundant group text next to logo)
-  const logoSize = 185;
+  const logoSize = 220;
   const logoX = cx + cw - logoSize;
   const logoY = cy;
   if (logoImg) {
@@ -141,16 +141,16 @@ async function renderTamamPageToJpeg(
   if (sheet.unitNameAr) {
     ctx.save();
     ctx.direction = 'rtl';
-    ctx.font = `bold 24px ${ARABIC_FONT_FAMILY}`;
+    ctx.font = `bold 32px ${ARABIC_FONT_FAMILY}`;
     const textW = ctx.measureText(sheet.unitNameAr).width;
-    const badgeW = textW + 28;
-    const badgeH = 42;
+    const badgeW = textW + 38;
+    const badgeH = 54;
     const badgeX = logoX - 20 - badgeW;
     const badgeY = logoY + (logoSize - badgeH) / 2;
 
     ctx.strokeStyle = '#000000';
-    ctx.lineWidth = 2.5;
-    drawRoundedRectPath(ctx, badgeX, badgeY, badgeW, badgeH, 8);
+    ctx.lineWidth = 3;
+    drawRoundedRectPath(ctx, badgeX, badgeY, badgeW, badgeH, 10);
     ctx.stroke();
 
     ctx.fillStyle = '#000000';
@@ -167,20 +167,20 @@ async function renderTamamPageToJpeg(
   ctx.fillStyle = '#000000';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
-  ctx.font = `56px Georgia, "Times New Roman", serif`;
-  ctx.fillText('♱', centerX, cy + 8);
+  ctx.font = `72px Georgia, "Times New Roman", serif`;
+  ctx.fillText('♱', centerX, cy + 6);
 
   const titleText = `تمام حضور وغياب ${sheet.patrolNameAr}`;
-  ctx.font = `bold 34px ${ARABIC_FONT_FAMILY}`;
-  const titleY = cy + 82;
-  ctx.fillText(titleText, centerX, titleY);
+  ctx.font = `bold 46px ${ARABIC_FONT_FAMILY}`;
+  const titleY = cy + 98;
+  ctx.fillText(titleText, centerX, titleY, colW + 140);
 
-  const titleW = Math.min(ctx.measureText(titleText).width + 44, colW + 80);
+  const titleW = Math.min(ctx.measureText(titleText).width + 50, colW + 140);
   ctx.strokeStyle = '#000000';
-  ctx.lineWidth = 4;
+  ctx.lineWidth = 4.5;
   ctx.beginPath();
-  ctx.moveTo(centerX - titleW / 2, titleY + 52);
-  ctx.lineTo(centerX + titleW / 2, titleY + 52);
+  ctx.moveTo(centerX - titleW / 2, titleY + 68);
+  ctx.lineTo(centerX + titleW / 2, titleY + 68);
   ctx.stroke();
   ctx.restore();
 
@@ -190,14 +190,14 @@ async function renderTamamPageToJpeg(
   ctx.fillStyle = '#000000';
   ctx.textAlign = 'left';
   ctx.textBaseline = 'top';
-  ctx.font = `bold 25px ${ARABIC_FONT_FAMILY}`;
-  ctx.fillText(`اليوم: ${dayName}`, cx + 10, cy + 36);
-  ctx.fillText(`التاريخ: ${formattedDate}`, cx + 10, cy + 82);
+  ctx.font = `bold 33px ${ARABIC_FONT_FAMILY}`;
+  ctx.fillText(`اليوم: ${dayName}`, cx + 10, cy + 44);
+  ctx.fillText(`التاريخ: ${formattedDate}`, cx + 10, cy + 104);
   ctx.restore();
 
   // ---------------- 2. ROLL-CALL SUMMARY (Stacked Vertically Below Logo) ----------------
-  let summaryY = cy + Math.max(logoSize, 145) + 22;
-  const lineStep = 44;
+  const summaryY = cy + Math.max(logoSize, 175) + 32;
+  const lineStep = 58;
   const rightEdge = cx + cw;
 
   ctx.save();
@@ -207,50 +207,50 @@ async function renderTamamPageToJpeg(
   ctx.textBaseline = 'middle';
 
   // Line 1: أصل القوة: <count>
-  ctx.font = `bold 26px ${ARABIC_FONT_FAMILY}`;
+  ctx.font = `bold 35px ${ARABIC_FONT_FAMILY}`;
   const forceLabel = `أصل القوة: `;
-  ctx.fillText(forceLabel, rightEdge, summaryY + 14);
+  ctx.fillText(forceLabel, rightEdge, summaryY + 18);
   const forceLabelW = ctx.measureText(forceLabel).width;
   const countStr = String(sheet.members.length);
-  ctx.font = `bold 28px ${ARABIC_FONT_FAMILY}`;
+  ctx.font = `bold 38px ${ARABIC_FONT_FAMILY}`;
   const countW = ctx.measureText(countStr).width;
-  ctx.fillText(countStr, rightEdge - forceLabelW, summaryY + 14);
-  ctx.lineWidth = 3;
+  ctx.fillText(countStr, rightEdge - forceLabelW, summaryY + 18);
+  ctx.lineWidth = 3.5;
   ctx.strokeStyle = '#000000';
   ctx.beginPath();
-  ctx.moveTo(rightEdge - forceLabelW - countW, summaryY + 28);
-  ctx.lineTo(rightEdge - forceLabelW, summaryY + 28);
+  ctx.moveTo(rightEdge - forceLabelW - countW, summaryY + 34);
+  ctx.lineTo(rightEdge - forceLabelW, summaryY + 34);
   ctx.stroke();
 
   const blankFields = ['أرض الطابور:', 'غياب بعذر:', 'غياب بدون عذر:'];
-  ctx.font = `600 25px ${ARABIC_FONT_FAMILY}`;
+  ctx.font = `bold 34px ${ARABIC_FONT_FAMILY}`;
   for (let i = 0; i < blankFields.length; i++) {
     const rowY = summaryY + lineStep * (i + 1);
     const label = blankFields[i];
-    ctx.fillText(label, rightEdge, rowY + 14);
-    const labelW = ctx.measureText(label).width + 16;
-    ctx.lineWidth = 2;
+    ctx.fillText(label, rightEdge, rowY + 18);
+    const labelW = ctx.measureText(label).width + 20;
+    ctx.lineWidth = 2.5;
     ctx.beginPath();
-    ctx.moveTo(rightEdge - labelW - 155, rowY + 24);
-    ctx.lineTo(rightEdge - labelW, rowY + 24);
+    ctx.moveTo(rightEdge - labelW - 210, rowY + 30);
+    ctx.lineTo(rightEdge - labelW, rowY + 30);
     ctx.stroke();
   }
   ctx.restore();
 
   // ---------------- 3. ATTENDANCE TABLE (RTL, Right-to-Left Columns) ----------------
-  const tableTop = summaryY + lineStep * 4 + 26;
-  const headerH = 92;
+  const tableTop = summaryY + lineStep * 4 + 36;
+  const headerH = 118;
   const availableTableH = contentBottom - tableTop - headerH;
-  const defaultRowH = 68;
+  const defaultRowH = 96;
   const rowH =
     totalRows * defaultRowH <= availableTableH
       ? defaultRowH
-      : Math.max(42, Math.floor(availableTableH / totalRows));
+      : Math.max(46, Math.floor(availableTableH / totalRows));
   const tableH = headerH + totalRows * rowH;
 
   // Column proportions scaled cleanly to cw (1434px)
   // Order (Right -> Left): م | الدور الكشفي | الأسم | الاجتماع الكشفى | قداس | مدارس احد | الزي
-  const rawWidths = [61, 172, 591, 184, 134, 159, 133];
+  const rawWidths = [70, 185, 585, 178, 128, 158, 130];
   const widthSum = rawWidths.reduce((acc, v) => acc + v, 0);
   const colWidths = rawWidths.map((w, idx) =>
     idx === rawWidths.length - 1
@@ -322,7 +322,7 @@ async function renderTamamPageToJpeg(
   ctx.fillStyle = '#000000';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.font = `bold 24px ${ARABIC_FONT_FAMILY}`;
+  ctx.font = `bold 32px ${ARABIC_FONT_FAMILY}`;
 
   headers.forEach((lines, colIdx) => {
     const rect = colRects[colIdx];
@@ -330,8 +330,8 @@ async function renderTamamPageToJpeg(
     if (lines.length === 1) {
       ctx.fillText(lines[0], centerColX, tableTop + headerH / 2 + 2);
     } else {
-      ctx.fillText(lines[0], centerColX, tableTop + headerH / 2 - 14);
-      ctx.fillText(lines[1], centerColX, tableTop + headerH / 2 + 16);
+      ctx.fillText(lines[0], centerColX, tableTop + headerH / 2 - 19);
+      ctx.fillText(lines[1], centerColX, tableTop + headerH / 2 + 20);
     }
   });
   ctx.restore();
@@ -342,12 +342,17 @@ async function renderTamamPageToJpeg(
   ctx.fillStyle = '#000000';
   ctx.textBaseline = 'middle';
 
+  const rowFontScale = rowH < 80 ? Math.max(0.65, rowH / defaultRowH) : 1;
+  const seqFontPx = Math.round(32 * rowFontScale);
+  const roleFontPx = Math.round(30 * rowFontScale);
+  const nameFontPx = Math.round(36 * rowFontScale);
+
   for (let r = 0; r < totalRows; r++) {
     const scout = sortedMembers[r] || null;
     const rowMidY = tableTop + headerH + r * rowH + rowH / 2 + 1;
 
     // 1. Sequence number
-    ctx.font = `bold 24px ${ARABIC_FONT_FAMILY}`;
+    ctx.font = `bold ${seqFontPx}px ${ARABIC_FONT_FAMILY}`;
     ctx.textAlign = 'center';
     ctx.fillText(String(r + 1), colRects[0].x + colRects[0].w / 2, rowMidY);
 
@@ -355,13 +360,13 @@ async function renderTamamPageToJpeg(
       // 2. Role
       const role = (scout.patrol_role ?? scout.rank ?? '').trim();
       if (role) {
-        ctx.font = `bold 22px ${ARABIC_FONT_FAMILY}`;
+        ctx.font = `bold ${roleFontPx}px ${ARABIC_FONT_FAMILY}`;
         ctx.textAlign = 'center';
         ctx.fillText(role, colRects[1].x + colRects[1].w / 2, rowMidY, colRects[1].w - 16);
       }
 
       // 3. Scout Full Name (Arabic) - no IDs
-      ctx.font = `bold 25px ${ARABIC_FONT_FAMILY}`;
+      ctx.font = `bold ${nameFontPx}px ${ARABIC_FONT_FAMILY}`;
       ctx.textAlign = 'right';
       ctx.fillText(
         scout.full_name_ar || '',

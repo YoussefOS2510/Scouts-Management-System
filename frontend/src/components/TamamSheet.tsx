@@ -79,7 +79,7 @@ export default function TamamSheet({
                   className="w-20 h-20 sm:w-24 sm:h-24 object-contain shrink-0"
                 />
                 {unitNameAr && (
-                  <div className="px-2 py-0.5 border border-black rounded text-xs font-bold">
+                  <div className="px-2.5 py-1 border border-black rounded text-sm sm:text-base font-bold">
                     {unitNameAr}
                   </div>
                 )}
@@ -88,87 +88,87 @@ export default function TamamSheet({
               {/* Center: Coptic Cross & Tamam Title */}
               <div className="text-center">
                 {/* Ornate Cross */}
-                <div className="text-3xl font-serif text-black leading-none mb-2 select-none">
+                <div className="text-4xl font-serif text-black leading-none mb-2 select-none">
                   ♱
                 </div>
-                <div className="text-base sm:text-lg font-bold border-b-2 border-black pb-1 inline-block px-3">
+                <div className="text-lg sm:text-xl font-bold border-b-2 border-black pb-1.5 inline-block px-4">
                   تمام حضور وغياب {patrolNameAr}
                 </div>
               </div>
 
               {/* Top Left: Day & Date */}
-              <div className="text-left text-xs sm:text-sm font-bold space-y-1.5 pr-2">
+              <div className="text-left text-sm sm:text-base font-bold space-y-2 pr-2">
                 <div className="flex items-center justify-end gap-1.5">
                   <span className="font-semibold">اليوم:</span>
                   <span>{dayName}</span>
                 </div>
                 <div className="flex items-center justify-end gap-1.5">
                   <span className="font-semibold">التاريخ:</span>
-                  <span className="font-mono text-xs">{formattedDate}</span>
+                  <span className="font-mono text-sm sm:text-base">{formattedDate}</span>
                 </div>
               </div>
             </div>
 
             {/* Roll-Call Summary (Stacked Vertically Below Logo, On Top of Table) */}
-            <div className="flex flex-col items-start space-y-1.5 mb-3 text-xs sm:text-sm font-bold">
-              <div className="flex items-center gap-1.5">
+            <div className="flex flex-col items-start space-y-2 mb-4 text-sm sm:text-base font-bold">
+              <div className="flex items-center gap-2">
                 <span className="font-semibold">أصل القوة:</span>
-                <span className="font-mono font-bold text-sm underline decoration-2">{members.length}</span>
+                <span className="font-mono font-bold text-base sm:text-lg underline decoration-2">{members.length}</span>
               </div>
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-2">
                 <span className="font-semibold text-zinc-800">أرض الطابور:</span>
-                <span className="inline-block w-20 border-b border-black"></span>
+                <span className="inline-block w-24 border-b border-black"></span>
               </div>
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-2">
                 <span className="font-semibold text-zinc-800">غياب بعذر:</span>
-                <span className="inline-block w-20 border-b border-black"></span>
+                <span className="inline-block w-24 border-b border-black"></span>
               </div>
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-2">
                 <span className="font-semibold text-zinc-800">غياب بدون عذر:</span>
-                <span className="inline-block w-20 border-b border-black"></span>
+                <span className="inline-block w-24 border-b border-black"></span>
               </div>
             </div>
 
             {/* Attendance Table */}
             <div className="w-full">
-              <table className="w-full border-collapse border-2 border-black text-center text-xs sm:text-sm">
+              <table className="w-full border-collapse border-2 border-black text-center text-sm sm:text-base">
                 <thead>
-                  <tr className="bg-zinc-100/60 print:bg-transparent border-b-2 border-black h-10 sm:h-11 text-black font-bold">
-                    <th className="border border-black w-10 py-1.5">م</th>
-                    <th className="border border-black w-24 py-1.5 leading-tight">
+                  <tr className="bg-zinc-100/60 print:bg-transparent border-b-2 border-black h-12 sm:h-14 text-black font-bold">
+                    <th className="border border-black w-12 py-2">م</th>
+                    <th className="border border-black w-28 py-2 leading-tight">
                       الدور<br />الكشفي
                     </th>
-                    <th className="border border-black py-1.5 text-center px-3">الأسم</th>
-                    <th className="border border-black w-24 py-1.5 leading-tight">
+                    <th className="border border-black py-2 text-center px-3">الأسم</th>
+                    <th className="border border-black w-28 py-2 leading-tight">
                       الاجتماع<br />الكشفى
                     </th>
-                    <th className="border border-black w-16 py-1.5">قداس</th>
-                    <th className="border border-black w-20 py-1.5 leading-tight">
+                    <th className="border border-black w-20 py-2">قداس</th>
+                    <th className="border border-black w-24 py-2 leading-tight">
                       مدارس<br />احد
                     </th>
-                    <th className="border border-black w-16 py-1.5">الزي</th>
+                    <th className="border border-black w-20 py-2">الزي</th>
                   </tr>
                 </thead>
                 <tbody>
                   {rows.map((scout, idx) => {
                     const role = getRank(idx, scout);
                     return (
-                      <tr key={idx} className="h-10 sm:h-11 border-b border-black">
+                      <tr key={idx} className="h-12 sm:h-14 border-b border-black">
                         {/* 1. Sequence Number */}
-                        <td className="border border-black font-mono font-bold text-xs sm:text-sm bg-zinc-50/40 print:bg-transparent">
+                        <td className="border border-black font-mono font-bold text-base sm:text-lg bg-zinc-50/40 print:bg-transparent">
                           {idx + 1}
                         </td>
 
                         {/* 2. Scout Role (CP / CG / 3rd / Custom) */}
                         <td
                           dir="auto"
-                          className="border border-black font-bold text-xs sm:text-sm px-1"
+                          className="border border-black font-bold text-base sm:text-lg px-1.5"
                         >
                           {role}
                         </td>
 
                         {/* 3. Scout Name */}
-                        <td className="border border-black font-semibold text-right px-3 py-1.5 text-xs sm:text-sm text-zinc-950">
+                        <td className="border border-black font-semibold text-right px-3.5 py-2 text-base sm:text-lg text-zinc-950">
                           {scout ? (
                             <span>{scout.full_name_ar}</span>
                           ) : (
