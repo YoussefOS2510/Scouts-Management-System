@@ -169,7 +169,7 @@ export async function POST(req: NextRequest) {
     const cleanConfession = toNullIfBlank(father_of_confession);
     const cleanNotes = toNullIfBlank(notes);
     const cleanPin = toNullIfBlank(body.pin) || '1234';
-    const cleanPatrolId =
+    let cleanPatrolId =
       patrol_id !== null &&
       patrol_id !== undefined &&
       patrol_id !== 'none' &&
@@ -177,6 +177,18 @@ export async function POST(req: NextRequest) {
       !isNaN(Number(patrol_id))
         ? Number(patrol_id)
         : null;
+    if (cleanPatrolId !== null) {
+      const validPatrolRows = await query(
+        `SELECT id FROM patrols WHERE id = @patrol_id AND unit_id = @unit_id LIMIT 1;`,
+        {
+          patrol_id: { type: sql.Int, value: cleanPatrolId },
+          unit_id: { type: sql.Int, value: cleanUnitId },
+        }
+      );
+      if (validPatrolRows.length === 0) {
+        cleanPatrolId = null;
+      }
+    }
     const cleanPatrolRole =
       patrol_role && String(patrol_role).trim() !== '' && patrol_role !== 'none'
         ? String(patrol_role).trim()

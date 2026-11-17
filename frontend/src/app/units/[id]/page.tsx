@@ -172,6 +172,7 @@ function UnitHubContent() {
 
   useEffect(() => {
     fetchEvents(unitId);
+    setMPatrolId('none');
   }, [unitId]);
 
   // Today string YYYY-MM-DD
