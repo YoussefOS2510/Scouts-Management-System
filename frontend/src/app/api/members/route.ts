@@ -1,30 +1,84 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query, sql } from '@/lib/db';
 
-let roleSchemaEnsured = false;
-async function ensureMemberRoleSchema() {
-  if (roleSchemaEnsured) return;
-  try {
-    await query(`ALTER TABLE members ADD COLUMN IF NOT EXISTS patrol_role VARCHAR(100);`);
-    await query(`
-      CREATE TABLE IF NOT EXISTS unit_custom_roles (
-        id SERIAL PRIMARY KEY,
-        unit_id INT NOT NULL REFERENCES units(id) ON DELETE CASCADE,
-        role_name VARCHAR(100) NOT NULL,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(unit_id, role_name)
-      );
-    `);
-    roleSchemaEnsured = true;
-  } catch (err) {
-    console.error('Failed to ensure patrol_role schema:', err);
-  }
+const MEMBER_RETURNING_COLUMNS = `
+  id,
+  member_code,
+  unit_id,
+  patrol_id,
+  patrol_role,
+  full_name_ar,
+  full_name_en,
+  TO_CHAR(date_of_birth, 'YYYY-MM-DD') AS date_of_birth,
+  member_phone,
+  father_phone,
+  mother_phone,
+  address_ar,
+  address_en,
+  school_or_college,
+  academic_year,
+  sunday_school_class,
+  father_of_confession,
+  notes,
+  has_missing_data,
+  missing_fields,
+  school_or_college_en,
+  sunday_school_class_en,
+  academic_year_en,
+  is_active
+`;
+
+function toNullIfBlank(val: any): string | null {
+  if (val === null || val === undefined) return null;
+  const trimmed = String(val).trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function formatMemberRow(m: any) {
+  return {
+    ...m,
+    id: String(m.id),
+    unit_id: Number(m.unit_id),
+    patrol_id: m.patrol_id !== null && m.patrol_id !== undefined ? Number(m.patrol_id) : null,
+    patrol_role: m.patrol_role || null,
+    school_or_college_en: m.school_or_college_en || null,
+    sunday_school_class_en: m.sunday_school_class_en || null,
+    academic_year_en: m.academic_year_en || null,
+    is_active: Boolean(m.is_active),
+    has_missing_data: Boolean(m.has_missing_data),
+    missing_fields: m.missing_fields || '',
+  };
+}
+
+function computeMissingMemberFields(
+  fields: {
+    fatherPhone: string | null;
+    motherPhone?: string | null;
+    memberPhone?: string | null;
+    addressAr: string | null;
+    academicYear: string | null;
+    schoolOrCollege: string | null;
+    fatherOfConfession: string | null;
+  },
+  includeAltPhones: boolean
+): { hasMissingData: boolean; missingFields: string } {
+  const missing: string[] = [];
+  const hasPhone = includeAltPhones
+    ? Boolean(fields.fatherPhone || fields.motherPhone || fields.memberPhone)
+    : Boolean(fields.fatherPhone);
+  if (!hasPhone) missing.push('تليفون الاب');
+  if (!fields.addressAr) missing.push('العنوان');
+  if (!fields.academicYear) missing.push('السنة الدراسية');
+  if (!fields.schoolOrCollege) missing.push('المدرسة / الكلية');
+  if (!fields.fatherOfConfession) missing.push('اب الاعتراف');
+  return {
+    hasMissingData: missing.length > 0,
+    missingFields: missing.join(', '),
+  };
 }
 
 export async function GET() {
   try {
-    await ensureMemberRoleSchema();
-
     const [members, patrols, customRoles] = await Promise.all([
       query(`
         SELECT 
@@ -73,16 +127,7 @@ export async function GET() {
       `),
     ]);
 
-    const formattedMembers = members.map((m: any) => ({
-      ...m,
-      id: String(m.id),
-      unit_id: Number(m.unit_id),
-      patrol_id: m.patrol_id !== null && m.patrol_id !== undefined ? Number(m.patrol_id) : null,
-      patrol_role: m.patrol_role || null,
-      is_active: Boolean(m.is_active),
-      has_missing_data: Boolean(m.has_missing_data),
-      missing_fields: m.missing_fields || '',
-    }));
+    const formattedMembers = members.map(formatMemberRow);
 
     const formattedPatrols = patrols.map((p: any) => ({
       id: Number(p.id),
@@ -118,8 +163,6 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    await ensureMemberRoleSchema();
-
     const body = await req.json();
     const {
       full_name_ar,
@@ -134,8 +177,11 @@ export async function POST(req: NextRequest) {
       address_ar,
       address_en,
       school_or_college,
+      school_or_college_en,
       academic_year,
+      academic_year_en,
       sunday_school_class,
+      sunday_school_class_en,
       father_of_confession,
       notes,
     } = body;
@@ -150,12 +196,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const toNullIfBlank = (val: any): string | null => {
-      if (val === null || val === undefined) return null;
-      const trimmed = String(val).trim();
-      return trimmed.length > 0 ? trimmed : null;
-    };
-
     const cleanNameEn = toNullIfBlank(full_name_en);
     const cleanDob = toNullIfBlank(date_of_birth);
     const cleanMemberPhone = toNullIfBlank(member_phone);
@@ -164,8 +204,11 @@ export async function POST(req: NextRequest) {
     const cleanAddressAr = toNullIfBlank(address_ar);
     const cleanAddressEn = toNullIfBlank(address_en);
     const cleanSchool = toNullIfBlank(school_or_college);
+    const cleanSchoolEn = toNullIfBlank(school_or_college_en);
     const cleanAcademicYear = toNullIfBlank(academic_year);
+    const cleanAcademicYearEn = toNullIfBlank(academic_year_en);
     const cleanSundaySchool = toNullIfBlank(sunday_school_class);
+    const cleanSundaySchoolEn = toNullIfBlank(sunday_school_class_en);
     const cleanConfession = toNullIfBlank(father_of_confession);
     const cleanNotes = toNullIfBlank(notes);
     const cleanPin = toNullIfBlank(body.pin) || '1234';
@@ -194,14 +237,26 @@ export async function POST(req: NextRequest) {
         ? String(patrol_role).trim()
         : null;
 
-    const missingFieldsList: string[] = [];
-    if (!cleanFatherPhone) missingFieldsList.push('تليفون الاب');
-    if (!cleanAddressAr) missingFieldsList.push('العنوان');
-    if (!cleanAcademicYear) missingFieldsList.push('السنة الدراسية');
-    if (!cleanSchool) missingFieldsList.push('المدرسة / الكلية');
-    if (!cleanConfession) missingFieldsList.push('اب الاعتراف');
-    const hasMissingData = missingFieldsList.length > 0;
-    const missingFieldsStr = missingFieldsList.join(', ');
+    const computedMissing = computeMissingMemberFields(
+      {
+        fatherPhone: cleanFatherPhone,
+        addressAr: cleanAddressAr,
+        academicYear: cleanAcademicYear,
+        schoolOrCollege: cleanSchool,
+        fatherOfConfession: cleanConfession,
+      },
+      false
+    );
+    const hasMissingData =
+      typeof body.has_missing_data === 'boolean'
+        ? body.has_missing_data
+        : computedMissing.hasMissingData;
+    const missingFieldsStr =
+      body.missing_fields !== undefined && body.missing_fields !== null
+        ? Array.isArray(body.missing_fields)
+          ? body.missing_fields.join(', ')
+          : String(body.missing_fields)
+        : computedMissing.missingFields;
 
     // Auto-generate unique member code: SCT-2026-XXXX (ensure no collision)
     let memberCode =
@@ -217,7 +272,7 @@ export async function POST(req: NextRequest) {
 
     const insertResult = await query(
       `
-      INSERT INTO dbo.members (
+      INSERT INTO members (
         member_code,
         pin_hash,
         unit_id,
@@ -232,8 +287,11 @@ export async function POST(req: NextRequest) {
         address_ar,
         address_en,
         school_or_college,
+        school_or_college_en,
         academic_year,
+        academic_year_en,
         sunday_school_class,
+        sunday_school_class_en,
         father_of_confession,
         notes,
         has_missing_data,
@@ -255,39 +313,18 @@ export async function POST(req: NextRequest) {
         @address_ar,
         @address_en,
         @school_or_college,
+        @school_or_college_en,
         @academic_year,
+        @academic_year_en,
         @sunday_school_class,
+        @sunday_school_class_en,
         @father_of_confession,
         @notes,
         @has_missing_data,
         @missing_fields,
         true
       )
-      RETURNING 
-        id,
-        member_code,
-        unit_id,
-        patrol_id,
-        patrol_role,
-        full_name_ar,
-        full_name_en,
-        TO_CHAR(date_of_birth, 'YYYY-MM-DD') AS date_of_birth,
-        member_phone,
-        father_phone,
-        mother_phone,
-        address_ar,
-        address_en,
-        school_or_college,
-        academic_year,
-        sunday_school_class,
-        father_of_confession,
-        notes,
-        has_missing_data,
-        missing_fields,
-        school_or_college_en,
-        sunday_school_class_en,
-        academic_year_en,
-        is_active;
+      RETURNING ${MEMBER_RETURNING_COLUMNS};
       `,
       {
         member_code: { type: sql.NVarChar(50), value: memberCode },
@@ -304,12 +341,15 @@ export async function POST(req: NextRequest) {
         address_ar: { type: sql.NVarChar(sql.MAX), value: cleanAddressAr },
         address_en: { type: sql.NVarChar(sql.MAX), value: cleanAddressEn },
         school_or_college: { type: sql.NVarChar(200), value: cleanSchool },
+        school_or_college_en: { type: sql.NVarChar(200), value: cleanSchoolEn },
         academic_year: { type: sql.NVarChar(100), value: cleanAcademicYear },
+        academic_year_en: { type: sql.NVarChar(100), value: cleanAcademicYearEn },
         sunday_school_class: { type: sql.NVarChar(150), value: cleanSundaySchool },
+        sunday_school_class_en: { type: sql.NVarChar(150), value: cleanSundaySchoolEn },
         father_of_confession: { type: sql.NVarChar(150), value: cleanConfession },
         notes: { type: sql.NVarChar(sql.MAX), value: cleanNotes },
         has_missing_data: { type: sql.Bit, value: hasMissingData },
-        missing_fields: { type: sql.NVarChar(sql.MAX), value: missingFieldsStr },
+        missing_fields: { type: sql.NVarChar(sql.MAX), value: missingFieldsStr || null },
       }
     );
 
@@ -339,16 +379,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      member: {
-        ...created,
-        id: String(created.id),
-        unit_id: Number(created.unit_id),
-        patrol_id: created.patrol_id !== null && created.patrol_id !== undefined ? Number(created.patrol_id) : null,
-        patrol_role: created.patrol_role || null,
-        is_active: Boolean(created.is_active),
-        has_missing_data: Boolean(created.has_missing_data),
-        missing_fields: created.missing_fields || '',
-      },
+      member: formatMemberRow(created),
     });
   } catch (error: any) {
     console.error('Error inserting member to ScoutsDB:', error);
@@ -361,8 +392,6 @@ export async function POST(req: NextRequest) {
 
 export async function PUT(req: NextRequest) {
   try {
-    await ensureMemberRoleSchema();
-
     const body = await req.json();
     const { action, memberId, patrolId } = body;
 
@@ -506,74 +535,134 @@ export async function PUT(req: NextRequest) {
         father_phone,
         mother_phone,
         address_ar,
+        address_en,
         school_or_college,
+        school_or_college_en,
         academic_year,
+        academic_year_en,
+        sunday_school_class,
+        sunday_school_class_en,
         father_of_confession,
         notes,
+        has_missing_data,
+        missing_fields,
       } = body;
 
-      const missingList: string[] = [];
-      if (!father_phone && !mother_phone && !member_phone) missingList.push('phone');
-      if (!academic_year) missingList.push('grade');
-      const hasMissing = missingList.length > 0;
-      const missingStr = hasMissing ? missingList.join(',') : null;
-      const cleanPatrol = patrol_id !== null && patrol_id !== undefined && patrol_id !== 'none' ? Number(patrol_id) : null;
+      const cleanFatherPhone = toNullIfBlank(father_phone);
+      const cleanMotherPhone = toNullIfBlank(mother_phone);
+      const cleanMemberPhone = toNullIfBlank(member_phone);
+      const cleanAddressAr = toNullIfBlank(address_ar);
+      const cleanAcademicYear = toNullIfBlank(academic_year);
+      const cleanSchool = toNullIfBlank(school_or_college);
+      const cleanConfession = toNullIfBlank(father_of_confession);
+
+      const computedMissing = computeMissingMemberFields(
+        {
+          fatherPhone: cleanFatherPhone,
+          motherPhone: cleanMotherPhone,
+          memberPhone: cleanMemberPhone,
+          addressAr: cleanAddressAr,
+          academicYear: cleanAcademicYear,
+          schoolOrCollege: cleanSchool,
+          fatherOfConfession: cleanConfession,
+        },
+        true
+      );
+
+      const hasMissing =
+        typeof has_missing_data === 'boolean' ? has_missing_data : computedMissing.hasMissingData;
+      const missingStr =
+        missing_fields !== undefined && missing_fields !== null
+          ? (Array.isArray(missing_fields) ? missing_fields.join(', ') : String(missing_fields)).trim() || null
+          : hasMissing
+          ? computedMissing.missingFields
+          : null;
+
+      const hasPatrolIdParam = patrol_id !== undefined;
+      const cleanPatrol =
+        hasPatrolIdParam && patrol_id !== null && patrol_id !== 'none' && patrol_id !== ''
+          ? Number(patrol_id)
+          : null;
       const hasPatrolRoleParam = patrol_role !== undefined;
       const cleanPatrolRole =
         hasPatrolRoleParam && patrol_role !== null && String(patrol_role).trim() !== '' && patrol_role !== 'none'
           ? String(patrol_role).trim()
           : null;
 
-      await query(
+      const updateResult = await query(
         `
         UPDATE members
         SET
           full_name_ar = COALESCE(@full_name_ar, full_name_ar),
           full_name_en = @full_name_en,
           unit_id = COALESCE(@unit_id, unit_id),
-          patrol_id = @patrol_id,
+          patrol_id = CASE WHEN @update_patrol_id = 1 THEN @patrol_id ELSE patrol_id END,
           patrol_role = CASE WHEN @update_patrol_role = 1 THEN @patrol_role ELSE patrol_role END,
-          date_of_birth = COALESCE(@date_of_birth, date_of_birth),
+          date_of_birth = @date_of_birth,
           member_phone = @member_phone,
           father_phone = @father_phone,
           mother_phone = @mother_phone,
-          address_ar = COALESCE(@address_ar, address_ar),
+          address_ar = @address_ar,
+          address_en = CASE WHEN @update_address_en = 1 THEN @address_en ELSE address_en END,
           school_or_college = @school_or_college,
+          school_or_college_en = CASE WHEN @update_school_or_college_en = 1 THEN @school_or_college_en ELSE school_or_college_en END,
           academic_year = @academic_year,
+          academic_year_en = CASE WHEN @update_academic_year_en = 1 THEN @academic_year_en ELSE academic_year_en END,
+          sunday_school_class = CASE WHEN @update_sunday_school_class = 1 THEN @sunday_school_class ELSE sunday_school_class END,
+          sunday_school_class_en = CASE WHEN @update_sunday_school_class_en = 1 THEN @sunday_school_class_en ELSE sunday_school_class_en END,
           father_of_confession = @father_of_confession,
           notes = @notes,
           has_missing_data = @has_missing_data,
           missing_fields = @missing_fields,
           updated_at = NOW()
-        WHERE id = @memberId;
+        WHERE id = @memberId
+        RETURNING ${MEMBER_RETURNING_COLUMNS};
         `,
         {
           memberId: { type: sql.UniqueIdentifier, value: memberId },
-          full_name_ar: { type: sql.NVarChar, value: full_name_ar || null },
-          full_name_en: { type: sql.NVarChar, value: full_name_en || null },
+          full_name_ar: { type: sql.NVarChar, value: toNullIfBlank(full_name_ar) },
+          full_name_en: { type: sql.NVarChar, value: toNullIfBlank(full_name_en) },
           unit_id: { type: sql.Int, value: unit_id ? Number(unit_id) : null },
+          update_patrol_id: { type: sql.Int, value: hasPatrolIdParam ? 1 : 0 },
           patrol_id: { type: sql.Int, value: cleanPatrol },
-          update_patrol_role: { type: sql.Bit, value: hasPatrolRoleParam ? 1 : 0 },
+          update_patrol_role: { type: sql.Int, value: hasPatrolRoleParam ? 1 : 0 },
           patrol_role: { type: sql.NVarChar(100), value: cleanPatrolRole },
-          date_of_birth: { type: sql.Date, value: date_of_birth || null },
-          member_phone: { type: sql.NVarChar, value: member_phone || null },
-          father_phone: { type: sql.NVarChar, value: father_phone || null },
-          mother_phone: { type: sql.NVarChar, value: mother_phone || null },
-          address_ar: { type: sql.NVarChar, value: address_ar || null },
-          school_or_college: { type: sql.NVarChar, value: school_or_college || null },
-          academic_year: { type: sql.NVarChar, value: academic_year || null },
-          father_of_confession: { type: sql.NVarChar, value: father_of_confession || null },
-          notes: { type: sql.NVarChar, value: notes || null },
-          has_missing_data: { type: sql.Bit, value: hasMissing ? 1 : 0 },
+          date_of_birth: { type: sql.Date, value: toNullIfBlank(date_of_birth) },
+          member_phone: { type: sql.NVarChar, value: cleanMemberPhone },
+          father_phone: { type: sql.NVarChar, value: cleanFatherPhone },
+          mother_phone: { type: sql.NVarChar, value: cleanMotherPhone },
+          address_ar: { type: sql.NVarChar, value: cleanAddressAr },
+          update_address_en: { type: sql.Int, value: address_en !== undefined ? 1 : 0 },
+          address_en: { type: sql.NVarChar(sql.MAX), value: toNullIfBlank(address_en) },
+          school_or_college: { type: sql.NVarChar, value: cleanSchool },
+          update_school_or_college_en: { type: sql.Int, value: school_or_college_en !== undefined ? 1 : 0 },
+          school_or_college_en: { type: sql.NVarChar(200), value: toNullIfBlank(school_or_college_en) },
+          academic_year: { type: sql.NVarChar, value: cleanAcademicYear },
+          update_academic_year_en: { type: sql.Int, value: academic_year_en !== undefined ? 1 : 0 },
+          academic_year_en: { type: sql.NVarChar(100), value: toNullIfBlank(academic_year_en) },
+          update_sunday_school_class: { type: sql.Int, value: sunday_school_class !== undefined ? 1 : 0 },
+          sunday_school_class: { type: sql.NVarChar(150), value: toNullIfBlank(sunday_school_class) },
+          update_sunday_school_class_en: { type: sql.Int, value: sunday_school_class_en !== undefined ? 1 : 0 },
+          sunday_school_class_en: { type: sql.NVarChar(150), value: toNullIfBlank(sunday_school_class_en) },
+          father_of_confession: { type: sql.NVarChar, value: cleanConfession },
+          notes: { type: sql.NVarChar, value: toNullIfBlank(notes) },
+          has_missing_data: { type: sql.Bit, value: hasMissing },
           missing_fields: { type: sql.NVarChar, value: missingStr },
         }
       );
 
+      if (updateResult.length === 0) {
+        return NextResponse.json({ success: false, error: 'Member not found' }, { status: 404 });
+      }
+
+      const updatedMember = formatMemberRow(updateResult[0]);
+
       return NextResponse.json({
         success: true,
         memberId,
-        has_missing_data: hasMissing,
-        missing_fields: missingStr,
+        has_missing_data: updatedMember.has_missing_data,
+        missing_fields: updatedMember.missing_fields,
+        member: updatedMember,
       });
     }
 

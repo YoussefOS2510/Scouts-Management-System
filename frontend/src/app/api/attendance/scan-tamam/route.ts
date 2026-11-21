@@ -260,7 +260,7 @@ Return ONLY valid JSON matching this schema:
     });
   }
 
-  const modelsToTry = ['gemini-2.5-flash', 'gemini-2.0-flash'];
+  const modelsToTry = ['gemini-3.5-flash-lite', 'gemini-4.0-hydrogen'];
   let lastErrorMsg = 'Failed to communicate with Gemini API';
   let lastStatus = 500;
 
@@ -317,9 +317,9 @@ Return ONLY valid JSON matching this schema:
       const payload: GeminiParsedPayload = Array.isArray(parsed)
         ? { patrolsDetected: [], rows: parsed }
         : {
-            patrolsDetected: Array.isArray(parsed?.patrolsDetected) ? parsed.patrolsDetected : [],
-            rows: Array.isArray(parsed?.rows) ? parsed.rows : [],
-          };
+          patrolsDetected: Array.isArray(parsed?.patrolsDetected) ? parsed.patrolsDetected : [],
+          rows: Array.isArray(parsed?.rows) ? parsed.rows : [],
+        };
       return { payload, modelUsed: model };
     } catch {
       lastErrorMsg = `Could not parse JSON output from ${model}`;

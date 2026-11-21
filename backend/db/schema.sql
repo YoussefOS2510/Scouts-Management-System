@@ -45,24 +45,42 @@ CREATE TABLE IF NOT EXISTS members (
     pin_hash VARCHAR(255) NOT NULL DEFAULT '1234',
     unit_id INT NOT NULL REFERENCES units(id),
     patrol_id INT REFERENCES patrols(id) ON DELETE SET NULL,
-    patrol_role VARCHAR(100),
+    patrol_role VARCHAR(30) DEFAULT 'member',
     full_name_ar VARCHAR(255) NOT NULL,
     full_name_en VARCHAR(255),
-    date_of_birth DATE NOT NULL,
+    date_of_birth DATE,
     member_phone VARCHAR(20),
-    father_phone VARCHAR(20) NOT NULL,
+    father_phone VARCHAR(20),
     mother_phone VARCHAR(20),
-    address_ar TEXT NOT NULL,
+    address_ar TEXT,
     address_en TEXT,
     school_or_college VARCHAR(200),
-    academic_year VARCHAR(100) NOT NULL,
+    school_or_college_en VARCHAR(200),
+    academic_year VARCHAR(100),
+    academic_year_en VARCHAR(100),
     sunday_school_class VARCHAR(150),
+    sunday_school_class_en VARCHAR(150),
     father_of_confession VARCHAR(150),
     notes TEXT,
+    has_missing_data BOOLEAN NOT NULL DEFAULT FALSE,
+    missing_fields TEXT,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Idempotent Migration Block for Existing Live Databases
+ALTER TABLE members ADD COLUMN IF NOT EXISTS patrol_role VARCHAR(30) DEFAULT 'member';
+ALTER TABLE members ALTER COLUMN patrol_role SET DEFAULT 'member';
+ALTER TABLE members ADD COLUMN IF NOT EXISTS has_missing_data BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE members ADD COLUMN IF NOT EXISTS missing_fields TEXT;
+ALTER TABLE members ADD COLUMN IF NOT EXISTS school_or_college_en VARCHAR(200);
+ALTER TABLE members ADD COLUMN IF NOT EXISTS sunday_school_class_en VARCHAR(150);
+ALTER TABLE members ADD COLUMN IF NOT EXISTS academic_year_en VARCHAR(100);
+ALTER TABLE members ALTER COLUMN date_of_birth DROP NOT NULL;
+ALTER TABLE members ALTER COLUMN father_phone DROP NOT NULL;
+ALTER TABLE members ALTER COLUMN address_ar DROP NOT NULL;
+ALTER TABLE members ALTER COLUMN academic_year DROP NOT NULL;
 
 CREATE INDEX IF NOT EXISTS idx_members_code ON members(member_code);
 CREATE INDEX IF NOT EXISTS idx_members_unit ON members(unit_id);

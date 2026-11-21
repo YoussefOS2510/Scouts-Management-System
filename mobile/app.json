@@ -1,0 +1,27 @@
+{
+  "expo": {
+    "name": "SMSR Scouts",
+    "slug": "smsr-scouts-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "splash": {
+      "backgroundColor": "#1B4332"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "org.smsr.scouts"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#1B4332"
+      },
+      "package": "org.smsr.scouts"
+    },
+    "web": {
+      "bundler": "metro"
+    }
+  }
+}
+

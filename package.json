@@ -16,7 +16,12 @@
     "verify:postgres": "npm run verify:postgres --workspace=backend",
     "test:system": "npx tsx --env-file=frontend/.env.local backend/scripts/system-test-suite.ts",
     "migrate:cloud": "npx tsx backend/scripts/migrate-cloud.ts",
-    "worker": "npm run worker --workspace=backend"
+    "worker": "npm run worker --workspace=backend",
+    "mobile": "npm --prefix mobile run start",
+    "mobile:android": "npm --prefix mobile run android",
+    "mobile:ios": "npm --prefix mobile run ios",
+    "mobile:web": "npm --prefix mobile run web",
+    "mobile:typecheck": "npm --prefix mobile run typecheck"
   },
   "type": "module"
 }
